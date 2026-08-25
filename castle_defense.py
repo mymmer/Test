@@ -405,6 +405,12 @@ class Projectile:
             if self.hostile:
                 g.castle.splash_hit(self.x, self.y, self.splash, self.damage,
                                     stun=self.stun)
+                bar = g.barricade
+                if bar.alive:
+                    gap = abs(self.x - bar.x)
+                    if gap <= self.splash:
+                        bar.take_damage(self.damage
+                                        * (1.0 - 0.5 * gap / max(1.0, self.splash)))
             else:
                 for e in g.enemies:
                     if not e.alive:
@@ -465,6 +471,18 @@ class Projectile:
 
     def _update_hostile(self):
         castle = self.game.castle
+        # the outer barricade is the first thing in the way
+        bar = self.game.barricade
+        if (bar.alive and self.y >= bar.top_y
+                and abs(self.x - bar.x) <= bar.W / 2 + self.radius):
+            if self.splash > 0:
+                self.explode()
+            else:
+                bar.take_damage(self.damage)
+                self.game.effects.burst(self.x, self.y, 6, self.color,
+                                        speed=150, life=0.3, size=3)
+                self.kill()
+            return
         tower = castle.tower_at(self.x, self.y)
         if tower is not None:
             if self.splash > 0:
@@ -1690,13 +1708,27 @@ class Enemy:
         if not (self.GRABBABLE and self.alive
                 and self.state in ("walk", "attack")):
             return False
-        # the cursor can only lift what its Grab Strength allows
+        # A heavy unit rides out every lift attempt while its plating is on.
+        # Grab Strength alone is not enough -- the armour comes off first.
+        if self.armored:
+            return False
         return self.MASS <= self.game.grab_capacity
 
     @property
+    def armored(self):
+        """Heavy unit still wearing plating: locks lifting and shoving."""
+        return self.HEAVY and self.layers > 0
+
+    @property
+    def shovable(self):
+        """Stripped heavy unit: can be hauled forward by the cursor."""
+        return (self.HEAVY and self.alive and not self.armored
+                and self.state in ("walk", "attack"))
+
+    @property
     def too_heavy(self):
-        """Liftable in principle, but the cursor is not strong enough yet."""
-        return (self.GRABBABLE and self.alive
+        """Stripped and liftable in principle, but the cursor is too weak."""
+        return (self.GRABBABLE and self.alive and not self.armored
                 and self.MASS > self.game.grab_capacity)
 
     def regalia_anchor(self):
@@ -1739,6 +1771,8 @@ class Enemy:
         at the wall far sooner."""
         if not (self.HEAVY and self.alive):
             return False
+        if self.armored:
+            return False        # strip the plating before hauling it about
         was = self.shove
         self.shove = min(SHOVE_MAX, self.shove + amount * SHOVE_FACTOR)
         if self.shove > 40 and was <= 40:
@@ -3081,7 +3115,9 @@ class LichLord(Boss):
                 self.recover_staff()
             return
 
-        if self.x > self.standoff_x:
+        # halt in front of the outer barricade -- he will not advance on
+        # the castle while a live wall stands between him and it
+        if self.x > self.current_standoff():
             self.x -= self.speed * dt
             self.vx_estimate = -self.speed
             self.state = "walk"
@@ -3105,6 +3141,15 @@ class LichLord(Boss):
             self.game.effects.text(self.x, self.y - self.h, "BONE WARD",
                                    (170, 220, 255), 24)
 
+    def current_standoff(self):
+        """Where he halts.  While the outer barricade stands he stops in
+        front of it -- he will not advance on the castle past a live wall."""
+        bar = self.game.barricade
+        if bar.alive:
+            return max(self.standoff_x,
+                       bar.x + bar.W / 2 + self.w / 2 + 18)
+        return self.standoff_x
+
     def raise_dead(self):
         pool = self.game.summonable_types()
         count = 2 + min(4, self.wave // 8)
@@ -3123,12 +3168,19 @@ class LichLord(Boss):
 
     def death_bolt(self):
         c = self.game.castle
-        live = [t for t in c.towers if not t.disabled]
-        if live and random.random() < 0.5:
-            t = random.choice(live)
-            tx, ty = t.x, t.y - t.H / 2
+        bar = self.game.barricade
+        if bar.alive:
+            # the outer wall is the target until it comes down
+            tx = bar.x
+            ty = random.uniform(bar.top_y + 12, GROUND_Y - 12)
         else:
-            tx, ty = c.front_x - 30, random.uniform(WALL_TOP + 20, GROUND_Y - 30)
+            live = [t for t in c.towers if not t.disabled]
+            if live and random.random() < 0.5:
+                t = random.choice(live)
+                tx, ty = t.x, t.y - t.H / 2
+            else:
+                tx, ty = c.front_x - 30, random.uniform(WALL_TOP + 20,
+                                                        GROUND_Y - 30)
         a = math.atan2(ty - (self.y - 20), tx - self.x)
         speed = 520.0
         self.game.projectiles.append(Projectile(
@@ -3812,10 +3864,11 @@ class Game:
         return best
 
     def heavy_under_mouse(self, pos):
-        """A heavy unit whose plating can still be torn off."""
+        """A heavy unit the cursor can work on -- either armour left to tear
+        off, or a bare hull that can be shoved."""
         best = None
         for e in self.enemies:
-            if not e.strippable:
+            if not (e.strippable or e.shovable):
                 continue
             if e.grab_rect.collidepoint(pos):
                 if best is None or e.x < best.x:
@@ -4015,22 +4068,30 @@ class Game:
         # --- dismantling a heavy unit ---------------------------------
         h = self.stripping
         if h is not None:
-            if not h.strippable:
-                self.stripping = None      # dead, or fully stripped already
+            # the session survives the armour coming off -- a bare hull can
+            # still be shoved, so only drop it when there is nothing left to do
+            if not (h.strippable or h.shovable):
+                self.stripping = None      # dead, or no longer interactable
             else:
                 mx, my = self.mouse_pos
                 ax, ay = self.strip_anchor
                 dx = mx - ax
                 self.strip_anchor = (mx, my)
-                if dx > 0.5:
-                    # hauling AWAY from the castle rips the plating off
-                    h.apply_strip(dx)
-                    if random.random() < 0.4:
-                        self.effects.burst(h.x + random.uniform(-30, 30),
-                                           h.y, 2, (188, 192, 206),
-                                           speed=120, life=0.3, size=2)
+                if h.armored:
+                    # PHASE 1 -- armour on: hauling AWAY strips it, and that
+                    # is the *only* thing the cursor can do to this unit.
+                    if dx > 0.5:
+                        h.apply_strip(dx)
+                        if random.random() < 0.4:
+                            self.effects.burst(h.x + random.uniform(-30, 30),
+                                               h.y, 2, (188, 192, 206),
+                                               speed=120, life=0.3, size=2)
+                    elif dx < -0.5 and random.random() < 0.03:
+                        self.effects.text(h.x, h.y - h.h * 0.9,
+                                          "ARMOR FIRST!", (255, 150, 130), 20)
                 elif dx < -0.5:
-                    # hauling TOWARD the castle shoves it forward instead
+                    # PHASE 2 -- stripped bare: hauling TOWARD the castle
+                    # shoves it forward.
                     h.apply_shove(-dx)
                 return
 
@@ -4393,8 +4454,12 @@ class Game:
                 on = i < heavy.layers
                 pygame.draw.rect(s, col if on else (90, 80, 74),
                                  (px, r.top - 26, 9, 7), 0 if on else 1)
-            draw_text(s, "PULL!" if self.stripping else "DRAG TO RIP ARMOR",
-                      heavy.x, r.top - 48, 18, col, "center", True)
+            if heavy.armored:
+                label = "RIPPING ARMOR!" if self.stripping \
+                    else "DRAG AWAY TO RIP ARMOR"
+            else:
+                label = "SHOVING!" if self.stripping else "DRAG IN TO SHOVE"
+            draw_text(s, label, heavy.x, r.top - 48, 18, col, "center", True)
             if self.stripping:
                 pygame.draw.line(s, (255, 200, 120), (mx, my),
                                  (heavy.x, heavy.y), 2)
@@ -5013,21 +5078,33 @@ def _ui_smoke(g):
     ram = SiegeRam(g, 8); ram.x = 900; ram.y = ram.ground_y
     g.enemies.append(ram)
     g.grab_level = 0
-    assert not ram.grabbable and ram.too_heavy, "a tank must start unliftable"
+    assert not ram.grabbable, "a tank must start unliftable"
+    assert ram.armored and not ram.too_heavy, \
+        "a fresh tank is blocked by its armour, not by weight"
     assert ShieldBearer(g, 8).grabbable, "regular mobs stay liftable at Lv.0"
     g.grab_level = GRAB_MAX_LEVEL
-    assert ram.grabbable, "max Grab Strength must lift a Siege Ram"
+    assert not ram.grabbable, "armour still blocks the lift at max strength"
+    while ram.layers:                       # strip it bare
+        ram.strip_progress = 1.0
+        ram.apply_strip(0.0)
+    assert ram.grabbable, "stripped + max Grab Strength must lift a Siege Ram"
     g.grab_level = 0
+    assert not ram.grabbable and ram.too_heavy, \
+        "stripped but under-powered is the 'too heavy' case"
 
     # ---------- drag direction: away strips, toward shoves ----------
+    g.enemies.clear()          # the stripped one would steal the click
+    ram = SiegeRam(g, 8); ram.x = 900; ram.y = ram.ground_y   # fresh plating
+    g.enemies.append(ram)
     g.mouse_pos = (int(ram.x), int(ram.y))
     g.try_grab(g.mouse_pos)
     assert g.stripping is ram and g.grabbed is None
-    layers0 = ram.layers
-    for _ in range(30):
+    for _ in range(90):
         g.mouse_pos = (g.mouse_pos[0] + 40, int(ram.y))
         g.update_grab(1 / 60.0)
-    assert ram.layers < layers0, "dragging away must strip plating"
+        if ram.layers == 0:
+            break
+    assert ram.layers == 0, "dragging away must strip the plating off"
     assert ram.shove == 0, "stripping must not shove it forward"
     for _ in range(30):
         g.mouse_pos = (g.mouse_pos[0] - 40, int(ram.y))
@@ -5038,6 +5115,117 @@ def _ui_smoke(g):
     for _ in range(60):
         g.update(1 / 60.0)
     assert shoved_x - ram.x > ram.speed, "the shove must outrun a normal walk"
+
+    # ---------- BUG 1 regression: strict armour -> shove -> lift order -----
+    def _tank(grab_lvl, stripped):
+        gg = Game(g.screen); gg.state = Game.PLAYING
+        gg.wave, gg.wave_active, gg.grab_level = 8, True, grab_lvl
+        t = SiegeRam(gg, 8); t.x = 900; t.y = t.ground_y
+        gg.enemies.append(t)
+        if stripped:
+            while t.layers:
+                t.strip_progress = 1.0
+                t.apply_strip(0.0)
+        return gg, t
+
+    # phase 1: armour on -- lifting is locked even at max Grab Strength
+    gg, tank = _tank(GRAB_MAX_LEVEL, False)
+    assert tank.armored and not tank.grabbable, \
+        "an armoured tank must never be liftable, whatever the Grab Strength"
+    assert not tank.shovable, "an armoured tank must not be shovable either"
+    gg.mouse_pos = (int(tank.x), int(tank.y))
+    gg.try_grab(gg.mouse_pos)
+    assert gg.grabbed is None and gg.stripping is tank, \
+        "clicking an armoured tank must start stripping, never a lift"
+    for _ in range(30):          # haul castle-ward: must do nothing at all
+        gg.mouse_pos = (gg.mouse_pos[0] - 40, int(tank.y))
+        gg.update_grab(1 / 60.0)
+    assert tank.shove == 0, "an armoured tank cannot be shoved forward"
+    assert tank.layers == SiegeRam.ARMOR_LAYERS, "and is not stripped by it"
+    layers_before = tank.layers
+    for _ in range(80):          # haul away: strips, and keeps the session
+        gg.mouse_pos = (gg.mouse_pos[0] + 40, int(tank.y))
+        gg.update_grab(1 / 60.0)
+        if tank.layers == 0:
+            break
+    assert tank.layers < layers_before and not tank.armored
+    assert gg.stripping is tank, \
+        "the drag must survive the armour coming off, mid-click"
+    for _ in range(30):          # same click, now inward: shoves
+        gg.mouse_pos = (gg.mouse_pos[0] - 40, int(tank.y))
+        gg.update_grab(1 / 60.0)
+    assert tank.shove > 0, "a stripped tank must shove"
+
+    # phase 2: stripped but too weak -- shove yes, lift no
+    gg, tank = _tank(0, True)
+    assert not tank.armored and tank.shovable
+    assert not tank.grabbable and tank.too_heavy
+    gg.mouse_pos = (int(tank.x), int(tank.y))
+    gg.try_grab(gg.mouse_pos)
+    assert gg.grabbed is None and gg.stripping is tank
+
+    # phase 3: stripped and strong enough -- lifts
+    gg, tank = _tank(GRAB_MAX_LEVEL, True)
+    assert tank.grabbable
+    gg.mouse_pos = (int(tank.x), int(tank.y))
+    gg.try_grab(gg.mouse_pos)
+    assert gg.grabbed is tank and gg.stripping is None, \
+        "a stripped tank must lift once Grab Strength allows"
+
+    # ---------- BUG 2 regression: Lich halts at the outer barricade -------
+    def _lich(wall):
+        gg = Game(g.screen); gg.state = Game.PLAYING
+        gg.wave, gg.wave_active = 15, True
+        for _ in range(3):
+            gg.barricade.buy()
+        if not wall:
+            gg.barricade.hp = 0.0
+        lich = LichLord(gg, 15)
+        lich.x, lich.y = SPAWN_X, lich.ground_y
+        gg.enemies.append(lich)
+        hits = {"wall": 0.0, "castle": 0.0}
+        gg.castle.take_damage = lambda a: hits.__setitem__("castle",
+                                                           hits["castle"] + a)
+        real_bar = gg.barricade.take_damage
+        def bar_spy(a):
+            hits["wall"] += a
+            if wall:
+                gg.barricade.hp = gg.barricade.max_hp   # keep it standing
+            else:
+                real_bar(a)
+        gg.barricade.take_damage = bar_spy
+        halted = None
+        for _ in range(60 * 60):
+            gg.update(1 / 60.0)
+            gg.enemies = [e for e in gg.enemies if e is lich]
+            if halted is None and lich.state == "attack":
+                halted = lich.x
+        return gg, lich, halted, hits
+
+    gw, lw, halted_w, hits_w = _lich(True)
+    bar = gw.barricade
+    assert halted_w is not None and halted_w > bar.x + bar.W / 2, \
+        "the Lich Lord must stop in front of a standing barricade"
+    assert abs(halted_w - lw.current_standoff()) < 2.0
+    assert lw.current_standoff() > lw.standoff_x, \
+        "a live wall must push his halt point further out"
+    assert hits_w["wall"] > 0, "he must attack the barricade"
+    assert hits_w["castle"] == 0, \
+        "and must not touch the castle while the barricade stands"
+
+    gn, ln, halted_n, hits_n = _lich(False)
+    assert abs(ln.current_standoff() - ln.standoff_x) < 1e-6, \
+        "with the wall gone he reverts to his normal stand-off"
+    assert hits_n["castle"] > 0, "and only then attacks the castle"
+
+    # a Necromancer shares the same think() shape -- make sure it still runs
+    gg = Game(g.screen); gg.state = Game.PLAYING
+    gg.wave, gg.wave_active = 8, True
+    necro = Necromancer(gg, 8); necro.x = 700; necro.y = necro.ground_y
+    gg.enemies.append(necro)
+    for _ in range(300):
+        gg.update(1 / 60.0)
+    assert necro.alive and necro.state in ("walk", "attack")
 
     # ---------- Magnetic Gloves ----------
     g.reset(); g.state = Game.PLAYING
@@ -5243,9 +5431,11 @@ def _ui_smoke(g):
         "the horn must call the whole remaining wave in at once"
     assert g.horn_bonus > 0 and not g.blow_horn(), "and only work once"
 
-    print("selftest: cursor OK (Grab Strength gates tanks, drag-away strips / "
-          "drag-in shoves, gloves fling "
-          f"{MULTI_MAX_LEVEL + 1} at once)")
+    print("selftest: cursor OK (armour locks lift AND shove; strip -> shove -> "
+          f"lift order enforced; gloves fling {MULTI_MAX_LEVEL + 1} at once)")
+    print(f"selftest: Lich Lord halts at {halted_w:.0f} in front of the "
+          f"barricade ({hits_w['wall']:.0f} dmg to the wall, 0 to the castle) "
+          "and only advances once it falls")
     print("selftest: structures OK (outpost fires and cannot be attacked, "
           "barricade stops ground but not flyers, spikes reflect)")
     print(f"selftest: overcharge OK (x{OVERCHARGE_DAMAGE} damage, wider blast, "
