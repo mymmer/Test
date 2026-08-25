@@ -53,6 +53,11 @@ SLAM_DMG_FLOOR = 170.0  # relative speed below which mid-air collisions are safe
 SLAM_DMG_SCALE = 0.10
 GRAB_COOLDOWN = 0.22
 
+# --- armour stripping (heavy units) -------------------------------------
+STRIP_DISTANCE = 420.0   # px of dragging needed to pry one plate loose
+STRIP_SLOW = 0.76        # speed retained per plate torn off
+STRIP_VULN = 0.22        # extra damage taken per plate torn off
+
 STARTING_GOLD = 220
 MAX_PARTICLES = 900
 
@@ -262,7 +267,8 @@ class Projectile:
 
     def __init__(self, game, x, y, vx, vy, kind, damage,
                  splash=0.0, pierce=0, grav=0.0, hostile=False,
-                 color=None, life=5.0, stun=0.0):
+                 color=None, life=5.0, stun=0.0,
+                 bonus_air=1.0, bonus_heavy=1.0):
         self.game = game
         self.x, self.y = float(x), float(y)
         self.vx, self.vy = float(vx), float(vy)
@@ -272,6 +278,10 @@ class Projectile:
         self.pierce = int(pierce)
         self.grav = float(grav)
         self.hostile = bool(hostile)
+        # counter multipliers travel with the shot and are resolved against
+        # each victim individually
+        self.bonus_air = float(bonus_air)
+        self.bonus_heavy = float(bonus_heavy)
         self.life = float(life)
         self.stun = float(stun)
         self.alive = True
@@ -294,6 +304,14 @@ class Projectile:
     def kill(self):
         self.alive = False
 
+    def damage_for(self, e):
+        d = self.damage
+        if e.flying:
+            d *= self.bonus_air
+        if e.HEAVY:
+            d *= self.bonus_heavy
+        return d
+
     def explode(self):
         g = self.game
         if self.splash > 0:
@@ -312,7 +330,7 @@ class Projectile:
                     d = math.hypot(e.x - self.x, e.y - self.y)
                     if d <= self.splash:
                         falloff = 1.0 - 0.55 * (d / max(1.0, self.splash))
-                        e.take_damage(self.damage * falloff, "explosive")
+                        e.take_damage(self.damage_for(e) * falloff, "explosive")
         else:
             g.effects.burst(self.x, self.y, 6, self.color, speed=140,
                             life=0.3, size=3)
@@ -352,7 +370,7 @@ class Projectile:
                 if self.splash > 0:
                     self.explode()
                     return
-                e.take_damage(self.damage, "projectile")
+                e.take_damage(self.damage_for(e), "projectile")
                 self.game.effects.burst(self.x, self.y, 5, self.color,
                                         speed=120, life=0.25, size=2)
                 if self.pierce > 0:
@@ -444,6 +462,17 @@ class DefenseTower:
     MAX_HP = 100.0
     W, H = 26, 34
 
+    # --- strategic counter system -------------------------------------
+    # A multiplier of 3.0 is "+200% bonus damage" against that class of
+    # target.  Applied per-target at the moment of impact, so a cannon's
+    # splash can crit a Siege Ram while only tickling the scouts beside it.
+    BONUS_VS_AIR = 1.0
+    BONUS_VS_HEAVY = 1.0
+    # Vertical reach multiplier: >1 stretches the range envelope upwards so
+    # the tower can engage flyers well above its own altitude.
+    AIR_RANGE_MULT = 1.0
+    COUNTER_TAG = ""          # short label drawn on the shop card
+
     def __init__(self, game, x, y):
         self.game = game
         self.x, self.y = float(x), float(y)   # anchor = base of the tower
@@ -499,15 +528,37 @@ class DefenseTower:
         self.rebuild = 0.0
         self.stun = 0.0
 
+    def reach_to(self, e):
+        """Distance to a target, measured in the tower's own range envelope.
+
+        Anything above the muzzle has its vertical offset divided by
+        AIR_RANGE_MULT, which stretches the envelope upwards -- that is the
+        Bowmen's air-range buff, and it is what stops flyers parking just
+        out of reach."""
+        mx, my = self.muzzle
+        dx = e.x - mx
+        dy = e.y - my
+        if dy < 0 and self.AIR_RANGE_MULT > 1.0:
+            dy /= self.AIR_RANGE_MULT
+        return math.hypot(dx, dy)
+
+    def damage_vs(self, e):
+        """This tower's damage against one specific target."""
+        m = 1.0
+        if e.flying:
+            m *= self.BONUS_VS_AIR
+        if e.HEAVY:
+            m *= self.BONUS_VS_HEAVY
+        return self.damage * m
+
     def pick_target(self):
         best, best_score = None, None
-        mx, my = self.muzzle
         for e in self.game.enemies:
             if not e.alive or not e.targetable:
                 continue
             if e.flying and not self.HITS_AIR:
                 continue
-            d = math.hypot(e.x - mx, e.y - my)
+            d = self.reach_to(e)
             if d > self.range:
                 continue
             score = self.score_target(e, d)
@@ -516,7 +567,14 @@ class DefenseTower:
         return best
 
     def score_target(self, enemy, dist):
-        return enemy.x          # default: whoever is closest to the castle
+        # by default prefer whatever this tower is a hard counter to,
+        # then whoever is closest to the gate
+        prio = 0
+        if enemy.flying and self.BONUS_VS_AIR > 1.0:
+            prio = -1
+        if enemy.HEAVY and self.BONUS_VS_HEAVY > 1.0:
+            prio = -1
+        return prio * 100000 + enemy.x
 
     def update(self, dt):
         self.recoil = max(0.0, self.recoil - dt * 5.0)
@@ -588,8 +646,10 @@ class Bowman(DefenseTower):
     COOLDOWN = 0.50
     DAMAGE = 11.0
     HITS_AIR = True
+    AIR_RANGE_MULT = 1.9      # reaches far higher than it does far
     MAX_HP = 70.0
     W, H = 22, 32
+    COUNTER_TAG = "High air reach"
 
     def fire(self, target):
         mx, my = self.muzzle
@@ -627,13 +687,16 @@ class Ballista(DefenseTower):
     RANGE = 640.0
     COOLDOWN = 2.5
     DAMAGE = 62.0
-    HITS_AIR = False
+    HITS_AIR = True
+    AIR_RANGE_MULT = 1.5
+    BONUS_VS_AIR = 3.0        # +200% damage to flyers
     MAX_HP = 120.0
     W, H = 34, 30
+    COUNTER_TAG = "+200% vs FLYING"
 
     def score_target(self, enemy, dist):
-        # prefers the beefiest thing in range -- that is what it is for
-        return -enemy.hp
+        # flyers first (it is the anti-air gun), then the beefiest target
+        return (0 if enemy.flying else 1, -enemy.hp)
 
     def fire(self, target):
         mx, my = self.muzzle
@@ -642,7 +705,8 @@ class Ballista(DefenseTower):
         a = math.atan2(py - my, px - mx)
         self.game.projectiles.append(Projectile(
             self.game, mx, my, math.cos(a) * speed, math.sin(a) * speed,
-            "bolt", self.damage, pierce=2))
+            "bolt", self.damage, pierce=2,
+            bonus_air=self.BONUS_VS_AIR, bonus_heavy=self.BONUS_VS_HEAVY))
         self.game.add_shake(1.5)
 
     def draw(self, surf):
@@ -675,12 +739,16 @@ class Cannon(DefenseTower):
     COOLDOWN = 3.1
     DAMAGE = 40.0
     SPLASH = 86.0
-    HITS_AIR = False
+    HITS_AIR = False          # the lobbed shell cannot lead a flyer
+    BONUS_VS_HEAVY = 3.0      # +200% damage to Siege Rams and other tanks
     MAX_HP = 140.0
     W, H = 36, 28
+    COUNTER_TAG = "+200% vs HEAVY"
 
     def score_target(self, enemy, dist):
-        # prefers the densest cluster: count neighbours within the blast
+        # a heavy in range always wins; otherwise hit the densest cluster
+        if enemy.HEAVY:
+            return -1000000 + dist
         n = 0
         for o in self.game.enemies:
             if o.alive and o.targetable and not o.flying:
@@ -698,7 +766,8 @@ class Cannon(DefenseTower):
         vy = (dy - 0.5 * GRAVITY * t * t) / t
         self.game.projectiles.append(Projectile(
             self.game, mx, my, vx, vy, "cannon", self.damage,
-            splash=self.splash, grav=GRAVITY, life=t + 1.4))
+            splash=self.splash, grav=GRAVITY, life=t + 1.4,
+            bonus_air=self.BONUS_VS_AIR, bonus_heavy=self.BONUS_VS_HEAVY))
         self.game.effects.burst(mx, my, 10, (200, 190, 170), speed=180,
                                 life=0.35, grav=200)
         self.game.add_shake(3.2)
@@ -1064,6 +1133,9 @@ class Enemy:
     MASS = 1.0             # heavier = harder to fling, worse landings
     FLYING = False
     GRABBABLE = True
+    HEAVY = False          # a tank: cannons get bonus damage against it
+    STRIPPABLE = False     # armour can be torn off by dragging on it
+    ARMOR_LAYERS = 0       # how many plates there are to tear off
     IS_BOSS = False
     FLY_Y = 250.0
     DESC = ""
@@ -1074,6 +1146,11 @@ class Enemy:
         hp_m, dmg_m, spd_m = wave_scaling(wave)
         self.max_hp = self.BASE_HP * hp_m
         self.hp = self.max_hp
+        # armour is per-instance because the player can tear it off
+        self.armor = self.ARMOR
+        self.layers = self.ARMOR_LAYERS
+        self.strip_progress = 0.0      # 0..1 toward prying the next plate
+        self.vulnerable = 1.0          # damage taken multiplier once stripped
         self.speed = self.BASE_SPEED * spd_m
         self.damage = self.BASE_DAMAGE * dmg_m
         self.gold = int(round(self.GOLD * (1.0 + 0.05 * (wave - 1))))
@@ -1126,6 +1203,37 @@ class Enemy:
         return self.GRABBABLE and self.alive and self.state in ("walk", "attack")
 
     @property
+    def strippable(self):
+        """Heavy units refuse to be lifted, but their plating can be pried
+        off by hauling on it -- that is the player's answer to a tank."""
+        return (self.STRIPPABLE and self.alive and self.layers > 0
+                and self.state in ("walk", "attack"))
+
+    def apply_strip(self, amount):
+        """Feed drag distance into prying off the next armour plate.
+        Returns True when a plate actually comes away."""
+        if not self.strippable:
+            return False
+        self.strip_progress += amount / STRIP_DISTANCE
+        if self.strip_progress < 1.0:
+            return False
+        self.strip_progress = 0.0
+        self.layers -= 1
+        g = self.game
+        # each plate: less armour, slower advance, more damage taken
+        self.armor = max(0.0, self.ARMOR * (self.layers / max(1, self.ARMOR_LAYERS)))
+        self.speed *= STRIP_SLOW
+        self.vulnerable += STRIP_VULN
+        g.stats_plates_torn += 1
+        g.add_shake(4.0)
+        g.effects.burst(self.x, self.y, 26, (176, 180, 196), speed=340,
+                        life=0.7, size=4)
+        g.effects.text(self.x, self.y - self.h * 0.8,
+                       "ARMOR TORN!" if self.layers else "FULLY EXPOSED!",
+                       (255, 214, 120) if self.layers else (255, 130, 110), 24)
+        return True
+
+    @property
     def speed_now(self):
         return math.hypot(self.vx, self.vy)
 
@@ -1134,9 +1242,9 @@ class Enemy:
         if not self.alive:
             return 0.0
         if kind == "projectile":
-            amount *= (1.0 - self.ARMOR)
+            amount *= (1.0 - self.armor) * self.vulnerable
         elif kind == "explosive":
-            amount *= (1.0 - self.ARMOR * 0.35)
+            amount *= (1.0 - self.armor * 0.35) * self.vulnerable
         # 'fall' and 'impact' deliberately ignore armour: hurling a Shield
         # Bearer off a cliff is the player's answer to all that plating.
         amount = max(0.0, amount)
@@ -1347,9 +1455,14 @@ class Enemy:
         pygame.draw.rect(surf, shade(self.COLOR, 0.5), r, 2, border_radius=4)
 
     def draw_hp(self, surf):
-        if self.IS_BOSS or self.hp >= self.max_hp or not self.alive:
+        if not self.alive:
             return
         w = max(20, int(self.w))
+        if self.strip_progress > 0:
+            draw_bar(surf, int(self.x - w / 2), int(self.y - self.h / 2 - 17),
+                     w, 5, self.strip_progress, (255, 196, 90))
+        if self.IS_BOSS or self.hp >= self.max_hp:
+            return
         draw_bar(surf, int(self.x - w / 2), int(self.y - self.h / 2 - 10),
                  w, 4, self.hp / self.max_hp, C_GREEN)
 
@@ -1490,17 +1603,20 @@ class Berzerker(Enemy):
 # --- 5. Siege Ram -------------------------------------------------------------
 class SiegeRam(Enemy):
     NAME = "Siege Ram"
-    DESC = "Devastates walls. Far too heavy to lift."
+    DESC = "Armoured tank. Drag on it to tear the plating off."
     COLOR = (128, 92, 58)
     W, H = 76, 44
-    BASE_HP = 340.0
+    BASE_HP = 520.0
     BASE_SPEED = 28.0
     BASE_DAMAGE = 58.0
     ATTACK_RATE = 2.2
-    GOLD = 42
-    ARMOR = 0.35
+    GOLD = 52
+    ARMOR = 0.60           # very heavily plated...
     MASS = 9.0
-    GRABBABLE = False
+    GRABBABLE = False      # ...too determined to be lifted...
+    HEAVY = True           # ...but Cannons hit it for triple...
+    STRIPPABLE = True      # ...and the player can rip the plates off
+    ARMOR_LAYERS = 3
 
     def __init__(self, game, wave, x=None, y=None):
         super().__init__(game, wave, x, y)
@@ -1538,6 +1654,21 @@ class SiegeRam(Enemy):
         pygame.draw.polygon(surf, (86, 66, 44), [
             (r.left - 6, r.y + 10), (r.right + 6, r.y + 10),
             (r.right - 6, r.y - 6), (r.left + 6, r.y - 6)])
+        # --- armour plates: one bolted panel per remaining layer ---
+        plate_w = (r.w - 8) / max(1, self.ARMOR_LAYERS)
+        for i in range(self.layers):
+            px = r.x + 4 + i * plate_w
+            plate = pygame.Rect(int(px), r.y + 8, int(plate_w - 3), r.h - 12)
+            pygame.draw.rect(surf, (150, 157, 174), plate, border_radius=3)
+            pygame.draw.line(surf, (196, 202, 218), (plate.left + 3, plate.bottom - 4),
+                             (plate.right - 4, plate.top + 3), 3)
+            pygame.draw.rect(surf, (84, 90, 104), plate, 2, border_radius=3)
+            for by in (plate.top + 5, plate.bottom - 5):
+                for bx in (plate.left + 5, plate.right - 5):
+                    pygame.draw.circle(surf, (214, 218, 230), (bx, by), 2)
+        if self.layers == 0:
+            draw_text(surf, "EXPOSED", self.x, r.bottom + 6, 16, (255, 140, 120),
+                      "center", True)
         # the ram log, recoiling on impact
         px = r.left - 16 - self.ram_push * 12
         pygame.draw.line(surf, (74, 56, 38), (px + 34, r.centery + 6),
@@ -1814,7 +1945,7 @@ class TrollKing(Boss):
     GOLD = 320
     ARMOR = 0.25
     MASS = 12.0
-    HINT = "Too heavy to lift - but hurl OTHER mobs into him for big damage."
+    HINT = "Immune to throws and stripping - hurl OTHER mobs into him."
 
 
     def __init__(self, game, wave, x=None, y=None):
@@ -1896,7 +2027,7 @@ class Dragon(Boss):
     GOLD = 520
     ARMOR = 0.15
     MASS = 14.0
-    HINT = "FLYING - Ballistas and Cannons cannot touch it. Bring Bowmen."
+    HINT = "FLYING - Ballistas hit it for +200%. Bowmen reach it too."
     FLYING = True
     FLY_Y = 210.0
 
@@ -2001,9 +2132,9 @@ class LichLord(Boss):
     DESC = "Summons endless dead and hurls death magic."
     COLOR = (120, 92, 190)
     W, H = 70, 100
-    BASE_HP = 3800.0
+    BASE_HP = 2900.0
     BASE_SPEED = 36.0
-    BASE_DAMAGE = 30.0
+    BASE_DAMAGE = 24.0
     ATTACK_RATE = 1.6
     GOLD = 780
     ARMOR = 0.30
@@ -2145,6 +2276,8 @@ UNLOCKS = [
 ]
 
 BOSS_ROTATION = [TrollKing, Dragon, LichLord]
+# lets the shop cards show each tower's strategic counter tag
+TOWER_FOR_KEY = {"bowman": Bowman, "ballista": Ballista, "cannon": Cannon}
 MAX_ALIVE = 58
 
 
@@ -2268,11 +2401,14 @@ class Game:
         self.shake = 0.0
         self.banners = []
         self.grabbed = None
+        self.stripping = None          # heavy unit currently being dismantled
+        self.strip_anchor = (0, 0)
         self.grab_cd = 0.0
         self.mouse_hist = deque(maxlen=12)
         self.mouse_pos = (WIDTH // 2, HEIGHT // 2)
         self.stats_kills = 0
         self.stats_thrown_damage = 0.0
+        self.stats_plates_torn = 0
         self.purchases = {"bowman": 0, "ballista": 0, "cannon": 0}
         self.shop_items = self._build_shop()
         self.shop_msg = ""
@@ -2330,20 +2466,20 @@ class Game:
 
         return [
             ShopItem("bowman", "Bowmen", Bowman.COLOR,
-                     "Rapid arrows. Low damage, hits ground AND air. "
-                     "Targets whoever is closest to the gate.",
+                     "Rapid arrows, low damage. Its range stretches far "
+                     "UPWARD, so it always reaches flyers.",
                      lambda: 110 * (1.26 ** self.purchases["bowman"]),
                      buy_tower(Bowman, "bowman"),
                      tower_status(Bowman, "bowman")),
             ShopItem("ballista", "Ballista", Ballista.COLOR,
-                     "Heavy piercing bolt, slow reload. Picks the "
-                     "highest-health target. Ground only.",
+                     "Heavy piercing bolt, slow reload. HARD COUNTER to "
+                     "flyers: +200% damage to anything airborne.",
                      lambda: 250 * (1.28 ** self.purchases["ballista"]),
                      buy_tower(Ballista, "ballista"),
                      tower_status(Ballista, "ballista")),
             ShopItem("cannon", "Cannon", (168, 174, 196),
-                     "Explosive splash. Aims at the densest cluster of "
-                     "enemies. Ground only.",
+                     "Explosive splash on the densest cluster. HARD COUNTER "
+                     "to tanks: +200% damage to Heavy ground units.",
                      lambda: 380 * (1.28 ** self.purchases["cannon"]),
                      buy_tower(Cannon, "cannon"),
                      tower_status(Cannon, "cannon")),
@@ -2458,6 +2594,7 @@ class Game:
         self.effects.clear()
         self.projectiles.clear()
         self.grabbed = None
+        self.stripping = None
         self.shop_msg = f"Wave {self.wave} cleared!  Bonus +{bonus} gold."
         self.shop_msg_t = 4.0
         self.state = self.SHOP
@@ -2465,6 +2602,7 @@ class Game:
     def on_castle_destroyed(self):
         self.state = self.GAMEOVER
         self.grabbed = None
+        self.stripping = None
         self.add_shake(14.0)
         self.effects.burst(CASTLE_FRONT * 0.5, WALL_TOP + 60, 160,
                            (200, 120, 90), speed=700, life=1.4, size=6)
@@ -2493,11 +2631,29 @@ class Game:
                     best = e
         return best
 
+    def heavy_under_mouse(self, pos):
+        """A heavy unit whose plating can still be torn off."""
+        best = None
+        for e in self.enemies:
+            if not e.strippable:
+                continue
+            if e.grab_rect.collidepoint(pos):
+                if best is None or e.x < best.x:
+                    best = e
+        return best
+
     def try_grab(self, pos):
-        if self.grab_cd > 0 or self.grabbed is not None:
+        if self.grab_cd > 0 or self.grabbed is not None or self.stripping:
             return
         e = self.enemy_under_mouse(pos)
         if e is None:
+            # nothing liftable here -- is there a tank to dismantle instead?
+            heavy = self.heavy_under_mouse(pos)
+            if heavy is not None:
+                self.stripping = heavy
+                self.strip_anchor = pos
+                self.effects.text(heavy.x, heavy.y - heavy.h, "PULL!",
+                                  (255, 214, 120), 20)
             return
         self.grabbed = e
         e.on_grab()
@@ -2507,6 +2663,10 @@ class Game:
                           life=0.3, size=3)
 
     def release_grab(self):
+        if self.stripping is not None:
+            self.stripping = None
+            self.grab_cd = GRAB_COOLDOWN
+            return
         e = self.grabbed
         self.grabbed = None
         self.grab_cd = GRAB_COOLDOWN
@@ -2528,6 +2688,25 @@ class Game:
 
     def update_grab(self, dt):
         self.grab_cd = max(0.0, self.grab_cd - dt)
+
+        # --- dismantling a heavy unit ---------------------------------
+        h = self.stripping
+        if h is not None:
+            if not h.strippable:
+                self.stripping = None      # dead, or fully stripped already
+            else:
+                mx, my = self.mouse_pos
+                ax, ay = self.strip_anchor
+                pulled = math.hypot(mx - ax, my - ay)
+                self.strip_anchor = (mx, my)
+                if pulled > 0.5:
+                    h.apply_strip(pulled)
+                    if random.random() < 0.4:
+                        self.effects.burst(h.x + random.uniform(-30, 30),
+                                           h.y, 2, (188, 192, 206),
+                                           speed=120, life=0.3, size=2)
+                return
+
         e = self.grabbed
         if e is None:
             return
@@ -2586,6 +2765,8 @@ class Game:
 
         if self.grabbed is not None and not self.grabbed.alive:
             self.grabbed = None
+        if self.stripping is not None and not self.stripping.alive:
+            self.stripping = None
 
         # wave completion
         if self.wave_active and not self.spawn_queue and not self.alive_enemies():
@@ -2673,7 +2854,7 @@ class Game:
 
         if ev.type == pygame.MOUSEBUTTONUP and ev.button == 1:
             self.mouse_pos = ev.pos
-            if self.grabbed is not None:
+            if self.grabbed is not None or self.stripping is not None:
                 self.release_grab()
             return
 
@@ -2716,8 +2897,26 @@ class Game:
             self.draw_gameover(self.screen)
 
     def draw_grab_cursor(self, s):
-        target = self.grabbed or self.enemy_under_mouse(self.mouse_pos)
         mx, my = self.mouse_pos
+
+        # heavy unit under the cursor (or being dismantled right now)
+        heavy = self.stripping or self.heavy_under_mouse(self.mouse_pos)
+        if heavy is not None and self.grabbed is None:
+            r = heavy.grab_rect
+            col = (255, 170, 90) if self.stripping else (220, 190, 150)
+            pygame.draw.rect(s, col, r, 2, border_radius=6)
+            for i in range(heavy.ARMOR_LAYERS):
+                px = r.left + 6 + i * 12
+                on = i < heavy.layers
+                pygame.draw.rect(s, col if on else (90, 80, 74),
+                                 (px, r.top - 26, 9, 7), 0 if on else 1)
+            draw_text(s, "PULL!" if self.stripping else "DRAG TO RIP ARMOR",
+                      heavy.x, r.top - 48, 18, col, "center", True)
+            if self.stripping:
+                pygame.draw.line(s, (255, 200, 120), (mx, my),
+                                 (heavy.x, heavy.y), 2)
+
+        target = self.grabbed or self.enemy_under_mouse(self.mouse_pos)
         if target is not None:
             r = target.grab_rect
             col = (255, 230, 140) if self.grabbed else (200, 220, 255)
@@ -2764,6 +2963,9 @@ class Game:
                       C_DIM, "right")
             draw_text(surf, f"Throw damage: {int(self.stats_thrown_damage)}",
                       WIDTH - 20, 64, 20, (255, 190, 120), "right")
+            if self.stats_plates_torn:
+                draw_text(surf, f"Plates torn: {self.stats_plates_torn}",
+                          WIDTH - 20, 86, 20, (200, 206, 224), "right")
 
         # boss bar
         boss = self.current_boss()
@@ -2788,7 +2990,8 @@ class Game:
             y += 40
 
         if self.state == self.PLAYING:
-            draw_text(surf, "Hold LMB on a mob to grab  -  flick to fling  -  P to pause",
+            draw_text(surf, "LMB a mob to fling it  -  LMB-drag a Siege Ram to rip "
+                      "its armour  -  P to pause",
                       WIDTH // 2, HEIGHT - 24, 18, (170, 176, 194), "center")
 
     # -- overlay panels --------------------------------------------------
@@ -2811,22 +3014,24 @@ class Game:
         lines = [
             ("Endless waves. 8 mob types, 3 bosses, one castle.", C_DIM),
             ("", C_DIM),
-            ("HOLD LEFT MOUSE on a ground mob to grab it,", C_WHITE),
-            ("then FLICK and RELEASE to hurl it skyward.", C_WHITE),
-            ("Falling mobs take heavy damage and crush their friends.", C_GREEN),
-            ("Bosses and Siege Rams are too heavy to lift --", (255, 180, 140)),
-            ("buy Bowmen, Ballistas and Cannons for those.", (255, 180, 140)),
+            ("THROW:  hold LEFT MOUSE on a ground mob, then FLICK", C_WHITE),
+            ("and release to hurl it. Falls hurt; landings crush others.", C_GREEN),
             ("", C_DIM),
-            ("Spend gold between waves. Upgrade your walls to survive.", C_GOLD),
+            ("STRIP:  Siege Rams refuse to be lifted -- drag on one", C_WHITE),
+            ("repeatedly to rip its armour plates off, slowing it and", (255, 200, 140)),
+            ("leaving it wide open to your guns.", (255, 200, 140)),
             ("", C_DIM),
-            ("Click or press SPACE to visit the armoury", C_HILITE),
+            ("Bowmen reach high, Ballistas shred flyers (+200%),", C_HILITE),
+            ("Cannons shred tanks (+200%). Bosses need pure firepower.", C_HILITE),
+            ("", C_DIM),
+            ("Click or press SPACE to visit the armoury", C_GOLD),
         ]
-        y = r.top + 96
+        y = r.top + 84
         for text, col in lines:
-            size = 26 if col is C_HILITE else 21
+            size = 24 if col is C_GOLD else 20
             draw_text(surf, text, r.centerx, y, size, col, "center",
-                      bold=(col is C_HILITE))
-            y += 29
+                      bold=(col is C_GOLD))
+            y += 27
 
     def draw_gameover(self, surf):
         self.draw_center_panel(surf, "THE CASTLE HAS FALLEN", [
@@ -2834,6 +3039,7 @@ class Game:
             f" (fell on wave {self.wave}).",
             f"Enemies slain: {self.stats_kills}",
             f"Damage dealt by throwing: {int(self.stats_thrown_damage)}",
+            f"Armour plates torn off: {self.stats_plates_torn}",
             f"Final walls: {self.castle.tier_name}",
             "",
             "Press R or click to play again.",
@@ -2886,6 +3092,11 @@ class Game:
                       C_WHITE if afford else (130, 130, 140), "center", True)
 
             self._draw_shop_icon(surf, item.key, r.centerx, r.y + 108, item.color)
+
+            tower_cls = TOWER_FOR_KEY.get(item.key)
+            if tower_cls is not None and tower_cls.COUNTER_TAG:
+                draw_text(surf, tower_cls.COUNTER_TAG, r.centerx, r.y + 132, 17,
+                          (255, 206, 120), "center", True)
 
             ty = r.y + 150
             for ln in wrap_text(item.desc, 17, r.w - 26):
@@ -2969,7 +3180,8 @@ class Game:
                 self.handle_event(ev)
             self.mouse_pos = pygame.mouse.get_pos()
             # if the button-up was swallowed (focus loss, alt-tab), drop the mob
-            if self.grabbed is not None and not pygame.mouse.get_pressed()[0]:
+            if ((self.grabbed is not None or self.stripping is not None)
+                    and not pygame.mouse.get_pressed()[0]):
                 self.release_grab()
             self.update(dt)
             self.draw()
@@ -3047,11 +3259,63 @@ def _ui_smoke(g):
     g.draw()
     ev(type=pygame.KEYDOWN, key=pygame.K_r)
     assert g.state == Game.MENU, "R should return to the menu"
+    # --- strategic counter table must hold ---
+    bow, bal, can = Bowman(g, 200, 350), Ballista(g, 200, 350), Cannon(g, 200, 350)
+    air, heavy = Gargoyle(g, 5), SiegeRam(g, 5)
+    ground = FootSoldier(g, 5)
+    assert abs(bal.damage_vs(air) / bal.damage_vs(ground) - 3.0) < 1e-6, \
+        "Ballista must deal +200% to flyers"
+    assert abs(can.damage_vs(heavy) / can.damage_vs(ground) - 3.0) < 1e-6, \
+        "Cannon must deal +200% to heavy ground units"
+    assert bal.damage_vs(heavy) == bal.damage_vs(ground)
+    assert can.damage_vs(air) == can.damage_vs(ground)
+    assert bow.AIR_RANGE_MULT > 1.0 and bal.HITS_AIR
+
+    # a target straight overhead must be reachable where a level one is not
+    class _Probe:
+        flying, HEAVY = True, False
+        def __init__(self, x, y): self.x, self.y = x, y
+    mx, my = bow.muzzle
+    assert bow.reach_to(_Probe(mx, my - bow.range * 1.3)) <= bow.range
+    assert bow.reach_to(_Probe(mx + bow.range * 1.3, my)) > bow.range
+
+    # --- stripping: plates come off, armour falls, it slows, it softens ---
+    ram = SiegeRam(g, 5)
+    ram.x, ram.y = 800, ram.ground_y
+    g.enemies.append(ram)
+    g.state = Game.PLAYING
+    before = (ram.armor, ram.speed, ram.vulnerable)
+    assert not ram.grabbable and ram.strippable
+    g.mouse_pos = (int(ram.x), int(ram.y))
+    g.try_grab(g.mouse_pos)
+    assert g.stripping is ram and g.grabbed is None, "drag on a tank must strip"
+    for step in range(600):
+        g.mouse_pos = (int(ram.x) + (70 if step % 2 else -70), int(ram.y))
+        g.update_grab(1 / 60.0)
+        if ram.layers == 0:
+            break
+    assert ram.layers == 0, "dragging must eventually strip every plate"
+    assert ram.armor < before[0] and ram.speed < before[1] \
+        and ram.vulnerable > before[2], "stripping must reduce armour+speed"
+    assert not ram.strippable, "a fully stripped tank has nothing left to tear"
+    g.release_grab()
+    assert g.stripping is None
+
+    for cls in (TrollKing, Dragon, LichLord):
+        b = cls(g, 15)
+        assert not b.grabbable and not b.strippable, \
+            f"{cls.NAME} must resist both throwing and stripping"
+
+    print("selftest: counters OK (Ballista +200% air, Cannon +200% heavy, "
+          "Bowman air-range buff)")
+    print("selftest: stripping OK (3 plates -> armour "
+          f"{before[0]:.2f}->{ram.armor:.2f}, speed {before[1]:.0f}->{ram.speed:.0f}"
+          f", damage taken x{ram.vulnerable:.2f}); bosses immune")
     print("selftest: UI paths OK (menu, shop clicks + hotkeys, pause, "
           "throw, defeat, restart)")
 
 
-def selftest(frames=26000):
+def selftest(frames=32000):
     """
     Headless smoke test: plays itself for a while, exercising every mob, every
     boss, the shop, and the grab/throw physics, while rendering each frame.
@@ -3081,6 +3345,17 @@ def selftest(frames=26000):
         # keep the castle alive so we reach the late waves
         if g.castle.hp < g.castle.max_hp * 0.5:
             g.castle.hp = g.castle.max_hp
+
+        # dismantle any heavy unit on the field, then go back to throwing
+        if g.stripping is not None:
+            g.mouse_pos = (int(g.stripping.x) + (70 if i % 2 else -70),
+                           int(g.stripping.y))
+            g.update(dt); g.draw()
+            continue
+        heavy = next((e for e in g.enemies if e.strippable), None)
+        if heavy is not None and held is None and i % 7 == 0:
+            g.mouse_pos = (int(heavy.x), int(heavy.y))
+            g.try_grab(g.mouse_pos)
 
         # drive the grab/throw mechanic
         if held is None and i % 23 == 0:
@@ -3130,7 +3405,7 @@ def selftest(frames=26000):
 
 if __name__ == "__main__":
     if "--selftest" in sys.argv:
-        n = 26000
+        n = 32000
         for a in sys.argv[1:]:
             if a.isdigit():
                 n = int(a)
