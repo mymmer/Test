@@ -69,6 +69,64 @@ BOUNCE_RESTITUTION = (0.32, 0.46, 0.56, 0.64, 0.71, 0.78)
 BOUNCE_DMG_BONUS = 0.22        # extra impact damage per level ("weight")
 BOUNCE_STAGGER = 0.34          # extra recovery time per level, in seconds
 
+# --- weather --------------------------------------------------------------
+WIND_MAX = 260.0             # px/s^2 pushed onto anything airborne
+WIND_PROJECTILE = 0.45       # projectiles are less affected than bodies
+STORM_CHANCE = 0.3           # of waves that break into a thunderstorm
+STORM_CEILING = 132.0        # fling a mob above this line and it gets hit
+STORM_DAMAGE = 0.34          # fraction of a mob's max health per strike
+STORM_COOLDOWN = 1.1         # per-mob, so one mob is not fried 60x a second
+
+# --- Dragon claw smacking --------------------------------------------------
+CLAW_SMACK_DISTANCE = 360.0  # px of dragging to land a solid smack
+CLAW_STAGGER = 3.2           # seconds the Dragon reels for
+
+# --- Challenge Horn --------------------------------------------------------
+HORN_RECT = pygame.Rect(170, 452, 58, 60)
+HORN_BONUS = 0.6             # extra gold and score for the rest of the wave
+
+# --- endgame mob tiers (after the first three bosses are behind you) ------
+# (name, first wave, colour tint, tint strength, hp mult, dmg mult, spd mult)
+ENDGAME_TIERS = (
+    ("Bloodied",    16, (214,  58,  52), 0.42, 1.35, 1.22, 1.05),
+    ("Frostbound",  26, ( 74, 148, 230), 0.46, 1.85, 1.46, 1.10),
+    ("Voidtouched", 36, ( 24,  20,  34), 0.55, 2.60, 1.80, 1.16),
+)
+
+# --- cursor strength ------------------------------------------------------
+GRAB_MAX_LEVEL = 4
+# the heaviest MASS the cursor can lift at each Grab Strength level.
+# A Siege Ram is MASS 9.0, so it stays unliftable until level 3.
+GRAB_CAPACITY = (3.5, 5.5, 7.5, 9.5, 13.0)
+MULTI_MAX_LEVEL = 3          # Magnetic Gloves: extra mobs held at once
+MULTI_RADIUS = 110.0
+
+# --- shoving a heavy unit castle-ward -------------------------------------
+SHOVE_FACTOR = 3.4           # forward momentum gained per px dragged inward
+SHOVE_DECAY = 1.6            # fraction of the shove bled off per second
+SHOVE_MAX = 340.0
+
+# --- manual overcharge (slingshot) ----------------------------------------
+OVERCHARGE_PULL = 190.0      # px of draw-back for a full-power shot
+OVERCHARGE_DAMAGE = 2.5      # +150% damage on an overcharged round
+OVERCHARGE_SPLASH = 1.7      # blast radius multiplier
+OVERCHARGE_SPEED = 1.45      # projectile speed multiplier
+OVERCHARGE_COOLDOWN = 5.0    # per-tower, so it cannot simply be spammed
+
+# --- world structures ------------------------------------------------------
+OUTPOST_X = 1015.0           # safely back in the scenery; mobs ignore it
+OUTPOST_BASE_Y = 505.0
+OUTPOST_MAX_LEVEL = 6
+OUTPOST_TURRET_FROM = 4      # at this garrison level the bows become turrets
+OUTPOST_RANGE = 560.0
+
+BARRICADE_X = 585.0          # out on the field, well ahead of the wall
+BARRICADE_MAX_LEVEL = 5
+BARRICADE_HP = (0, 340, 620, 980, 1450, 2050)
+
+SPIKE_MAX_LEVEL = 4
+SPIKE_DAMAGE = 15.0          # reflected onto anything striking the wall
+
 # --- risk / reward -------------------------------------------------------
 POP_GOLD_FREE = 4              # mobs on screen before the bonus kicks in
 POP_GOLD_STEP = 0.055          # extra gold multiplier per additional mob
@@ -363,6 +421,7 @@ class Projectile:
     # -- update ----------------------------------------------------------
     def update(self, dt):
         self.trail.append((self.x, self.y))
+        self.vx += self.game.wind * WIND_PROJECTILE * dt
         self.vy += self.grav * dt
         self.x += self.vx * dt
         self.y += self.vy * dt
@@ -600,6 +659,7 @@ class DefenseTower:
     # the tower can engage flyers well above its own altitude.
     AIR_RANGE_MULT = 1.0
     COUNTER_TAG = ""          # short label drawn on the shop card
+    OVERCHARGEABLE = False    # can the player slingshot-fire this by hand?
 
     def __init__(self, game, x, y):
         self.game = game
@@ -618,6 +678,7 @@ class DefenseTower:
         self.aim = -0.35          # rendered barrel angle
         self.recoil = 0.0
         self.level = 1
+        self.overcharge_cd = 0.0
 
     # -- geometry --------------------------------------------------------
     @property
@@ -706,6 +767,7 @@ class DefenseTower:
 
     def update(self, dt):
         self.recoil = max(0.0, self.recoil - dt * 5.0)
+        self.overcharge_cd = max(0.0, self.overcharge_cd - dt)
         if self.disabled:
             self.rebuild -= dt
             if self.rebuild <= 0:
@@ -740,6 +802,35 @@ class DefenseTower:
         self.max_hp *= 1.15
         self.hp = self.max_hp
         return self.level
+
+    @property
+    def can_overcharge(self):
+        return (self.OVERCHARGEABLE and not self.disabled
+                and self.stun <= 0 and self.overcharge_cd <= 0)
+
+    def overcharge_fire(self, ax, ay, power):
+        """Hand-fired slingshot shot: aimed by dragging back from the tower,
+        released to launch instantly regardless of the reload timer."""
+        mx, my = self.muzzle
+        dx, dy = mx - ax, my - ay          # fires opposite the draw-back
+        d = math.hypot(dx, dy)
+        if d < 12:
+            return False
+        self.overcharge_cd = OVERCHARGE_COOLDOWN
+        self.cooldown = self.reload
+        self.recoil = 1.0
+        self.aim = math.atan2(dy, dx)
+        self.launch_overcharged(dx / d, dy / d, power)
+        g = self.game
+        g.add_shake(6.0 * power)
+        g.effects.ring(mx, my, 16, (255, 226, 150),
+                       speed=320 * power, life=0.4, size=4)
+        g.effects.text(self.x, self.y - self.H - 20, "OVERCHARGE!",
+                       (255, 214, 120), 22)
+        return True
+
+    def launch_overcharged(self, dirx, diry, power):
+        raise NotImplementedError
 
     def fire(self, target):
         raise NotImplementedError
@@ -821,6 +912,16 @@ class Ballista(DefenseTower):
     MAX_HP = 120.0
     W, H = 34, 30
     COUNTER_TAG = "+200% vs FLYING"
+    OVERCHARGEABLE = True
+
+    def launch_overcharged(self, dirx, diry, power):
+        mx, my = self.muzzle
+        speed = 1150.0 * OVERCHARGE_SPEED
+        self.game.projectiles.append(Projectile(
+            self.game, mx, my, dirx * speed, diry * speed, "bolt",
+            self.damage * (1.0 + (OVERCHARGE_DAMAGE - 1.0) * power),
+            pierce=4, color=(255, 226, 150),
+            bonus_air=self.BONUS_VS_AIR, bonus_heavy=self.BONUS_VS_HEAVY))
 
     def score_target(self, enemy, dist):
         # flyers first (it is the anti-air gun), then the beefiest target
@@ -872,6 +973,17 @@ class Cannon(DefenseTower):
     MAX_HP = 140.0
     W, H = 36, 28
     COUNTER_TAG = "+200% vs HEAVY"
+    OVERCHARGEABLE = True
+
+    def launch_overcharged(self, dirx, diry, power):
+        mx, my = self.muzzle
+        speed = 900.0 * OVERCHARGE_SPEED
+        self.game.projectiles.append(Projectile(
+            self.game, mx, my, dirx * speed, diry * speed, "cannon",
+            self.damage * (1.0 + (OVERCHARGE_DAMAGE - 1.0) * power),
+            splash=self.splash * (1.0 + (OVERCHARGE_SPLASH - 1.0) * power),
+            grav=GRAVITY * 0.55, life=4.0, color=(255, 190, 120),
+            bonus_air=self.BONUS_VS_AIR, bonus_heavy=self.BONUS_VS_HEAVY))
 
     def score_target(self, enemy, dist):
         # a heavy in range always wins; otherwise hit the densest cluster
@@ -1217,6 +1329,22 @@ class Castle:
         pygame.draw.polygon(surf, trim, pts)
         pygame.draw.polygon(surf, shade(trim, 0.6), pts, 2)
 
+        lvl = self.game.spike_level
+        if lvl > 0:
+            # rows of iron spikes jutting from the outer face
+            for row in range(lvl):
+                yy = WALL_TOP + 26 + row * 34
+                for k in range(4):
+                    ty = yy + k * 8
+                    pygame.draw.polygon(surf, (176, 182, 198), [
+                        (self.front_x - 2, ty - 4),
+                        (self.front_x + 18, ty),
+                        (self.front_x - 2, ty + 4)])
+                    pygame.draw.polygon(surf, (96, 102, 116), [
+                        (self.front_x - 2, ty - 4),
+                        (self.front_x + 18, ty),
+                        (self.front_x - 2, ty + 4)], 1)
+
         for t in self.towers:
             t.draw(surf)
         for t in self.towers:
@@ -1224,8 +1352,215 @@ class Castle:
 
 
 # ------------------------------------------------------------------------------
+# Outpost and Barricade
+# ------------------------------------------------------------------------------
+
+class Outpost:
+    """
+    A stone tower back in the scenery.  Enemies march straight past it and
+    can never attack it, so whatever is garrisoned here keeps firing all
+    round -- an uninterrupted trickle of damage the player buys into.
+    """
+
+    def __init__(self, game):
+        self.game = game
+        self.x = OUTPOST_X
+        self.y = OUTPOST_BASE_Y
+        self.level = 0
+        self.cooldowns = []
+        self.flash = 0.0
+
+    @property
+    def guns(self):
+        return self.level
+
+    @property
+    def is_turret(self):
+        return self.level >= OUTPOST_TURRET_FROM
+
+    @property
+    def gun_damage(self):
+        return 15.0 if self.is_turret else 7.5
+
+    @property
+    def gun_reload(self):
+        return 0.62 if self.is_turret else 0.92
+
+    def upgrade(self):
+        if self.level >= OUTPOST_MAX_LEVEL:
+            return False
+        self.level += 1
+        self.cooldowns.append(random.uniform(0.0, 0.5))
+        self.flash = 1.0
+        return True
+
+    def gun_pos(self, i):
+        return (self.x - 26 + (i % 3) * 26, self.y - 60 - (i // 3) * 26)
+
+    def pick_target(self):
+        best, bx = None, None
+        for e in self.game.enemies:
+            if not e.alive or not e.targetable:
+                continue
+            if math.hypot(e.x - self.x, e.y - self.y) > OUTPOST_RANGE:
+                continue
+            if bx is None or e.x < bx:      # whatever is furthest along
+                best, bx = e, e.x
+        return best
+
+    def update(self, dt):
+        self.flash = max(0.0, self.flash - dt * 2.0)
+        if self.level <= 0:
+            return
+        for i in range(len(self.cooldowns)):
+            self.cooldowns[i] -= dt
+            if self.cooldowns[i] > 0:
+                continue
+            target = self.pick_target()
+            if target is None:
+                self.cooldowns[i] = 0.15
+                continue
+            self.cooldowns[i] = self.gun_reload
+            gx, gy = self.gun_pos(i)
+            speed = 1000.0 if self.is_turret else 840.0
+            a = math.atan2(target.y - gy, target.x - gx)
+            self.game.projectiles.append(Projectile(
+                self.game, gx, gy, math.cos(a) * speed, math.sin(a) * speed,
+                "bolt" if self.is_turret else "arrow", self.gun_damage))
+
+    def draw(self, surf):
+        x, y = int(self.x), int(self.y)
+        # rocky outcrop it stands on
+        pygame.draw.polygon(surf, (38, 44, 54), [
+            (x - 78, GROUND_Y - 16), (x - 46, y + 6),
+            (x + 46, y + 6), (x + 78, GROUND_Y - 16)])
+        body = pygame.Rect(x - 42, y - 62, 84, 70)
+        pygame.draw.rect(surf, (74, 78, 92), body)
+        for row in range(4):
+            for col in range(4):
+                pygame.draw.rect(surf, shade((74, 78, 92), 0.86 + 0.1 * ((row + col) % 2)),
+                                 (body.x + 3 + col * 20, body.y + 3 + row * 17, 17, 14))
+        pygame.draw.rect(surf, (46, 50, 62), body, 2)
+        for i in range(5):      # battlements
+            pygame.draw.rect(surf, (92, 96, 112),
+                             (body.x + i * 18, body.y - 10, 12, 12))
+        if self.level <= 0:
+            draw_text(surf, "OUTPOST (empty)", self.x, body.y - 30, 16,
+                      (150, 156, 174), "center")
+            return
+        for i in range(self.guns):
+            gx, gy = self.gun_pos(i)
+            if self.is_turret:
+                pygame.draw.rect(surf, (96, 104, 124),
+                                 (gx - 8, gy - 6, 16, 14), border_radius=3)
+                pygame.draw.line(surf, (150, 158, 178), (gx, gy - 2),
+                                 (gx + 14, gy - 6), 4)
+                pygame.draw.circle(surf, (198, 206, 226), (gx, gy - 2), 4)
+            else:
+                pygame.draw.circle(surf, (222, 190, 152), (int(gx), int(gy) - 6), 4)
+                pygame.draw.rect(surf, (110, 170, 108), (gx - 4, gy - 2, 8, 10),
+                                 border_radius=2)
+                pygame.draw.arc(surf, (198, 170, 110),
+                                pygame.Rect(int(gx) + 3, int(gy) - 10, 12, 20),
+                                -1.1, 1.1, 2)
+        tag = "TURRETS" if self.is_turret else "BOWMEN"
+        draw_text(surf, f"OUTPOST {tag} x{self.guns}", self.x, body.y - 30, 15,
+                  (176, 200, 226), "center", True)
+
+
+class Barricade:
+    """
+    A bought wall standing out in the field.  Ground troops have to chew
+    through it before they can reach the castle; flyers simply go over.
+    """
+    W = 40
+
+    def __init__(self, game):
+        self.game = game
+        self.x = BARRICADE_X
+        self.level = 0
+        self.hp = 0.0
+        self.max_hp = 0.0
+        self.flash = 0.0
+
+    @property
+    def alive(self):
+        return self.level > 0 and self.hp > 0
+
+    @property
+    def top_y(self):
+        return GROUND_Y - 96
+
+    def buy(self):
+        """Buy, rebuild after a collapse, or reinforce to the next tier."""
+        if self.level < BARRICADE_MAX_LEVEL:
+            self.level += 1
+        elif self.hp >= self.max_hp:
+            return False, "The barricade is already at full strength."
+        self.max_hp = float(BARRICADE_HP[self.level])
+        self.hp = self.max_hp
+        return True, f"Barricade raised to Lv.{self.level}."
+
+    def take_damage(self, amount):
+        if not self.alive:
+            return
+        self.hp -= amount
+        self.flash = 1.0
+        if self.hp <= 0:
+            self.hp = 0.0
+            g = self.game
+            g.add_shake(8.0)
+            g.effects.burst(self.x, GROUND_Y - 48, 40, (140, 120, 96),
+                            speed=340, life=0.8, size=5)
+            g.announce("The barricade has fallen!", (255, 160, 120), 2.0)
+
+    def update(self, dt):
+        self.flash = max(0.0, self.flash - dt * 3.0)
+
+    def draw(self, surf):
+        if not self.alive:
+            if self.level > 0:      # rubble where it stood
+                for i in range(5):
+                    pygame.draw.rect(surf, (72, 64, 54),
+                                     (int(self.x) - 22 + i * 10,
+                                      GROUND_Y - 8 - (i % 2) * 5, 9, 8))
+            return
+        col = (128, 112, 88)
+        if self.flash > 0:
+            col = mix(col, (255, 190, 170), self.flash * 0.8)
+        top = self.top_y
+        r = pygame.Rect(int(self.x - self.W / 2), int(top), self.W,
+                        GROUND_Y - int(top))
+        pygame.draw.rect(surf, col, r)
+        pygame.draw.rect(surf, shade(col, 0.6), r, 3)
+        for i in range(4):          # plank lines
+            yy = top + 14 + i * 22
+            pygame.draw.line(surf, shade(col, 0.7),
+                             (r.left + 2, yy), (r.right - 2, yy), 2)
+        for s_ in (-1, 1):          # angled braces
+            pygame.draw.line(surf, shade(col, 0.8),
+                             (r.centerx, top + 10),
+                             (r.centerx + s_ * 22, GROUND_Y - 2), 4)
+        pygame.draw.polygon(surf, (156, 140, 112), [
+            (r.left - 4, top), (r.right + 4, top), (r.centerx, top - 14)])
+        draw_bar(surf, int(self.x - 30), int(top - 30), 60, 6,
+                 self.hp / max(1.0, self.max_hp), (206, 160, 92))
+        draw_text(surf, f"Lv.{self.level}", self.x, top - 48, 15,
+                  (206, 182, 140), "center", True)
+
+
+# ------------------------------------------------------------------------------
 # Wave scaling
 # ------------------------------------------------------------------------------
+
+def endgame_tier(wave):
+    """Index into ENDGAME_TIERS for this wave, or -1 for the normal game."""
+    idx = -1
+    for i, t in enumerate(ENDGAME_TIERS):
+        if wave >= t[1]:
+            idx = i
+    return idx
+
 
 def wave_scaling(wave):
     """(health, damage, speed) multipliers -- mobs keep getting nastier."""
@@ -1272,6 +1607,19 @@ class Enemy:
         self.game = game
         self.wave = wave
         hp_m, dmg_m, spd_m = wave_scaling(wave)
+        # endgame tiers stack on top of the normal per-wave scaling and
+        # repaint the mob so the danger is readable at a glance
+        self.tier = endgame_tier(wave)
+        self.tier_name = ""
+        if self.tier >= 0:
+            name, _first, tint, strength, thp, tdmg, tspd = ENDGAME_TIERS[self.tier]
+            self.tier_name = name
+            hp_m *= thp
+            dmg_m *= tdmg
+            spd_m *= tspd
+            # shadows the class attribute for this instance only, so every
+            # existing `self.COLOR` reference picks up the tint for free
+            self.COLOR = mix(self.COLOR, tint, strength)
         self.max_hp = self.BASE_HP * hp_m
         self.hp = self.max_hp
         # armour is per-instance because the player can tear it off
@@ -1312,8 +1660,10 @@ class Enemy:
         self.fling_hits = 0
         self.fling_peak = 0.0
         self.bounce_count = 0
+        self.storm_cd = 0.0          # lightning re-strike delay
         self.regalia_cd = 0.0        # seconds until its item can be taken again
         self.regalia_taken = 0       # how many times the player has robbed it
+        self.shove = 0.0             # forward momentum from the player shoving
         self.bob = random.uniform(0, math.tau)
         self.spin = 0.0
 
@@ -1337,7 +1687,17 @@ class Enemy:
 
     @property
     def grabbable(self):
-        return self.GRABBABLE and self.alive and self.state in ("walk", "attack")
+        if not (self.GRABBABLE and self.alive
+                and self.state in ("walk", "attack")):
+            return False
+        # the cursor can only lift what its Grab Strength allows
+        return self.MASS <= self.game.grab_capacity
+
+    @property
+    def too_heavy(self):
+        """Liftable in principle, but the cursor is not strong enough yet."""
+        return (self.GRABBABLE and self.alive
+                and self.MASS > self.game.grab_capacity)
 
     def regalia_anchor(self):
         """Where this enemy's detachable item sits, or None."""
@@ -1347,6 +1707,14 @@ class Enemy:
         """Rect of a detachable item on this enemy, or None. Bosses override
         this to expose a crown / staff the player can rip off."""
         return None
+
+    def smack_rect(self):
+        """Rect the player can batter with the cursor, or None. Used by the
+        Dragon's claws; shares the boss-disruption guard timer."""
+        return None
+
+    def apply_smack(self, amount):
+        return False
 
     def guard_regalia(self):
         """Called when a boss recovers its item: it holds on tighter each
@@ -1364,6 +1732,21 @@ class Enemy:
         off by hauling on it -- that is the player's answer to a tank."""
         return (self.STRIPPABLE and self.alive and self.layers > 0
                 and self.state in ("walk", "attack"))
+
+    def apply_shove(self, amount):
+        """Player is hauling this heavy unit castle-ward: give it momentum.
+        Rushes the last slow tank into the guns, at the cost of it arriving
+        at the wall far sooner."""
+        if not (self.HEAVY and self.alive):
+            return False
+        was = self.shove
+        self.shove = min(SHOVE_MAX, self.shove + amount * SHOVE_FACTOR)
+        if self.shove > 40 and was <= 40:
+            self.game.effects.text(self.x, self.y - self.h * 0.8, "SHOVE!",
+                                   (150, 220, 255), 22)
+        self.game.effects.burst(self.x + self.w * 0.4, self.y, 2,
+                                (170, 210, 255), speed=90, life=0.25, size=2)
+        return True
 
     def apply_strip(self, amount):
         """Feed drag distance into prying off the next armour plate.
@@ -1525,7 +1908,8 @@ class Enemy:
         g.effects.burst((self.x + other.x) / 2, (self.y + other.y) / 2, 12,
                         (255, 220, 150), speed=240, life=0.4, size=3)
         g.add_shake(2.5)
-        if other.alive and other.GRABBABLE and other.state in ("walk", "attack"):
+        if (other.alive and other.GRABBABLE and other.MASS <= 4.0
+                and other.state in ("walk", "attack")):
             other.state = "air"
             other.vx = self.vx * 0.4
             other.vy = min(-140.0, self.vy * 0.5)
@@ -1539,6 +1923,7 @@ class Enemy:
         self.hurt_flash = max(0.0, self.hurt_flash - dt * 4.0)
         self.stagger = max(0.0, self.stagger - dt)
         self.regalia_cd = max(0.0, self.regalia_cd - dt)
+        self.storm_cd = max(0.0, self.storm_cd - dt)
         for k in list(self.slam_cooldown):
             self.slam_cooldown[k] -= dt
             if self.slam_cooldown[k] <= 0:
@@ -1559,11 +1944,14 @@ class Enemy:
 
     def _update_air(self, dt):
         self.vy += GRAVITY * dt
+        self.vx += self.game.wind * dt            # weather pushes bodies too
         self.vx -= self.vx * AIR_DRAG * dt
         self.x += self.vx * dt
         self.y += self.vy * dt
         self.spin += self.vx * dt * 0.012
         self.fling_peak = min(self.fling_peak, self.y)
+        if self.game.storm and self.y < STORM_CEILING:
+            self.game.strike_lightning(self)
         self.vx_estimate, self.vy_estimate = self.vx, self.vy
 
         # walls of the arena
@@ -1600,11 +1988,31 @@ class Enemy:
 
     # -- behaviour (override me) -----------------------------------------
     def think(self, dt):
+        if self.shove > 0:      # carried momentum from the player's shove
+            self.x -= self.shove * dt
+            self.shove *= max(0.0, 1.0 - SHOVE_DECAY * dt)
+            if self.shove < 8.0:
+                self.shove = 0.0
         self.anim += dt * self.speed * 0.06
         if self.flying:
             self.bob += dt * 3.0
             target_y = self.fly_y + math.sin(self.bob) * 18
             self.y += clamp(target_y - self.y, -160 * dt, 160 * dt)
+
+        bar = self.game.barricade
+        if (bar.alive and not self.flying and self.x >= bar.x
+                and self.x - self.w / 2 <= bar.x + bar.W / 2):
+            # blocked out in the field -- chew through the barricade.
+            # (a mob thrown *over* it lands inside and ignores it)
+            self.state = "attack"
+            self.x = bar.x + bar.W / 2 + self.w / 2
+            self.attack_timer -= dt
+            if self.attack_timer <= 0:
+                self.attack_timer = self.ATTACK_RATE
+                bar.take_damage(self.damage * (2.5 if self.HEAVY else 1.0))
+                self.game.effects.burst(bar.x, self.y, 6, (170, 150, 120),
+                                        speed=160, life=0.3)
+            return
 
         if self.x - self.w / 2 <= self.game.castle.front_x:
             self.state = "attack"
@@ -1624,9 +2032,14 @@ class Enemy:
             self.vx_estimate = -self.speed
 
     def attack_castle(self):
-        self.game.castle.take_damage(self.damage)
-        self.game.effects.burst(self.game.castle.front_x, self.y, 8,
-                                (220, 200, 180), speed=180, life=0.35)
+        g = self.game
+        g.castle.take_damage(self.damage)
+        g.effects.burst(g.castle.front_x, self.y, 8,
+                        (220, 200, 180), speed=180, life=0.35)
+        g.apply_spikes(self)
+
+    def draw_too_heavy_hint(self, surf):
+        pass
 
     # -- drawing ---------------------------------------------------------
     def body_color(self):
@@ -1826,7 +2239,7 @@ class SiegeRam(Enemy):
     GOLD = 52
     ARMOR = 0.60           # very heavily plated...
     MASS = 9.0
-    GRABBABLE = False      # ...too determined to be lifted...
+    GRABBABLE = True       # ...liftable only at high Grab Strength...
     HEAVY = True           # ...but Cannons hit it for triple...
     STRIPPABLE = True      # ...and the player can rip the plates off
     ARMOR_LAYERS = 3
@@ -1838,6 +2251,7 @@ class SiegeRam(Enemy):
     def attack_castle(self):
         self.ram_push = 1.0
         self.game.castle.take_damage(self.damage)
+        self.game.apply_spikes(self)
         self.game.add_shake(9.0)
         self.game.effects.burst(self.game.castle.front_x, self.y, 26,
                                 (190, 170, 150), speed=320, life=0.6, size=5)
@@ -2109,6 +2523,140 @@ class Gargoyle(Enemy):
                              (r.centerx + s * 9, r.y - 6), 2)
 
 
+# --- Volatile: walks in, goes off like a bomb --------------------------------
+class Volatile(Enemy):
+    NAME = "Volatile"
+    DESC = "Detonates violently when killed. Mind the blast."
+    COLOR = (232, 138, 52)
+    W, H = 26, 28
+    BASE_HP = 46.0
+    BASE_SPEED = 84.0
+    BASE_DAMAGE = 8.0
+    ATTACK_RATE = 1.1
+    GOLD = 16
+    MASS = 1.1
+    BLAST_RADIUS = 132.0
+    BLAST_DAMAGE = 3.4        # multiple of its own contact damage
+
+    def __init__(self, game, wave, x=None, y=None):
+        super().__init__(game, wave, x, y)
+        self.fuse = random.uniform(0.0, 6.28)
+
+    def die(self, silent=False):
+        was_alive = self.alive
+        super().die(silent)
+        if was_alive:
+            self.detonate()
+
+    def detonate(self):
+        g = self.game
+        dmg = self.damage * self.BLAST_DAMAGE
+        g.add_shake(7.0)
+        g.effects.ring(self.x, self.y, 26, (255, 190, 90),
+                       speed=self.BLAST_RADIUS * 3.4, life=0.45, size=6)
+        g.effects.burst(self.x, self.y, 34, (255, 140, 60), speed=380,
+                        life=0.7, size=5)
+        g.effects.text(self.x, self.y - self.h, "BOOM!", (255, 170, 80), 26)
+        for o in g.enemies:
+            if o is self or not o.alive:
+                continue
+            d = math.hypot(o.x - self.x, o.y - self.y)
+            if d <= self.BLAST_RADIUS:
+                o.take_damage(dmg * (1.0 - 0.5 * d / self.BLAST_RADIUS),
+                              "explosive")
+        # it will happily take the wall with it
+        gap = self.x - g.castle.front_x
+        if 0 <= gap <= self.BLAST_RADIUS:
+            g.castle.take_damage(dmg * (1.0 - 0.5 * gap / self.BLAST_RADIUS))
+        if g.barricade.alive and abs(self.x - g.barricade.x) <= self.BLAST_RADIUS:
+            g.barricade.take_damage(dmg)
+
+    def think(self, dt):
+        self.fuse += dt * 7.0
+        super().think(dt)
+
+    def draw_body(self, surf):
+        r = self.hit_rect
+        col = self.body_color()
+        pulse = 0.5 + 0.5 * math.sin(self.fuse)
+        self._legs(surf, shade(col, 0.6))
+        glow = pygame.Surface((r.w * 3, r.h * 3), pygame.SRCALPHA)
+        pygame.draw.circle(glow, (255, 150, 60, int(60 + 60 * pulse)),
+                           (r.w * 3 // 2, r.h * 3 // 2), int(r.w * 0.9))
+        surf.blit(glow, (r.centerx - r.w * 1.5, r.centery - r.h * 1.5))
+        pygame.draw.circle(surf, mix(col, (255, 240, 180), pulse * 0.55),
+                           (r.centerx, r.centery), r.w // 2)
+        pygame.draw.circle(surf, shade(col, 0.5), (r.centerx, r.centery),
+                           r.w // 2, 2)
+        pygame.draw.circle(surf, (40, 30, 24), (r.centerx - 4, r.centery - 3), 2)
+        pygame.draw.circle(surf, (40, 30, 24), (r.centerx + 4, r.centery - 3), 2)
+        # sputtering fuse
+        fx, fy = r.centerx + 6, r.top - 4
+        pygame.draw.line(surf, (90, 74, 58), (r.centerx, r.top + 2), (fx, fy), 2)
+        pygame.draw.circle(surf, (255, 226, 130), (fx, int(fy - pulse * 2)),
+                           2 + int(pulse * 2))
+
+
+# --- Treasure Goblin: catch it before it gets away ---------------------------
+class TreasureGoblin(Enemy):
+    NAME = "Treasure Goblin"
+    DESC = "Flees with a sack of gold. Kill it before it escapes!"
+    COLOR = (218, 176, 60)
+    W, H = 24, 30
+    BASE_HP = 70.0
+    BASE_SPEED = 104.0
+    BASE_DAMAGE = 0.0
+    GOLD = 140
+    MASS = 0.9
+
+    def __init__(self, game, wave, x=None, y=None):
+        if x is None:
+            x = random.uniform(720, 1040)      # starts out in the open field
+        super().__init__(game, wave, x, y)
+        self.escape_timer = 11.0
+        self.hop = random.uniform(0, 6.28)
+
+    def think(self, dt):
+        """It never attacks -- it just legs it for the edge of the map."""
+        self.anim += dt * self.speed * 0.09
+        self.hop += dt * 11.0
+        self.state = "walk"
+        self.x += self.speed * dt          # runs away from the castle
+        self.vx_estimate = self.speed
+        self.escape_timer -= dt
+        if self.escape_timer <= 0 or self.x > WIDTH + 90:
+            self.escape()
+
+    def escape(self):
+        if not self.alive:
+            return
+        self.game.effects.text(min(self.x, WIDTH - 80), self.y - self.h,
+                               "ESCAPED!", (200, 190, 160), 24)
+        self.die(silent=True)              # no reward for letting it go
+
+    def draw_body(self, surf):
+        r = self.hit_rect
+        col = self.body_color()
+        bounce = abs(math.sin(self.hop)) * 4
+        r = r.move(0, -bounce)
+        self._legs(surf, (150, 120, 40))
+        pygame.draw.ellipse(surf, col, (r.x, r.y + 8, r.w, r.h - 10))
+        pygame.draw.circle(surf, (150, 200, 130), (r.centerx, r.y + 7), 7)
+        pygame.draw.circle(surf, (30, 40, 30), (r.centerx - 3, r.y + 6), 2)
+        pygame.draw.circle(surf, (30, 40, 30), (r.centerx + 3, r.y + 6), 2)
+        # the sack, slung over one shoulder
+        sack = pygame.Rect(r.right - 4, r.y + 4, 18, 18)
+        pygame.draw.ellipse(surf, (196, 156, 48), sack)
+        pygame.draw.ellipse(surf, (120, 92, 24), sack, 2)
+        pygame.draw.line(surf, (120, 92, 24), (sack.centerx, sack.top),
+                         (sack.centerx, sack.top - 4), 3)
+        for k in range(3):
+            pygame.draw.circle(surf, (255, 226, 120),
+                               (sack.centerx - 4 + k * 4, sack.centery + 2), 2)
+        draw_text(surf, f"{int(self.escape_timer)}s", self.x, r.top - 18, 15,
+                  (240, 214, 130), "center", True)
+
+
 # ------------------------------------------------------------------------------
 # Bosses
 # ------------------------------------------------------------------------------
@@ -2310,10 +2858,18 @@ class Dragon(Boss):
         self.breathing = 0.0
         self.shot_timer = 0.0
         self.standoff_x = CASTLE_FRONT + 330
+        self.claw_progress = 0.0
+        self.reel = 0.0
 
     def think(self, dt):
         self.anim += dt * 6.0
         self.bob += dt * 2.2
+        if self.reel > 0:
+            # knocked off its attack run: climbing and shaking it off
+            self.reel -= dt
+            self.state = "attack"
+            self.y += clamp((self.fly_y - 60) - self.y, -170 * dt, 170 * dt)
+            return
         target_y = self.fly_y + math.sin(self.bob) * 26
         self.y += clamp(target_y - self.y, -180 * dt, 180 * dt)
 
@@ -2340,6 +2896,44 @@ class Dragon(Boss):
             self.shot_timer = 0.0
             self.game.effects.text(self.x, self.y - self.h, "FIRE BREATH!",
                                    (255, 170, 80), 28)
+
+    def regalia_anchor(self):
+        r = self.hit_rect
+        return (r.centerx - 6, r.bottom - 2)
+
+    def smack_rect(self):
+        if not self.alive or self.regalia_cd > 0 or self.reel > 0:
+            return None
+        r = self.hit_rect
+        return pygame.Rect(r.centerx - 40, r.bottom - 18, 80, 40)
+
+    def apply_smack(self, amount):
+        """Batter the claws: enough punishment and the Dragon reels,
+        cutting off its fire breath and driving it back."""
+        if self.smack_rect() is None:
+            return False
+        self.claw_progress += amount / CLAW_SMACK_DISTANCE
+        g = self.game
+        if random.random() < 0.35:
+            g.effects.burst(self.x + random.uniform(-30, 30), self.hit_rect.bottom,
+                            2, (255, 200, 130), speed=110, life=0.25, size=2)
+        if self.claw_progress < 1.0:
+            return False
+        self.claw_progress = 0.0
+        self.regalia_taken += 1
+        self.reel = CLAW_STAGGER
+        self.breathing = 0.0            # breath is cut off mid-stream
+        self.breath_timer = max(self.breath_timer, 2.0)
+        self.vy_estimate = 0.0
+        self.x += 120                   # driven back off the wall
+        self.guard_regalia()
+        g.add_shake(9.0)
+        g.effects.ring(self.x, self.hit_rect.bottom, 20, (255, 190, 120),
+                       speed=380, life=0.5, size=5)
+        g.effects.text(self.x, self.y - self.h * 0.7, "CLAWS SMACKED!",
+                       (255, 190, 120), 26)
+        g.announce("The Dragon reels back!", (255, 180, 120), 2.0)
+        return True
 
     def spit_fire(self, power=1.0):
         c = self.game.castle
@@ -2606,7 +3200,12 @@ UNLOCKS = [
     (7, Necromancer,  3.2),
     (8, Assassin,     2.8),
     (9, Gargoyle,     2.8),
+    (11, Volatile,    2.2),
 ]
+
+# Treasure Goblins are a bonus roll rather than part of the wave budget
+GOBLIN_FROM_WAVE = 4
+GOBLIN_CHANCE = 0.55
 
 BOSS_ROTATION = [TrollKing, Dragon, LichLord]
 # lets the shop cards show each tower's strategic counter tag
@@ -2654,6 +3253,9 @@ def build_wave(wave):
         picks.append(cls)
         budget -= cost
     random.shuffle(picks)
+    # a goblin may wander in with the wave
+    if wave >= GOBLIN_FROM_WAVE and random.random() < GOBLIN_CHANCE:
+        picks.insert(random.randint(0, max(0, len(picks) - 1)), TreasureGoblin)
     boss = boss_for_wave(wave)
     if boss is not None:
         # boss walks in a little after the vanguard
@@ -2723,10 +3325,14 @@ class Game:
         self.wave = 0
         self.gold = STARTING_GOLD
         self.castle = Castle(self)
+        self.outpost = Outpost(self)
+        self.barricade = Barricade(self)
+        self.spike_level = 0
         self.enemies = []
         self.projectiles = []
         self.effects = Effects()
         self.items = []
+        self.bolts = []
         self.spawn_queue = []
         self.spawn_timer = 0.0
         self.spawn_interval = 1.0
@@ -2735,10 +3341,19 @@ class Game:
         self.shake = 0.0
         self.banners = []
         self.grabbed = None
+        self.grabbed_extra = []        # Magnetic Gloves: mobs held alongside
         self.stripping = None          # heavy unit currently being dismantled
         self.strip_anchor = (0, 0)
         self.items = []                # crowns / staves knocked loose
         self.held_item = None
+        self.charging = None           # tower being hand-aimed, slingshot style
+        self.smacking = None           # Dragon whose claws are being battered
+        self.wind = 0.0                # + blows away from the castle
+        self.storm = False
+        self.storm_flash = 0.0
+        self.horn_used = False
+        self.horn_bonus = 0.0
+        self.horn_glow = 0.0
         self.grab_cd = 0.0
         self.mouse_hist = deque(maxlen=12)
         self.mouse_pos = (WIDTH // 2, HEIGHT // 2)
@@ -2750,6 +3365,8 @@ class Game:
         self.best_combo = 1.0
         self.combo_flash = 0.0
         self.bounce_level = 0
+        self.grab_level = 0
+        self.multi_level = 0
         self.purchases = {"bowman": 0, "ballista": 0, "cannon": 0}
         self.shop_items = self._build_shop()
         self.shop_msg = ""
@@ -2803,6 +3420,60 @@ class Game:
             n = self.bounce_level + 1
             return True, f"Thrown mobs now bounce up to {n} times!"
 
+        def grab_cost():
+            return 260 * (2.05 ** self.grab_level)
+
+        def buy_grab():
+            if self.grab_level >= GRAB_MAX_LEVEL:
+                return False, "Grab Strength is already maxed."
+            self.grab_level += 1
+            cap = self.grab_capacity
+            heavy = " You can now LIFT Siege Rams!" if cap >= SiegeRam.MASS \
+                and GRAB_CAPACITY[self.grab_level - 1] < SiegeRam.MASS else ""
+            return True, f"Cursor can lift {cap:.1f} mass.{heavy}"
+
+        def multi_cost():
+            return 340 * (1.85 ** self.multi_level)
+
+        def buy_multi():
+            if self.multi_level >= MULTI_MAX_LEVEL:
+                return False, "Magnetic Gloves are already maxed."
+            self.multi_level += 1
+            return True, f"You can now hold {self.multi_level + 1} mobs at once."
+
+        def outpost_cost():
+            return 300 * (1.5 ** self.outpost.level)
+
+        def buy_outpost():
+            was_bow = not self.outpost.is_turret
+            if not self.outpost.upgrade():
+                return False, "The outpost is fully garrisoned."
+            if was_bow and self.outpost.is_turret:
+                return True, "Outpost upgraded to automated TURRETS!"
+            return True, f"Outpost garrison: {self.outpost.guns}."
+
+        def barricade_cost():
+            b = self.barricade
+            if b.level == 0:
+                return 240
+            if not b.alive:
+                return int(150 * (1.4 ** b.level))     # rebuild the wreck
+            if b.hp < b.max_hp and b.level >= BARRICADE_MAX_LEVEL:
+                return int(60 + (b.max_hp - b.hp) * 0.35)
+            return int(240 * (1.5 ** b.level))
+
+        def buy_barricade():
+            return self.barricade.buy()
+
+        def spike_cost():
+            return 190 * (1.7 ** self.spike_level)
+
+        def buy_spikes():
+            if self.spike_level >= SPIKE_MAX_LEVEL:
+                return False, "The walls are already bristling."
+            self.spike_level += 1
+            return True, f"Spike Walls Lv.{self.spike_level}."
+
         def repair_cost():
             missing = self.castle.max_hp - self.castle.hp
             return max(50, int(missing * 0.55))
@@ -2835,8 +3506,8 @@ class Game:
                      buy_tower(Cannon, "cannon"),
                      tower_status(Cannon, "cannon")),
             ShopItem("wall", "Reinforce Walls", (206, 212, 228),
-                     "Raises max castle health, adds a tower emplacement, and "
-                     "visibly rebuilds the keep in tougher material.",
+                     "More max health, another tower slot, and a visibly "
+                     "tougher keep.",
                      wall_cost, buy_wall,
                      lambda: f"Lv.{self.castle.wall_level}/{self.castle.max_level}"
                              f"   {len(self.castle.towers)}/"
@@ -2849,6 +3520,45 @@ class Game:
                               f"   {self.bounce_level + 1} bounce"
                               f"{'' if self.bounce_level == 0 else 's'}"),
                      lambda: self.bounce_level < BOUNCE_MAX_LEVEL),
+            ShopItem("grab", "Grab Strength", (232, 168, 96),
+                     "Raises the weight your cursor can lift. Heavy tanks "
+                     "need Lv.3.",
+                     grab_cost, buy_grab,
+                     lambda: (f"Lv.{self.grab_level}/{GRAB_MAX_LEVEL}"
+                              f"   lifts {self.grab_capacity:.1f}"),
+                     lambda: self.grab_level < GRAB_MAX_LEVEL),
+            ShopItem("multi", "Magnetic Gloves", (176, 150, 240),
+                     "Snatch extra mobs near the one you grab and fling the "
+                     "whole bunch at once.",
+                     multi_cost, buy_multi,
+                     lambda: (f"Lv.{self.multi_level}/{MULTI_MAX_LEVEL}"
+                              f"   holds {self.multi_level + 1}"),
+                     lambda: self.multi_level < MULTI_MAX_LEVEL),
+            ShopItem("outpost", "Outpost", (150, 200, 226),
+                     "Garrison the background tower. Mobs cannot reach it, so "
+                     "it never stops firing.",
+                     outpost_cost, buy_outpost,
+                     lambda: (f"{self.outpost.guns}/{OUTPOST_MAX_LEVEL} "
+                              + ("turrets" if self.outpost.is_turret
+                                 else "bowmen")),
+                     lambda: self.outpost.level < OUTPOST_MAX_LEVEL),
+            ShopItem("barricade", "Barricade", (206, 182, 140),
+                     "A wall out in the field. Ground troops must break it "
+                     "before they reach you.",
+                     barricade_cost, buy_barricade,
+                     lambda: ("not built" if self.barricade.level == 0 else
+                              (f"Lv.{self.barricade.level}  "
+                               f"{int(self.barricade.hp)}/"
+                               f"{int(self.barricade.max_hp)}")),
+                     lambda: (self.barricade.level < BARRICADE_MAX_LEVEL
+                              or self.barricade.hp < self.barricade.max_hp)),
+            ShopItem("spikes", "Spike Walls", (226, 140, 130),
+                     "Iron spikes along the parapet. Anything that hits the "
+                     "wall takes damage back.",
+                     spike_cost, buy_spikes,
+                     lambda: (f"Lv.{self.spike_level}/{SPIKE_MAX_LEVEL}"
+                              f"   {int(self.spike_damage)} dmg"),
+                     lambda: self.spike_level < SPIKE_MAX_LEVEL),
             ShopItem("repair", "Repair", C_GREEN,
                      "Instantly restore 40% of maximum castle health.",
                      repair_cost, buy_repair,
@@ -2898,14 +3608,58 @@ class Game:
 
     # -- helpers ---------------------------------------------------------
     @property
+    def grab_capacity(self):
+        """Heaviest MASS the cursor can currently lift."""
+        return GRAB_CAPACITY[int(clamp(self.grab_level, 0, GRAB_MAX_LEVEL))]
+
+    @property
     def gold_multiplier(self):
         """Risk vs reward: a crowded screen pays far better, but a crowd is
         exactly what flattens the castle."""
         n = sum(1 for e in self.enemies if e.alive)
-        return min(POP_GOLD_CAP,
+        base = min(POP_GOLD_CAP,
                    1.0 + POP_GOLD_STEP * max(0, n - POP_GOLD_FREE))
+        return base * (1.0 + self.horn_bonus)
+
+    def blow_horn(self):
+        """Taunt the horde: the rest of the wave charges in at once, and
+        everything it drops for the rest of the round is worth more."""
+        if self.horn_used or not self.wave_active:
+            return False
+        pending = len(self.spawn_queue)
+        if pending == 0:
+            self.shop_msg, self.shop_msg_t = "Nothing left to call in.", 1.5
+            return False
+        self.horn_used = True
+        self.horn_bonus = HORN_BONUS
+        self.horn_glow = 1.0
+        for cls in self.spawn_queue:
+            self.spawn_enemy(cls(self, self.wave))
+        self.spawn_queue = []
+        self.add_shake(10.0)
+        self.effects.ring(CASTLE_FRONT * 0.6, WALL_TOP + 40, 34, C_GOLD,
+                          speed=560, life=0.8, size=5)
+        self.announce(f"CHALLENGE HORN! {pending} more incoming, "
+                      f"+{int(HORN_BONUS * 100)}% rewards", C_GOLD, 3.2)
+        return True
+
+    def strike_lightning(self, enemy):
+        """A mob flung into the storm ceiling draws a bolt."""
+        if not self.storm or not enemy.alive or enemy.storm_cd > 0:
+            return
+        enemy.storm_cd = STORM_COOLDOWN
+        dmg = enemy.max_hp * STORM_DAMAGE
+        enemy.take_damage(dmg, "lightning")
+        self.storm_flash = 1.0
+        self.add_shake(8.0)
+        self.bolts.append([enemy.x, enemy.y, 0.28])
+        self.effects.burst(enemy.x, enemy.y, 26, (220, 235, 255), speed=340,
+                           life=0.5, size=4)
+        self.effects.text(enemy.x, enemy.y - 30, f"ZAP {int(dmg)}",
+                          (190, 225, 255), 26)
 
     def add_score(self, pts, x, y, hits, combo):
+        pts = int(pts * (1.0 + self.horn_bonus))
         self.score += pts
         self.best_fling = max(self.best_fling, pts)
         if hits > 0:
@@ -2915,6 +3669,22 @@ class Game:
                               (255, 214, 120), 27, 1.35)
         else:
             self.effects.text(x, y, f"+{pts}", (196, 216, 248), 20, 0.9)
+
+    @property
+    def spike_damage(self):
+        if self.spike_level <= 0:
+            return 0.0
+        return (SPIKE_DAMAGE * self.spike_level
+                * (1.0 + 0.06 * max(0, self.wave - 1)))
+
+    def apply_spikes(self, enemy):
+        """Anything that strikes a spiked wall takes damage straight back."""
+        dmg = self.spike_damage
+        if dmg <= 0 or not enemy.alive:
+            return
+        enemy.take_damage(dmg, "spike")
+        self.effects.burst(self.castle.front_x + 8, enemy.y, 5,
+                           (226, 120, 110), speed=150, life=0.3, size=2)
 
     def add_shake(self, amount):
         # capped: the world is blitted at an offset, so a big shake would
@@ -2951,7 +3721,27 @@ class Game:
         self.spawn_interval = max(0.32, 1.25 - self.wave * 0.032)
         self.spawn_timer = 0.8
         self.castle.restore_towers()
+        # roll the weather for this wave
+        self.wind = random.uniform(-1.0, 1.0) * WIND_MAX
+        self.storm = random.random() < STORM_CHANCE
+        self.horn_used = False
+        self.horn_bonus = 0.0
         self.announce(f"WAVE {self.wave}", C_GOLD, 2.2)
+        if abs(self.wind) > WIND_MAX * 0.45:
+            if self.wind > 0:
+                self.announce("TAILWIND -- your throws carry further",
+                              (150, 220, 255), 3.0)
+            else:
+                self.announce("HEADWIND -- throws blow back at the wall",
+                              (255, 180, 140), 3.0)
+        if self.storm:
+            self.announce("THUNDERSTORM -- fling them high to call lightning!",
+                          (200, 220, 255), 3.6)
+        tier = endgame_tier(self.wave)
+        if tier >= 0 and endgame_tier(self.wave - 1) != tier:
+            name, _f, tint, _s, _h, _d, _sp = ENDGAME_TIERS[tier]
+            self.announce(f"{name.upper()} TIER -- the horde has changed",
+                          tint, 4.0)
         for cls in newly_unlocked(self.wave):
             self.announce(f"New foe: {cls.NAME} - {cls.DESC}", cls.COLOR, 4.2)
         boss = boss_for_wave(self.wave)
@@ -2972,8 +3762,11 @@ class Game:
         self.effects.clear()
         self.projectiles.clear()
         self.grabbed = None
+        self.grabbed_extra = []
         self.stripping = None
         self.held_item = None
+        self.charging = None
+        self.smacking = None
         self.items.clear()
         self.shop_msg = f"Wave {self.wave} cleared!  Bonus +{bonus} gold."
         self.shop_msg_t = 4.0
@@ -2982,8 +3775,11 @@ class Game:
     def on_castle_destroyed(self):
         self.state = self.GAMEOVER
         self.grabbed = None
+        self.grabbed_extra = []
         self.stripping = None
         self.held_item = None
+        self.charging = None
+        self.smacking = None
         self.add_shake(14.0)
         self.effects.burst(CASTLE_FRONT * 0.5, WALL_TOP + 60, 160,
                            (200, 120, 90), speed=700, life=1.4, size=6)
@@ -3042,9 +3838,30 @@ class Game:
                 return it
         return None
 
+    def tower_under_mouse(self, pos):
+        for t in self.castle.towers:
+            if t.can_overcharge and t.rect.inflate(14, 14).collidepoint(pos):
+                return t
+        return None
+
+    def overcharge_power(self):
+        """How far the slingshot has been drawn back, 0..1."""
+        if self.charging is None:
+            return 0.0
+        mx, my = self.mouse_pos
+        d = math.hypot(self.charging.muzzle[0] - mx,
+                       self.charging.muzzle[1] - my)
+        return clamp(d / OVERCHARGE_PULL, 0.0, 1.0)
+
     def try_grab(self, pos):
         if (self.grab_cd > 0 or self.grabbed is not None or self.stripping
-                or self.held_item is not None):
+                or self.held_item is not None or self.charging is not None):
+            return
+
+        # a Ballista or Cannon under the cursor gets hand-aimed instead
+        t = self.tower_under_mouse(pos)
+        if t is not None:
+            self.charging = t
             return
 
         # boss regalia wins the click -- it sits on top of a big target
@@ -3068,6 +3885,15 @@ class Game:
             self.mouse_hist.append((self.time, pos[0], pos[1]))
             return
 
+        # a Dragon's claws can be battered
+        for en in self.enemies:
+            sr = en.smack_rect()
+            if sr is not None and sr.collidepoint(pos):
+                self.smacking = en
+                self.strip_anchor = pos
+                self.effects.text(en.x, en.y, "SMACK!", (255, 190, 120), 20)
+                return
+
         e = self.enemy_under_mouse(pos)
         if e is None:
             # nothing liftable here -- is there a tank to dismantle instead?
@@ -3080,12 +3906,39 @@ class Game:
             return
         self.grabbed = e
         e.on_grab()
+        # Magnetic Gloves drag nearby mobs along in formation
+        self.grabbed_extra = []
+        if self.multi_level > 0:
+            for o in self.enemies:
+                if o is e or len(self.grabbed_extra) >= self.multi_level:
+                    continue
+                if not o.grabbable:
+                    continue
+                if math.hypot(o.x - e.x, o.y - e.y) <= MULTI_RADIUS:
+                    o.on_grab()
+                    self.grabbed_extra.append([o, o.x - e.x, o.y - e.y])
+            if self.grabbed_extra:
+                self.effects.text(e.x - 46, e.y - e.h - 26,
+                                  f"x{len(self.grabbed_extra) + 1} GRAB",
+                                  (170, 220, 255), 22)
         self.mouse_hist.clear()
         self.mouse_hist.append((self.time, pos[0], pos[1]))
         self.effects.ring(e.x, e.y, 12, (230, 230, 255), speed=200,
                           life=0.3, size=3)
 
     def release_grab(self):
+        if self.smacking is not None:
+            self.smacking = None
+            self.grab_cd = GRAB_COOLDOWN
+            return
+        if self.charging is not None:
+            # power must be read *before* clearing the charge, or it is 0
+            power = self.overcharge_power()
+            t, self.charging = self.charging, None
+            self.grab_cd = GRAB_COOLDOWN
+            if power > 0.12 and t.can_overcharge:
+                t.overcharge_fire(self.mouse_pos[0], self.mouse_pos[1], power)
+            return
         if self.held_item is not None:
             it = self.held_item
             self.held_item = None
@@ -3104,6 +3957,11 @@ class Game:
             return
         vx, vy = self.mouse_velocity()
         e.on_release(vx, vy)
+        for o, _ox, _oy in self.grabbed_extra:
+            if o.alive:
+                o.on_release(vx * random.uniform(0.85, 1.15),
+                             vy * random.uniform(0.85, 1.15))
+        self.grabbed_extra = []
 
     def mouse_velocity(self):
         """Cursor speed sampled ~90 ms back, so a flick reads cleanly."""
@@ -3122,6 +3980,11 @@ class Game:
     def update_grab(self, dt):
         self.grab_cd = max(0.0, self.grab_cd - dt)
 
+        if self.charging is not None:
+            if not self.charging.can_overcharge:
+                self.charging = None
+            return
+
         # --- carrying a crown or staff --------------------------------
         it = self.held_item
         if it is not None:
@@ -3135,6 +3998,20 @@ class Game:
                 it.spin += 0.25
                 return
 
+        # --- battering a Dragon's claws -------------------------------
+        d = self.smacking
+        if d is not None:
+            if d.smack_rect() is None:
+                self.smacking = None
+            else:
+                mx, my = self.mouse_pos
+                ax, ay = self.strip_anchor
+                moved = math.hypot(mx - ax, my - ay)
+                self.strip_anchor = (mx, my)
+                if moved > 0.5:
+                    d.apply_smack(moved)
+                return
+
         # --- dismantling a heavy unit ---------------------------------
         h = self.stripping
         if h is not None:
@@ -3143,14 +4020,18 @@ class Game:
             else:
                 mx, my = self.mouse_pos
                 ax, ay = self.strip_anchor
-                pulled = math.hypot(mx - ax, my - ay)
+                dx = mx - ax
                 self.strip_anchor = (mx, my)
-                if pulled > 0.5:
-                    h.apply_strip(pulled)
+                if dx > 0.5:
+                    # hauling AWAY from the castle rips the plating off
+                    h.apply_strip(dx)
                     if random.random() < 0.4:
                         self.effects.burst(h.x + random.uniform(-30, 30),
                                            h.y, 2, (188, 192, 206),
                                            speed=120, life=0.3, size=2)
+                elif dx < -0.5:
+                    # hauling TOWARD the castle shoves it forward instead
+                    h.apply_shove(-dx)
                 return
 
         e = self.grabbed
@@ -3168,11 +4049,25 @@ class Game:
         e.y = clamp(e.y, 30, GROUND_Y + e.depth - e.h / 2)
         e.spin += 0.08
 
+        self.grabbed_extra = [g for g in self.grabbed_extra if g[0].alive]
+        for o, ox, oy in self.grabbed_extra:
+            of = clamp(1.0 - 0.10 * o.MASS, 0.25, 0.95)
+            o.x += (e.x + ox - o.x) * of
+            o.y += (e.y + oy - o.y) * of
+            o.x = clamp(o.x, CASTLE_FRONT + o.w / 2, WIDTH + 120)
+            o.y = clamp(o.y, 30, GROUND_Y + o.depth - o.h / 2)
+            o.spin += 0.08
+
     # -- main update -----------------------------------------------------
     def update(self, dt):
         self.time += dt
         self.shake = max(0.0, self.shake - dt * 42.0)
         self.combo_flash = max(0.0, self.combo_flash - dt * 1.6)
+        self.storm_flash = max(0.0, self.storm_flash - dt * 3.5)
+        self.horn_glow = max(0.0, self.horn_glow - dt * 2.0)
+        for b in self.bolts:
+            b[2] -= dt
+        self.bolts = [b for b in self.bolts if b[2] > 0]
         for b in self.banners:
             b[2] -= dt
         self.banners = [b for b in self.banners if b[2] > 0]
@@ -3201,6 +4096,8 @@ class Game:
                     self.add_shake(8.0)
 
         self.castle.update(dt)
+        self.outpost.update(dt)
+        self.barricade.update(dt)
         for it in self.items:
             it.update(dt)
         self.items = [it for it in self.items if it.alive]
@@ -3215,6 +4112,7 @@ class Game:
 
         if self.grabbed is not None and not self.grabbed.alive:
             self.grabbed = None
+            self.grabbed_extra = []
         if self.stripping is not None and not self.stripping.alive:
             self.stripping = None
         # a dead owner's regalia is just scenery -- clear it out, including
@@ -3225,6 +4123,10 @@ class Game:
         self.items = [it for it in self.items if it.alive]
         if self.held_item is not None and not self.held_item.alive:
             self.held_item = None
+        if self.charging is not None and self.charging.disabled:
+            self.charging = None
+        if self.smacking is not None and not self.smacking.alive:
+            self.smacking = None
 
         # wave completion
         if self.wave_active and not self.spawn_queue and not self.alive_enemies():
@@ -3285,15 +4187,18 @@ class Game:
             elif ev.key == pygame.K_r and self.state == self.GAMEOVER:
                 self.reset()
                 self.state = self.MENU
-            elif self.state == self.SHOP and pygame.K_1 <= ev.key <= pygame.K_6:
-                idx = ev.key - pygame.K_1
-                if idx < len(self.shop_items):
+            elif self.state == self.SHOP and (pygame.K_0 <= ev.key <= pygame.K_9):
+                idx = 9 if ev.key == pygame.K_0 else ev.key - pygame.K_1
+                if 0 <= idx < len(self.shop_items):
                     self.try_buy(self.shop_items[idx])
             return
 
         if ev.type == pygame.MOUSEBUTTONDOWN and ev.button == 1:
             self.mouse_pos = ev.pos
             if self.state == self.PLAYING:
+                if HORN_RECT.collidepoint(ev.pos) and not self.horn_used:
+                    self.blow_horn()
+                    return
                 self.try_grab(ev.pos)
             elif self.state == self.MENU:
                 self.open_first_shop()
@@ -3313,7 +4218,8 @@ class Game:
         if ev.type == pygame.MOUSEBUTTONUP and ev.button == 1:
             self.mouse_pos = ev.pos
             if (self.grabbed is not None or self.stripping is not None
-                    or self.held_item is not None):
+                    or self.held_item is not None or self.charging is not None
+                    or self.smacking is not None):
                 self.release_grab()
             return
 
@@ -3321,7 +4227,9 @@ class Game:
     def draw(self):
         s = self.scene
         s.blit(self.bg, (0, 0))
+        self.outpost.draw(s)          # background scenery, behind the fight
         self.castle.draw(s)
+        self.barricade.draw(s)
 
         # flying first (behind), then ground back-to-front by depth
         order = sorted(self.enemies,
@@ -3333,6 +4241,9 @@ class Game:
         for p in self.projectiles:
             p.draw(s)
         self.effects.draw(s)
+        self.draw_weather(s)
+        if self.state in (self.PLAYING, self.PAUSED):
+            self.draw_horn(s)
 
         if self.state == self.PLAYING:
             self.draw_grab_cursor(s)
@@ -3357,8 +4268,104 @@ class Game:
         elif self.state == self.GAMEOVER:
             self.draw_gameover(self.screen)
 
+    def draw_weather(self, s):
+        # wind streaks
+        if abs(self.wind) > 40:
+            n = int(abs(self.wind) / 26)
+            for i in range(n):
+                seed = (i * 97 + int(self.time * abs(self.wind) * 0.5)) % 1400
+                wx = (seed - 60) if self.wind > 0 else (1340 - seed)
+                wy = 90 + (i * 137) % 430
+                ln = 14 + (i % 3) * 10
+                pygame.draw.line(s, (188, 200, 224),
+                                 (wx, wy), (wx - math.copysign(ln, self.wind), wy), 1)
+        # lightning bolts, drawn as a jagged path from the clouds
+        for bx, by, life in self.bolts:
+            pts, y = [(bx, by)], by
+            x = bx
+            while y > -20:
+                y -= random.uniform(24, 46)
+                x += random.uniform(-26, 26)
+                pts.append((x, y))
+            pygame.draw.lines(s, (236, 244, 255), False, pts, 4)
+            pygame.draw.lines(s, (150, 200, 255), False, pts, 2)
+        if self.storm_flash > 0:
+            veil = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
+            veil.fill((190, 215, 255, int(70 * self.storm_flash)))
+            s.blit(veil, (0, 0))
+
+    def draw_horn(self, s):
+        r = HORN_RECT
+        used = self.horn_used
+        base = (96, 84, 60) if used else (168, 138, 78)
+        if self.horn_glow > 0:
+            base = mix(base, (255, 240, 180), self.horn_glow)
+        pygame.draw.circle(s, (54, 48, 40), r.center, 26)
+        pygame.draw.circle(s, base, r.center, 23)
+        pygame.draw.circle(s, shade(base, 0.6), r.center, 23, 3)
+        # a curled horn glyph
+        cx, cy = r.center
+        pygame.draw.arc(s, (250, 238, 206) if not used else (130, 120, 100),
+                        pygame.Rect(cx - 15, cy - 13, 30, 26), 0.5, 4.2, 5)
+        pygame.draw.polygon(s, (250, 238, 206) if not used else (130, 120, 100),
+                            [(cx + 9, cy - 11), (cx + 19, cy - 17),
+                             (cx + 14, cy - 4)])
+        if not used and self.wave_active and self.spawn_queue:
+            draw_text(s, "CHALLENGE", cx, r.bottom + 2, 15, C_GOLD,
+                      "center", True)
+        elif used:
+            draw_text(s, f"+{int(self.horn_bonus * 100)}%", cx, r.bottom + 2,
+                      15, (200, 190, 160), "center", True)
+
     def draw_grab_cursor(self, s):
         mx, my = self.mouse_pos
+
+        # --- slingshot draw-back on a hand-aimed tower ---
+        if self.charging is not None:
+            t = self.charging
+            gx, gy = t.muzzle
+            power = self.overcharge_power()
+            col = mix((150, 200, 255), (255, 170, 90), power)
+            pygame.draw.line(s, col, (gx, gy), (mx, my), 3)
+            # the shot will travel opposite the pull
+            dx, dy = gx - mx, gy - my
+            d = max(1.0, math.hypot(dx, dy))
+            for k in range(1, 7):
+                px = gx + dx / d * k * 34
+                py = gy + dy / d * k * 34 + 0.5 * 9.8 * (k * 0.1) ** 2 * 30
+                pygame.draw.circle(s, (*col, 200), (int(px), int(py)),
+                                   max(1, 4 - k // 2))
+            pygame.draw.circle(s, col, (int(gx), int(gy)), int(8 + 10 * power), 2)
+            draw_bar(s, int(gx - 26), int(gy - 34), 52, 6, power, col)
+            draw_text(s, f"{int(power * 100)}%", gx, gy - 54, 18, col,
+                      "center", True)
+            return
+
+        smack = self.smacking
+        if smack is None:
+            for en in self.enemies:
+                sr = en.smack_rect()
+                if sr is not None and sr.collidepoint(self.mouse_pos):
+                    smack = en
+                    break
+        if smack is not None:
+            sr = smack.smack_rect()
+            if sr is not None:
+                col = (255, 190, 120)
+                pygame.draw.rect(s, col, sr, 2, border_radius=5)
+                draw_text(s, "SMACK THE CLAWS!" if self.smacking
+                          else "DRAG ON THE CLAWS", sr.centerx, sr.bottom + 4,
+                          17, col, "center", True)
+                if self.smacking is not None:
+                    draw_bar(s, sr.centerx - 30, sr.top - 12, 60, 6,
+                             smack.claw_progress, col)
+
+        hov = self.tower_under_mouse(self.mouse_pos)
+        if hov is not None and self.grabbed is None:
+            r = hov.rect.inflate(14, 14)
+            pygame.draw.rect(s, (150, 200, 255), r, 2, border_radius=5)
+            draw_text(s, "DRAG BACK TO OVERCHARGE", r.centerx, r.top - 22, 16,
+                      (150, 200, 255), "center", True)
 
         # boss regalia under the cursor -- how the player discovers this at all
         if self.held_item is None:
@@ -3422,7 +4429,13 @@ class Game:
 
         draw_text(surf, f"WAVE {max(1, self.wave)}", 28, 22, 30, C_WHITE, bold=True)
         draw_text(surf, f"{self.gold} G", 346, 24, 28, C_GOLD, "right", True)
-        draw_text(surf, self.castle.tier_name, 28, 52, 18, C_DIM)
+        tier = endgame_tier(max(1, self.wave))
+        if tier >= 0:
+            tname, _f, ttint, _s, _h, _d, _sp = ENDGAME_TIERS[tier]
+            draw_text(surf, f"{self.castle.tier_name}  -  {tname} horde",
+                      28, 52, 18, mix(ttint, C_WHITE, 0.35))
+        else:
+            draw_text(surf, self.castle.tier_name, 28, 52, 18, C_DIM)
 
         # crowd bonus: the risk/reward readout
         mult = self.gold_multiplier
@@ -3457,6 +4470,17 @@ class Game:
             if self.stats_plates_torn:
                 draw_text(surf, f"Plates torn: {self.stats_plates_torn}",
                           WIDTH - 20, 86, 20, (200, 206, 224), "right")
+            wy = 110
+            if abs(self.wind) > 40:
+                arrow = ">>>" if self.wind > 0 else "<<<"
+                lbl = "TAILWIND" if self.wind > 0 else "HEADWIND"
+                draw_text(surf, f"{lbl} {arrow}", WIDTH - 20, wy, 20,
+                          (150, 220, 255) if self.wind > 0 else (255, 180, 140),
+                          "right", True)
+                wy += 22
+            if self.storm:
+                draw_text(surf, "THUNDERSTORM", WIDTH - 20, wy, 20,
+                          (200, 220, 255), "right", True)
 
         # boss bar
         boss = self.current_boss()
@@ -3512,11 +4536,16 @@ class Game:
             ("repeatedly to rip its armour plates off, slowing it and", (255, 200, 140)),
             ("leaving it wide open to your guns.", (255, 200, 140)),
             ("", C_DIM),
-            ("BOSSES:  rip the Troll King's CROWN off and fling it -- he", C_WHITE),
-            ("must fetch it. Flick the Lich Lord's STAFF away to disarm him.", (200, 170, 255)),
+            ("TANKS:  drag AWAY from the castle to rip a Siege Ram's armour", C_WHITE),
+            ("off, or drag TOWARDS it to shove the tank forward fast.", (255, 200, 140)),
             ("", C_DIM),
-            ("Long flings score big; hitting mobs mid-flight multiplies it.", C_HILITE),
-            ("A crowded screen pays more gold -- if you dare leave it alive.", C_HILITE),
+            ("BOSSES:  rip the Troll King's CROWN and fling it, flick the", C_WHITE),
+            ("Lich Lord's STAFF away, batter the Dragon's CLAWS.", (200, 170, 255)),
+            ("", C_DIM),
+            ("Drag back on a Ballista or Cannon to overcharge-fire it.", (150, 200, 255)),
+            ("", C_DIM),
+            ("Long flings score big; mid-air hits multiply it. A crowded", C_HILITE),
+            ("screen pays more gold. Blow the CHALLENGE HORN for even more.", C_HILITE),
             ("", C_DIM),
             ("Click or press SPACE to visit the armoury", C_GOLD),
         ]
@@ -3547,30 +4576,31 @@ class Game:
         veil.fill((6, 8, 16, 195))
         surf.blit(veil, (0, 0))
 
-        panel = pygame.Rect(70, 78, WIDTH - 140, HEIGHT - 156)
+        panel = pygame.Rect(24, 34, WIDTH - 48, HEIGHT - 68)
         pygame.draw.rect(surf, C_PANEL, panel, border_radius=12)
         pygame.draw.rect(surf, C_PANEL_EDGE, panel, 3, border_radius=12)
 
-        draw_text(surf, "ARMOURY", panel.centerx, panel.top + 16, 40,
+        draw_text(surf, "ARMOURY", panel.centerx, panel.top + 12, 38,
                   C_GOLD, "center", True)
-        draw_text(surf, f"Gold: {self.gold}", panel.right - 30, panel.top + 24,
+        draw_text(surf, f"Gold: {self.gold}", panel.right - 26, panel.top + 18,
                   30, C_GOLD, "right", True)
-        draw_text(surf, f"Next up: Wave {self.wave + 1}", panel.left + 30,
-                  panel.top + 26, 24, C_DIM)
+        draw_text(surf, f"Next up: Wave {self.wave + 1}", panel.left + 26,
+                  panel.top + 20, 23, C_DIM)
 
         if self.shop_msg and self.shop_msg_t > 0:
-            draw_text(surf, self.shop_msg, panel.centerx, panel.top + 60, 22,
+            draw_text(surf, self.shop_msg, panel.centerx, panel.top + 50, 21,
                       C_HILITE, "center")
 
-        # cards
-        n = len(self.shop_items)
-        cw, gap = 176, 13
-        total = n * cw + (n - 1) * gap
+        # cards, laid out on a two-row grid
+        cols, cw, gap, ch, vgap = 6, 192, 12, 206, 12
+        total = cols * cw + (cols - 1) * gap
         x0 = panel.centerx - total // 2
-        cy, ch = panel.top + 96, 300
+        cy = panel.top + 76
         mouse = self.mouse_pos
         for i, item in enumerate(self.shop_items):
-            r = pygame.Rect(x0 + i * (cw + gap), cy, cw, ch)
+            col, row = i % cols, i // cols
+            r = pygame.Rect(x0 + col * (cw + gap), cy + row * (ch + vgap),
+                            cw, ch)
             item.rect = r
             cost = item.cost
             available = item.avail_fn()
@@ -3583,55 +4613,56 @@ class Game:
             pygame.draw.rect(surf, item.color if afford else (70, 70, 80),
                              r, 3, border_radius=10)
 
-            pygame.draw.rect(surf, item.color, (r.x + 12, r.y + 12, r.w - 24, 6),
+            pygame.draw.rect(surf, item.color, (r.x + 10, r.y + 8, r.w - 20, 5),
                              border_radius=3)
-            draw_text(surf, f"[{i + 1}]", r.x + 12, r.y + 24, 18, C_DIM)
-            draw_text(surf, item.name, r.centerx, r.y + 42, 24,
+            if i < 10:
+                draw_text(surf, f"[{(i + 1) % 10}]", r.x + 10, r.y + 17, 17, C_DIM)
+            draw_text(surf, item.name, r.centerx, r.y + 30, 22,
                       C_WHITE if afford else (130, 130, 140), "center", True)
 
-            self._draw_shop_icon(surf, item.key, r.centerx, r.y + 108, item.color)
+            self._draw_shop_icon(surf, item.key, r.centerx, r.y + 74, item.color)
 
             tower_cls = TOWER_FOR_KEY.get(item.key)
             if tower_cls is not None and tower_cls.COUNTER_TAG:
-                draw_text(surf, tower_cls.COUNTER_TAG, r.centerx, r.y + 132, 17,
+                draw_text(surf, tower_cls.COUNTER_TAG, r.centerx, r.y + 96, 16,
                           (255, 206, 120), "center", True)
 
-            ty = r.y + 150
+            ty = r.y + 112
             # clipped so long copy can never collide with the status/price
-            for ln in wrap_text(item.desc, 16, r.w - 20)[:4]:
-                draw_text(surf, ln, r.centerx, ty, 16, C_DIM, "center")
-                ty += 18
+            for ln in wrap_text(item.desc, 15, r.w - 18)[:3]:
+                draw_text(surf, ln, r.centerx, ty, 15, C_DIM, "center")
+                ty += 17
 
-            draw_text(surf, item.status_fn(), r.centerx, r.bottom - 62, 17,
+            draw_text(surf, item.status_fn(), r.centerx, r.bottom - 46, 16,
                       (170, 205, 235), "center")
             if not available:
-                draw_text(surf, "MAXED", r.centerx, r.bottom - 38, 28,
+                draw_text(surf, "MAXED", r.centerx, r.bottom - 26, 24,
                           (140, 200, 150), "center", True)
             else:
                 price_col = C_GOLD if afford else (140, 120, 80)
-                draw_text(surf, f"{cost} G", r.centerx, r.bottom - 38, 30,
+                draw_text(surf, f"{cost} G", r.centerx, r.bottom - 28, 26,
                           price_col, "center", True)
 
         # start button
-        bw, bh = 360, 62
+        bw, bh = 360, 54
         self.start_btn = pygame.Rect(panel.centerx - bw // 2,
-                                     panel.bottom - bh - 22, bw, bh)
+                                     panel.bottom - bh - 14, bw, bh)
         hov = self.start_btn.collidepoint(mouse)
         pygame.draw.rect(surf, (58, 118, 92) if hov else (42, 92, 72),
                          self.start_btn, border_radius=10)
         pygame.draw.rect(surf, C_GREEN, self.start_btn, 3, border_radius=10)
         draw_text(surf, f"START WAVE {self.wave + 1}   [SPACE]",
-                  self.start_btn.centerx, self.start_btn.y + 16, 30,
+                  self.start_btn.centerx, self.start_btn.y + 13, 28,
                   C_WHITE, "center", True)
 
         nxt = boss_for_wave(self.wave + 1)
         if nxt is not None:
             draw_text(surf, f"WARNING: {nxt.NAME} arrives next wave!",
-                      panel.centerx, panel.bottom - bh - 74, 24,
+                      panel.centerx, panel.bottom - bh - 60, 22,
                       (255, 130, 110), "center", True)
             if nxt.HINT:
                 draw_text(surf, nxt.HINT, panel.centerx,
-                          panel.bottom - bh - 50, 20, (255, 190, 150), "center")
+                          panel.bottom - bh - 40, 18, (255, 190, 150), "center")
 
     def _draw_shop_icon(self, surf, key, cx, cy, color):
         if key == "bowman":
@@ -3666,6 +4697,43 @@ class Game:
                                  (cx - 30 + i * 21, cy - 6, 19, 26), 2)
             for i in range(4):
                 pygame.draw.rect(surf, color, (cx - 30 + i * 16, cy - 20, 11, 14))
+        elif key == "grab":
+            pygame.draw.circle(surf, color, (cx, cy - 6), 13, 3)
+            for a in (-2.4, -0.7, 0.9):
+                pygame.draw.line(surf, color, (cx, cy - 6),
+                                 (cx + math.cos(a) * 20, cy - 6 + math.sin(a) * 20), 4)
+            pygame.draw.rect(surf, shade(color, 0.7), (cx - 9, cy + 12, 18, 8),
+                             border_radius=2)
+        elif key == "multi":
+            for dx, dy in ((-16, 2), (0, -8), (16, 4)):
+                pygame.draw.circle(surf, color, (cx + dx, cy + dy), 7)
+                pygame.draw.circle(surf, shade(color, 0.6), (cx + dx, cy + dy), 7, 2)
+            pygame.draw.arc(surf, (240, 230, 255),
+                            pygame.Rect(cx - 24, cy - 20, 48, 34), 0.3, 2.9, 2)
+        elif key == "outpost":
+            pygame.draw.rect(surf, color, (cx - 16, cy - 10, 32, 28))
+            pygame.draw.rect(surf, shade(color, 0.6), (cx - 16, cy - 10, 32, 28), 2)
+            for i in range(3):
+                pygame.draw.rect(surf, shade(color, 1.15),
+                                 (cx - 16 + i * 12, cy - 18, 8, 8))
+            pygame.draw.polygon(surf, (60, 66, 80),
+                                [(cx - 30, cy + 20), (cx + 30, cy + 20),
+                                 (cx + 16, cy + 2), (cx - 16, cy + 2)])
+        elif key == "barricade":
+            pygame.draw.rect(surf, color, (cx - 9, cy - 18, 18, 38))
+            pygame.draw.rect(surf, shade(color, 0.6), (cx - 9, cy - 18, 18, 38), 2)
+            for i in range(3):
+                pygame.draw.line(surf, shade(color, 0.75),
+                                 (cx - 7, cy - 10 + i * 12), (cx + 7, cy - 10 + i * 12), 2)
+            for s_ in (-1, 1):
+                pygame.draw.line(surf, shade(color, 0.8), (cx, cy - 14),
+                                 (cx + s_ * 20, cy + 20), 3)
+        elif key == "spikes":
+            pygame.draw.rect(surf, (110, 114, 128), (cx - 22, cy - 18, 14, 40))
+            for i in range(4):
+                ty = cy - 14 + i * 11
+                pygame.draw.polygon(surf, color,
+                                    [(cx - 8, ty - 4), (cx + 20, ty), (cx - 8, ty + 4)])
         elif key == "bounce":
             pygame.draw.line(surf, (86, 92, 108), (cx - 34, cy + 22),
                              (cx + 34, cy + 22), 3)
@@ -3696,7 +4764,8 @@ class Game:
             self.mouse_pos = pygame.mouse.get_pos()
             # if the button-up was swallowed (focus loss, alt-tab), drop the mob
             if ((self.grabbed is not None or self.stripping is not None
-                    or self.held_item is not None)
+                    or self.held_item is not None or self.charging is not None
+                    or self.smacking is not None)
                     and not pygame.mouse.get_pressed()[0]):
                 self.release_grab()
             self.update(dt)
@@ -3742,7 +4811,8 @@ def _ui_smoke(g):
     for i, item in enumerate(g.shop_items):          # click every card
         ev(type=pygame.MOUSEBUTTONDOWN, button=1, pos=item.rect.center)
         g.draw()
-    for k in (pygame.K_1, pygame.K_2, pygame.K_3, pygame.K_4, pygame.K_5):
+    for k in (pygame.K_1, pygame.K_2, pygame.K_3, pygame.K_4, pygame.K_5,
+              pygame.K_6, pygame.K_7, pygame.K_8, pygame.K_9, pygame.K_0):
         ev(type=pygame.KEYDOWN, key=k)               # and every hotkey
     g.draw()
 
@@ -3938,6 +5008,252 @@ def _ui_smoke(g):
     print(f"selftest: bounce OK (Lv.0 {b0} bounce/{st0:.2f}s stun -> "
           f"Lv.{BOUNCE_MAX_LEVEL} {b5} bounces/{st5:.2f}s stun); "
           f"crowd gold x{crowded:.2f}")
+    # ---------- Grab Strength gates heavy lifting ----------
+    g.reset(); g.state = Game.PLAYING; g.wave = 8; g.wave_active = True
+    ram = SiegeRam(g, 8); ram.x = 900; ram.y = ram.ground_y
+    g.enemies.append(ram)
+    g.grab_level = 0
+    assert not ram.grabbable and ram.too_heavy, "a tank must start unliftable"
+    assert ShieldBearer(g, 8).grabbable, "regular mobs stay liftable at Lv.0"
+    g.grab_level = GRAB_MAX_LEVEL
+    assert ram.grabbable, "max Grab Strength must lift a Siege Ram"
+    g.grab_level = 0
+
+    # ---------- drag direction: away strips, toward shoves ----------
+    g.mouse_pos = (int(ram.x), int(ram.y))
+    g.try_grab(g.mouse_pos)
+    assert g.stripping is ram and g.grabbed is None
+    layers0 = ram.layers
+    for _ in range(30):
+        g.mouse_pos = (g.mouse_pos[0] + 40, int(ram.y))
+        g.update_grab(1 / 60.0)
+    assert ram.layers < layers0, "dragging away must strip plating"
+    assert ram.shove == 0, "stripping must not shove it forward"
+    for _ in range(30):
+        g.mouse_pos = (g.mouse_pos[0] - 40, int(ram.y))
+        g.update_grab(1 / 60.0)
+    assert ram.shove > 0, "dragging castle-ward must add forward momentum"
+    shoved_x = ram.x
+    g.release_grab()
+    for _ in range(60):
+        g.update(1 / 60.0)
+    assert shoved_x - ram.x > ram.speed, "the shove must outrun a normal walk"
+
+    # ---------- Magnetic Gloves ----------
+    g.reset(); g.state = Game.PLAYING
+    g.multi_level = MULTI_MAX_LEVEL
+    lead = Scout(g, 3); lead.x = 800; lead.y = lead.ground_y
+    g.enemies.append(lead)
+    for k in range(4):
+        o = Scout(g, 3); o.x = 800 + (k - 2) * 32; o.y = lead.ground_y
+        g.enemies.append(o)
+    g.mouse_pos = (int(lead.x), int(lead.y))
+    g.try_grab(g.mouse_pos)
+    assert len(g.grabbed_extra) == MULTI_MAX_LEVEL, "gloves must hold extras"
+    g.mouse_pos = (900, 200)
+    for _ in range(4):
+        g.update_grab(1 / 60.0)
+    g.release_grab()
+    assert sum(1 for e in g.enemies if e.state == "air") == MULTI_MAX_LEVEL + 1
+
+    # ---------- Outpost: fires, and is untouchable ----------
+    g.reset(); g.state = Game.PLAYING; g.wave = 8; g.wave_active = True
+    for _ in range(OUTPOST_MAX_LEVEL):
+        g.outpost.upgrade()
+    assert g.outpost.is_turret and g.outpost.guns == OUTPOST_MAX_LEVEL
+    victim = FootSoldier(g, 8); victim.x = 900; victim.y = victim.ground_y
+    victim.max_hp *= 60; victim.hp = victim.max_hp
+    g.enemies.append(victim)
+    hp0 = victim.hp
+    for _ in range(240):
+        g.update(1 / 60.0)
+    assert victim.hp < hp0, "a garrisoned outpost must shoot"
+    assert not hasattr(g.outpost, "hp"), "the outpost has no health to lose"
+
+    # ---------- Barricade blocks ground, not air ----------
+    g.reset(); g.state = Game.PLAYING; g.wave = 8; g.wave_active = True
+    ok, _msg = g.barricade.buy()
+    assert ok and g.barricade.alive
+    foot = FootSoldier(g, 8); foot.x = 900; foot.y = foot.ground_y
+    flyer = Gargoyle(g, 8); flyer.x = 900
+    g.enemies += [foot, flyer]
+    bar_hp0 = g.barricade.hp
+    for _ in range(600):
+        g.update(1 / 60.0)
+    assert g.barricade.hp < bar_hp0, "ground troops must attack it"
+    assert foot.x > g.barricade.x, "ground troops must be held outside"
+    assert flyer.x < g.barricade.x, "flyers must pass over it"
+
+    # ---------- Spike Walls reflect ----------
+    g.reset(); g.state = Game.PLAYING; g.wave = 10
+    g.spike_level = 0
+    m = FootSoldier(g, 10); m.max_hp *= 99; m.hp = m.max_hp
+    h0 = m.hp; m.attack_castle()
+    assert m.hp == h0, "no spikes, no reflected damage"
+    g.spike_level = SPIKE_MAX_LEVEL
+    h0 = m.hp; m.attack_castle()
+    assert m.hp < h0, "spiked walls must bite back"
+
+    # ---------- Manual overcharge ----------
+    g.reset(); g.state = Game.PLAYING; g.wave = 8; g.wave_active = True
+    g.gold = 9000
+    for key in ("ballista", "cannon"):
+        g.try_buy(next(i for i in g.shop_items if i.key == key))
+    for cls in (Ballista, Cannon):
+        gun = next(t for t in g.castle.towers if isinstance(t, cls))
+        g.grab_cd = 0.0
+        gun.cooldown = 99.0        # normal reload nowhere near ready
+        gun.overcharge_cd = 0.0
+        g.projectiles.clear()
+        g.mouse_pos = gun.rect.center
+        g.try_grab(g.mouse_pos)
+        assert g.charging is gun, f"{cls.NAME} must be hand-aimable"
+        g.mouse_pos = (gun.muzzle[0] + 220, gun.muzzle[1] + 120)
+        assert g.overcharge_power() >= 0.99
+        g.release_grab()
+        assert len(g.projectiles) == 1, "overcharge must ignore the reload"
+        shot = g.projectiles[0]
+        assert abs(shot.damage / gun.damage - OVERCHARGE_DAMAGE) < 1e-6
+        assert shot.vx < 0, "the shot flies opposite the draw-back"
+        if gun.splash:
+            assert shot.splash > gun.splash, "overcharge widens the blast"
+        assert gun.overcharge_cd > 0, "it must lock out afterwards"
+        g.grab_cd = 0.0
+        g.mouse_pos = gun.rect.center
+        g.try_grab(g.mouse_pos)
+        assert g.charging is None, "cannot re-charge during the lockout"
+
+    # ---------- Volatile detonation ----------
+    g.reset(); g.state = Game.PLAYING; g.wave = 12; g.wave_active = True
+    vol = Volatile(g, 12); vol.x = 800; vol.y = vol.ground_y; vol.depth = 0
+    g.enemies.append(vol)
+    near = FootSoldier(g, 12); near.x = 830; near.y = near.ground_y
+    near.depth = 0; near.max_hp *= 30; near.hp = near.max_hp
+    far = FootSoldier(g, 12); far.x = 800 + Volatile.BLAST_RADIUS + 60
+    far.y = far.ground_y; far.depth = 0; far.max_hp *= 30; far.hp = far.max_hp
+    g.enemies += [near, far]
+    n0, f0 = near.hp, far.hp
+    vol.die()
+    assert near.hp < n0, "the blast must hurt neighbours"
+    assert far.hp == f0, "and must respect its radius"
+
+    # ---------- Treasure Goblin ----------
+    g.reset(); g.state = Game.PLAYING; g.wave = 8; g.wave_active = True
+    gob = TreasureGoblin(g, 8)
+    g.enemies.append(gob)
+    # no wave bonus in the way: it would mask the goblin's own payout
+    g.wave_active = False
+    gx0, chp0, gold0 = gob.x, g.castle.hp, g.gold
+    for _ in range(200):
+        g.update(1 / 60.0)
+    assert gob.x > gx0, "the goblin flees away from the castle"
+    assert g.castle.hp == chp0, "it never attacks"
+    for _ in range(900):         # it escapes by leaving the map, or on its timer
+        g.update(1 / 60.0)
+        if not gob.alive:
+            break
+    assert not gob.alive, "the goblin must eventually escape"
+    assert g.gold == gold0, "escaping must pay nothing"
+    g2 = Game(g.screen); g2.state = Game.PLAYING; g2.wave = 8
+    gob2 = TreasureGoblin(g2, 8); g2.enemies.append(gob2)
+    before = g2.gold
+    gob2.die()
+    assert g2.gold - before >= TreasureGoblin.GOLD, "killing one must pay well"
+
+    # ---------- Endgame tiers ----------
+    assert endgame_tier(10) == -1 and endgame_tier(16) == 0
+    assert endgame_tier(26) == 1 and endgame_tier(40) == 2
+    plain, tiers = Scout(g, 10), [Scout(g, w) for w in (16, 26, 36)]
+    assert plain.tier_name == ""
+    last_hp = plain.max_hp
+    for t in tiers:
+        assert t.tier_name and t.max_hp > last_hp and t.COLOR != Scout.COLOR
+        last_hp = t.max_hp
+
+    # ---------- Dragon claws ----------
+    g.reset(); g.state = Game.PLAYING; g.wave = 10; g.wave_active = True
+    drg = Dragon(g, 10); drg.x = drg.standoff_x; drg.y = drg.fly_y
+    g.enemies.append(drg)
+    for _ in range(120):
+        g.update(1 / 60.0)
+    drg.breathing = 1.0
+    claw = drg.smack_rect()
+    assert claw is not None
+    g.mouse_pos = claw.center
+    g.try_grab(claw.center)
+    assert g.smacking is drg, "dragging the claws must start a smack"
+    for k in range(60):
+        g.mouse_pos = (claw.centerx + (60 if k % 2 else -60), claw.centery)
+        g.update_grab(1 / 60.0)
+        if drg.reel > 0:
+            break
+    assert drg.reel > 0, "enough battering must stagger the Dragon"
+    assert drg.breathing == 0.0, "and cut off its fire breath"
+    chp = g.castle.hp
+    for _ in range(int(CLAW_STAGGER * 60) - 20):
+        g.update(1 / 60.0)
+    assert g.castle.hp == chp, "a reeling Dragon cannot attack"
+    assert drg.regalia_cd > 0, "the claws are guarded afterwards"
+    assert not drg.grabbable and not drg.strippable, "still boss-immune"
+
+    # ---------- Wind ----------
+    def _drift(w):
+        gg = Game(g.screen); gg.state = Game.PLAYING
+        gg.wave, gg.wave_active, gg.wind = 5, True, w
+        mob = FootSoldier(gg, 5); mob.x = 800; mob.y = mob.ground_y
+        mob.depth = 0; mob.max_hp *= 90; mob.hp = mob.max_hp
+        gg.enemies.append(mob)
+        mob.on_grab(); mob.on_release(0, -1000)
+        for _ in range(240):
+            gg.update(1 / 60.0)
+            if mob.state != "air":
+                break
+        return mob.x - 800
+    assert _drift(WIND_MAX) > 60 > -60 > _drift(-WIND_MAX), \
+        "wind must push a vertical throw both ways"
+
+    # ---------- Thunderstorm lightning ----------
+    def _ceiling_throw(storm):
+        gg = Game(g.screen); gg.state = Game.PLAYING
+        gg.wave, gg.wave_active, gg.storm, gg.wind = 5, True, storm, 0.0
+        mob = ShieldBearer(gg, 5); mob.x = 800; mob.y = mob.ground_y
+        mob.depth = 0; mob.max_hp *= 40; mob.hp = mob.max_hp
+        gg.enemies.append(mob)
+        start = mob.hp
+        mob.on_grab(); mob.on_release(0, -2400)
+        for _ in range(300):
+            gg.update(1 / 60.0)
+            if mob.state != "air":
+                break
+        return start - mob.hp, mob.fling_peak
+    zapped, peak = _ceiling_throw(True)
+    calm, _ = _ceiling_throw(False)
+    assert peak < STORM_CEILING, "the test throw must reach the ceiling"
+    assert zapped > calm * 2, "a storm must punish mobs flung that high"
+
+    # ---------- Challenge Horn ----------
+    g.reset(); g.open_first_shop(); g.start_wave()
+    for _ in range(120):
+        g.update(1 / 60.0)
+    pending = len(g.spawn_queue)
+    assert pending > 0
+    on_field = len(g.enemies)
+    assert g.blow_horn()
+    assert not g.spawn_queue and len(g.enemies) == on_field + pending, \
+        "the horn must call the whole remaining wave in at once"
+    assert g.horn_bonus > 0 and not g.blow_horn(), "and only work once"
+
+    print("selftest: cursor OK (Grab Strength gates tanks, drag-away strips / "
+          "drag-in shoves, gloves fling "
+          f"{MULTI_MAX_LEVEL + 1} at once)")
+    print("selftest: structures OK (outpost fires and cannot be attacked, "
+          "barricade stops ground but not flyers, spikes reflect)")
+    print(f"selftest: overcharge OK (x{OVERCHARGE_DAMAGE} damage, wider blast, "
+          "fires mid-reload, then locks out)")
+    print("selftest: endgame OK (Volatile blast, Goblin flees/pays, "
+          "Bloodied/Frostbound/Voidtouched tiers)")
+    print("selftest: world OK (Dragon claws stagger, wind drifts throws, "
+          "storm lightning, Challenge Horn)")
     print("selftest: UI paths OK (menu, shop clicks + hotkeys, pause, "
           "throw, defeat, restart)")
 
