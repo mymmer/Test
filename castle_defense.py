@@ -53,6 +53,30 @@ SLAM_DMG_FLOOR = 170.0  # relative speed below which mid-air collisions are safe
 SLAM_DMG_SCALE = 0.10
 GRAB_COOLDOWN = 0.22
 
+# --- boss regalia (crown / staff) ---------------------------------------
+REGALIA_MAX_THROW = {"crown": 2300.0, "staff": 780.0}
+CROWN_RETRIEVE_SPEED = 1.7     # the Troll King hurries when uncrowned
+STAFF_DISARM_TIME = 5.0        # seconds the Lich Lord spends re-focusing
+# Once a boss gets its regalia back it guards it, and grows wiser every time
+# it is robbed -- without this the player could stun-lock a boss forever.
+REGALIA_COOLDOWN = 6.0
+REGALIA_CD_GROWTH = 0.6
+
+# --- bounce upgrade ------------------------------------------------------
+BOUNCE_MAX_LEVEL = 5
+# restitution per level -- capped so a mob can never bounce forever
+BOUNCE_RESTITUTION = (0.32, 0.46, 0.56, 0.64, 0.71, 0.78)
+BOUNCE_DMG_BONUS = 0.22        # extra impact damage per level ("weight")
+BOUNCE_STAGGER = 0.34          # extra recovery time per level, in seconds
+
+# --- risk / reward -------------------------------------------------------
+POP_GOLD_FREE = 4              # mobs on screen before the bonus kicks in
+POP_GOLD_STEP = 0.055          # extra gold multiplier per additional mob
+POP_GOLD_CAP = 3.0
+SCORE_PER_PX = 0.32            # fling score per pixel travelled
+SCORE_PER_SEC = 55.0           # fling score per second airborne
+SCORE_COMBO_STEP = 0.75        # combo multiplier added per mob struck
+
 # --- armour stripping (heavy units) -------------------------------------
 STRIP_DISTANCE = 420.0   # px of dragging needed to pry one plate loose
 STRIP_SLOW = 0.76        # speed retained per plate torn off
@@ -442,6 +466,110 @@ class Projectile:
         else:  # generic fallback shot
             pygame.draw.circle(surf, self.color, (x, y), self.radius)
             pygame.draw.circle(surf, (140, 140, 130), (x, y), self.radius, 1)
+
+
+# ------------------------------------------------------------------------------
+# Boss regalia the player can pull off
+# ------------------------------------------------------------------------------
+
+class DroppedItem:
+    """
+    A piece of boss equipment -- the Troll King's crown, the Lich Lord's staff
+    -- that the player has torn loose.  It follows the cursor while held, flies
+    with the throw, then lies on the ground until its owner recovers it.
+    """
+
+    def __init__(self, game, owner, kind, x, y):
+        self.game = game
+        self.owner = owner
+        self.kind = kind              # "crown" | "staff"
+        self.x, self.y = float(x), float(y)
+        self.vx = self.vy = 0.0
+        self.state = "held"           # held -> flying -> ground
+        self.alive = True
+        self.spin = 0.0
+        self.bob = 0.0
+        self.w, self.h = (44, 26) if kind == "crown" else (18, 60)
+
+    @property
+    def rect(self):
+        return pygame.Rect(int(self.x - self.w / 2), int(self.y - self.h / 2),
+                           self.w, self.h)
+
+    @property
+    def rest_y(self):
+        return GROUND_Y - self.h / 2 + 2
+
+    def kill(self):
+        self.alive = False
+
+    def throw(self, vx, vy):
+        cap = REGALIA_MAX_THROW.get(self.kind, 1600.0)
+        sp = math.hypot(vx, vy)
+        if sp > cap:
+            vx, vy = vx * cap / sp, vy * cap / sp
+        self.vx, self.vy = vx, vy
+        self.state = "flying"
+        self.game.effects.burst(self.x, self.y, 10, (255, 226, 150),
+                                speed=180, life=0.4)
+
+    def update(self, dt):
+        if self.state == "held":
+            return
+        self.bob += dt * 3.0
+        if self.state == "flying":
+            self.vy += GRAVITY * dt
+            self.x += self.vx * dt
+            self.y += self.vy * dt
+            self.spin += self.vx * dt * 0.02
+            # keep it on the battlefield, out of the castle
+            left = CASTLE_FRONT + self.w
+            right = WIDTH - self.w
+            if self.x < left:
+                self.x = left
+                self.vx = abs(self.vx) * 0.4
+            if self.x > right:
+                self.x = right
+                self.vx = -abs(self.vx) * 0.4
+            if self.y >= self.rest_y:
+                self.y = self.rest_y
+                self.vy = -abs(self.vy) * 0.34
+                self.vx *= 0.6
+                self.game.effects.burst(self.x, self.y + self.h / 2, 8,
+                                        C_DIRT, speed=140, life=0.35)
+                if abs(self.vy) < 90:
+                    self.vy = 0.0
+                    self.state = "ground"
+
+    def draw(self, surf):
+        x, y = int(self.x), int(self.y)
+        if self.state == "ground":
+            y += int(math.sin(self.bob) * 2)
+            glow = pygame.Surface((self.w * 3, self.h * 3), pygame.SRCALPHA)
+            col = (255, 214, 110) if self.kind == "crown" else (186, 140, 255)
+            pygame.draw.ellipse(glow, (*col, 46), glow.get_rect())
+            surf.blit(glow, (x - self.w * 1.5, y - self.h * 1.5))
+
+        if self.kind == "crown":
+            pygame.draw.polygon(surf, C_GOLD, [
+                (x - 20, y + 10), (x + 20, y + 10), (x + 16, y - 6),
+                (x + 8, y + 4), (x, y - 10), (x - 8, y + 4), (x - 16, y - 6)])
+            pygame.draw.polygon(surf, shade(C_GOLD, 0.6), [
+                (x - 20, y + 10), (x + 20, y + 10), (x + 16, y - 6),
+                (x + 8, y + 4), (x, y - 10), (x - 8, y + 4), (x - 16, y - 6)], 2)
+            pygame.draw.circle(surf, (228, 84, 96), (x, y + 4), 3)
+        else:
+            a = self.spin if self.state != "ground" else -1.2
+            dx, dy = math.cos(a) * 26, math.sin(a) * 26
+            pygame.draw.line(surf, (76, 62, 96), (x - dx, y - dy),
+                             (x + dx, y + dy), 5)
+            glow = pygame.Surface((44, 44), pygame.SRCALPHA)
+            pygame.draw.circle(glow, (170, 120, 255, 100), (22, 22), 20)
+            surf.blit(glow, (x + dx - 22, y + dy - 22))
+            pygame.draw.circle(surf, (196, 150, 255),
+                               (int(x + dx), int(y + dy)), 9)
+            pygame.draw.circle(surf, (240, 220, 255),
+                               (int(x + dx), int(y + dy)), 5)
 
 
 # ------------------------------------------------------------------------------
@@ -1177,6 +1305,15 @@ class Enemy:
         self.hurt_flash = 0.0
         self.slam_cooldown = {}
         self.stagger = 0.0
+        # --- score tracking for one fling ---
+        self.fling_active = False
+        self.fling_x0 = self.fling_y0 = 0.0
+        self.fling_t0 = 0.0
+        self.fling_hits = 0
+        self.fling_peak = 0.0
+        self.bounce_count = 0
+        self.regalia_cd = 0.0        # seconds until its item can be taken again
+        self.regalia_taken = 0       # how many times the player has robbed it
         self.bob = random.uniform(0, math.tau)
         self.spin = 0.0
 
@@ -1201,6 +1338,25 @@ class Enemy:
     @property
     def grabbable(self):
         return self.GRABBABLE and self.alive and self.state in ("walk", "attack")
+
+    def regalia_anchor(self):
+        """Where this enemy's detachable item sits, or None."""
+        return None
+
+    def regalia_rect(self):
+        """Rect of a detachable item on this enemy, or None. Bosses override
+        this to expose a crown / staff the player can rip off."""
+        return None
+
+    def guard_regalia(self):
+        """Called when a boss recovers its item: it holds on tighter each
+        time, so the mechanic stays strong without becoming a stun-lock."""
+        self.regalia_cd = REGALIA_COOLDOWN * (
+            1.0 + REGALIA_CD_GROWTH * self.regalia_taken)
+
+    def detach_regalia(self):
+        """Pull the item loose and hand back a DroppedItem."""
+        return None
 
     @property
     def strippable(self):
@@ -1257,17 +1413,22 @@ class Enemy:
     def die(self, silent=False):
         if not self.alive:
             return
+        g = self.game
+        # the crowd bonus counts this mob too -- chaos pays
+        mult = g.gold_multiplier
         self.alive = False
         self.hp = 0.0
-        g = self.game
         if not silent:
-            g.gold += self.gold
+            gain = max(1, int(round(self.gold * mult)))
+            g.gold += gain
             g.stats_kills += 1
             g.effects.burst(self.x, self.y, 18 if not self.IS_BOSS else 90,
                             self.COLOR, speed=280 if not self.IS_BOSS else 520,
                             life=0.7, size=3 if not self.IS_BOSS else 6)
-            g.effects.text(self.x, self.y - self.h * 0.6, f"+{self.gold}g",
+            label = f"+{gain}g" + (f"  x{mult:.1f}" if mult > 1.05 else "")
+            g.effects.text(self.x, self.y - self.h * 0.6, label,
                            C_GOLD, 20 if not self.IS_BOSS else 34)
+            self.resolve_fling()
             if self.IS_BOSS:
                 g.add_shake(12.0)
                 g.effects.ring(self.x, self.y, 40, (255, 220, 140),
@@ -1286,15 +1447,28 @@ class Enemy:
         self.vx = vx * mult
         self.vy = vy * mult
         self.slam_cooldown.clear()
+        # start scoring this fling
+        self.fling_active = True
+        self.fling_x0, self.fling_y0 = self.x, self.y
+        self.fling_peak = self.y
+        self.fling_t0 = self.game.time
+        self.fling_hits = 0
+        self.bounce_count = 0
         self.game.effects.burst(self.x, self.y, 8, (220, 220, 240),
                                 speed=150, life=0.3)
 
     def land(self):
-        """Called when an airborne mob hits the dirt.  Ouch."""
+        """Called when an airborne mob hits the dirt.  Ouch.
+
+        With the Bounce upgrade the mob is heavier and springier: it rebounds
+        several times, each impact doing damage and resetting a longer
+        recovery, so a good throw keeps a mob out of the fight for ages."""
+        g = self.game
+        lvl = clamp(g.bounce_level, 0, BOUNCE_MAX_LEVEL)
         impact = math.hypot(self.vx * 0.5, self.vy)
         dmg = max(0.0, impact - FALL_DMG_FLOOR) * FALL_DMG_SCALE * \
-            (0.75 + 0.35 * self.MASS)
-        g = self.game
+            (0.75 + 0.35 * self.MASS) * (1.0 + BOUNCE_DMG_BONUS * lvl)
+        self.bounce_count += 1
         if dmg > 0:
             self.take_damage(dmg, "fall")
             g.effects.text(self.x, self.y - self.h, f"{int(dmg)}",
@@ -1303,16 +1477,36 @@ class Enemy:
             g.effects.burst(self.x, self.ground_y + self.h / 2, 16,
                             C_DIRT, speed=min(320, impact * 0.5), life=0.5, size=4)
             g.stats_thrown_damage += dmg
-        self.vy = -abs(self.vy) * 0.32
-        self.vx *= 0.45
+        if self.bounce_count > 1 and dmg > 0:
+            g.effects.text(self.x, self.y - self.h * 1.2, "BOUNCE!",
+                           (150, 220, 255), 20, 0.6)
+        self.vy = -abs(self.vy) * BOUNCE_RESTITUTION[lvl]
+        self.vx *= 0.45 + 0.07 * lvl
         self.spin *= 0.3
-        if abs(self.vy) < 110:
+        # a hard cap on rebounds guarantees the mob always settles
+        if self.bounce_count > lvl or abs(self.vy) < 90:
             self.vy = 0.0
             self.spin = 0.0
             self.y = self.ground_y
             if self.alive:
                 self.state = "walk"
-                self.stagger = 0.45
+                self.stagger = 0.45 + BOUNCE_STAGGER * lvl
+            self.resolve_fling()
+
+    def resolve_fling(self):
+        """Cash in the score for one completed fling: distance + airtime,
+        multiplied up by every mob clobbered on the way."""
+        if not self.fling_active:
+            return
+        self.fling_active = False
+        g = self.game
+        travel = abs(self.x - self.fling_x0) + max(0.0, self.fling_y0 - self.fling_peak)
+        airtime = max(0.0, g.time - self.fling_t0)
+        base = travel * SCORE_PER_PX + airtime * SCORE_PER_SEC
+        combo = 1.0 + SCORE_COMBO_STEP * self.fling_hits
+        pts = int(base * combo)
+        if pts > 0:
+            g.add_score(pts, self.x, self.y - self.h, self.fling_hits, combo)
 
     def slam_into(self, other):
         """Airborne mob crashes into another mob -- both suffer."""
@@ -1325,6 +1519,7 @@ class Enemy:
         other.take_damage(dmg, "impact")
         self.take_damage(dmg * 0.45, "impact")
         g.stats_thrown_damage += dmg
+        self.fling_hits += 1
         g.effects.text(other.x, other.y - other.h * 0.7, f"{int(dmg)}",
                        (255, 208, 96), 22)
         g.effects.burst((self.x + other.x) / 2, (self.y + other.y) / 2, 12,
@@ -1343,6 +1538,7 @@ class Enemy:
     def update(self, dt):
         self.hurt_flash = max(0.0, self.hurt_flash - dt * 4.0)
         self.stagger = max(0.0, self.stagger - dt)
+        self.regalia_cd = max(0.0, self.regalia_cd - dt)
         for k in list(self.slam_cooldown):
             self.slam_cooldown[k] -= dt
             if self.slam_cooldown[k] <= 0:
@@ -1367,6 +1563,7 @@ class Enemy:
         self.x += self.vx * dt
         self.y += self.vy * dt
         self.spin += self.vx * dt * 0.012
+        self.fling_peak = min(self.fling_peak, self.y)
         self.vx_estimate, self.vy_estimate = self.vx, self.vy
 
         # walls of the arena
@@ -1447,7 +1644,23 @@ class Enemy:
             pygame.draw.ellipse(sh, (0, 0, 0, 90), sh.get_rect())
             surf.blit(sh, (surf_x - sw // 2, gy - 4))
         self.draw_body(surf)
+        if self.regalia_cd > 0:
+            self.draw_regalia_guard(surf)
         self.draw_hp(surf)
+
+    def draw_regalia_guard(self, surf):
+        """A shrinking ward around the item while the boss is guarding it."""
+        a = self.regalia_anchor()
+        if a is None:
+            return
+        ax, ay = int(a[0]), int(a[1])
+        span = max(1.0, REGALIA_COOLDOWN * (
+            1.0 + REGALIA_CD_GROWTH * max(0, self.regalia_taken - 1)))
+        frac = clamp(self.regalia_cd / span, 0.0, 1.0)
+        ring = pygame.Surface((60, 60), pygame.SRCALPHA)
+        pygame.draw.arc(ring, (150, 205, 255, 200), (6, 6, 48, 48),
+                        -math.pi / 2, -math.pi / 2 + math.tau * frac, 3)
+        surf.blit(ring, (ax - 30, ay - 30))
 
     def draw_body(self, surf):
         r = self.hit_rect
@@ -1945,16 +2158,72 @@ class TrollKing(Boss):
     GOLD = 320
     ARMOR = 0.25
     MASS = 12.0
-    HINT = "Immune to throws and stripping - hurl OTHER mobs into him."
+    HINT = "Drag the CROWN off his head! He must go and fetch it before "\
+           "he can attack again."
 
 
     def __init__(self, game, wave, x=None, y=None):
         super().__init__(game, wave, x, y)
         self.leap_timer = random.uniform(4.0, 6.0)
         self.smash = 0.0
+        self.has_crown = True
+        self.crown_item = None
+
+    def regalia_anchor(self):
+        r = self.hit_rect
+        return (r.centerx, r.y + 2)
+
+    def regalia_rect(self):
+        if not self.has_crown or not self.alive or self.regalia_cd > 0:
+            return None
+        cx, cy = self.regalia_anchor()
+        return pygame.Rect(cx - 26, cy - 20, 52, 34)
+
+    def detach_regalia(self):
+        if not self.has_crown:
+            return None
+        cx, cy = self.regalia_anchor()
+        self.has_crown = False
+        self.regalia_taken += 1
+        self.crown_item = DroppedItem(self.game, self, "crown", cx, cy)
+        g = self.game
+        g.effects.ring(cx, cy, 18, C_GOLD, speed=280, life=0.5, size=4)
+        g.effects.text(self.x, self.y - self.h * 0.7, "MY CROWN!",
+                       (255, 210, 120), 26)
+        g.announce("The Troll King is uncrowned!", C_GOLD, 2.2)
+        return self.crown_item
+
+    def retrieve_crown(self, dt):
+        """Uncrowned: he abandons the castle and stamps off after his crown."""
+        self.state = "retrieve"
+        crown = self.crown_item
+        if crown is None or not crown.alive:
+            self.has_crown = True          # nothing to fetch; put it back on
+            self.guard_regalia()
+            self.crown_item = None
+            return
+        self.anim += dt * self.speed * 0.06
+        dx = crown.x - self.x
+        step = self.speed * CROWN_RETRIEVE_SPEED * dt
+        if abs(dx) > 6:
+            self.x += clamp(dx, -step, step)
+            self.vx_estimate = math.copysign(
+                self.speed * CROWN_RETRIEVE_SPEED, dx)
+        if crown.state == "ground" and abs(dx) < 46:
+            self.has_crown = True
+            self.guard_regalia()
+            crown.kill()
+            self.crown_item = None
+            self.game.effects.ring(self.x, self.y - self.h * 0.5, 20, C_GOLD,
+                                   speed=300, life=0.5, size=4)
+            self.game.effects.text(self.x, self.y - self.h * 0.8, "CROWNED!",
+                                   (255, 214, 120), 24)
 
     def think(self, dt):
         self.smash = max(0.0, self.smash - dt * 2.5)
+        if not self.has_crown:
+            self.retrieve_crown(dt)        # no attacking until he is crowned
+            return
         self.leap_timer -= dt
         if self.leap_timer <= 0 and self.x > CASTLE_FRONT + 200:
             self.leap_timer = random.uniform(5.0, 7.5)
@@ -1994,12 +2263,16 @@ class TrollKing(Boss):
             pygame.draw.polygon(surf, (238, 236, 220), [
                 (r.centerx + s * 12, r.y + 38), (r.centerx + s * 8, r.y + 38),
                 (r.centerx + s * 10, r.y + 28)])
-        # crown
-        pygame.draw.polygon(surf, C_GOLD, [
-            (r.centerx - 20, r.y + 12), (r.centerx + 20, r.y + 12),
-            (r.centerx + 16, r.y - 4), (r.centerx + 8, r.y + 6),
-            (r.centerx, r.y - 8), (r.centerx - 8, r.y + 6),
-            (r.centerx - 16, r.y - 4)])
+        # crown -- gone while the player has knocked it off
+        if self.has_crown:
+            pygame.draw.polygon(surf, C_GOLD, [
+                (r.centerx - 20, r.y + 12), (r.centerx + 20, r.y + 12),
+                (r.centerx + 16, r.y - 4), (r.centerx + 8, r.y + 6),
+                (r.centerx, r.y - 8), (r.centerx - 8, r.y + 6),
+                (r.centerx - 16, r.y - 4)])
+        else:
+            draw_text(surf, "RETRIEVING CROWN", self.x, r.y - 54, 18,
+                      (255, 200, 120), "center", True)
         # club, swinging on the smash
         ang = -0.9 + self.smash * 2.2
         hx = r.left + 6
@@ -2139,7 +2412,8 @@ class LichLord(Boss):
     GOLD = 780
     ARMOR = 0.30
     MASS = 10.0
-    HINT = "Summons endlessly - splash damage clears his skeletons fastest."
+    HINT = "Flick the STAFF out of his hands to disarm him for 5s - no "\
+           "bolts, no summons, no ward."
 
 
     def __init__(self, game, wave, x=None, y=None):
@@ -2152,16 +2426,66 @@ class LichLord(Boss):
         self.phase_timer = 0.0
         self.shield = 0.0
         self.orb = 0.0
+        self.has_staff = True
+        self.staff_item = None
+        self.disarm = 0.0
 
     def take_damage(self, amount, kind="projectile"):
         if self.shield > 0:
             amount *= 0.25
         return super().take_damage(amount, kind)
 
+    def regalia_anchor(self):
+        r = self.hit_rect
+        return (r.right + 6, r.y - 16)
+
+    def regalia_rect(self):
+        if not self.has_staff or not self.alive or self.regalia_cd > 0:
+            return None
+        sx, sy = self.regalia_anchor()
+        return pygame.Rect(sx - 20, sy - 20, 40, 62)
+
+    def detach_regalia(self):
+        if not self.has_staff:
+            return None
+        sx, sy = self.regalia_anchor()
+        self.has_staff = False
+        self.regalia_taken += 1
+        self.disarm = STAFF_DISARM_TIME
+        self.shield = 0.0                  # the ward drops with the staff
+        self.staff_item = DroppedItem(self.game, self, "staff", sx, sy)
+        g = self.game
+        g.effects.ring(sx, sy, 22, (196, 150, 255), speed=340, life=0.6, size=5)
+        g.effects.text(self.x, self.y - self.h * 0.7, "DISARMED!",
+                       (208, 160, 255), 28)
+        g.announce("The Lich Lord is disarmed!", (208, 160, 255), 2.2)
+        return self.staff_item
+
+    def recover_staff(self):
+        """Focus regained -- the staff is magically recalled to his hand."""
+        if self.staff_item is not None:
+            self.game.effects.ring(self.staff_item.x, self.staff_item.y, 16,
+                                   (196, 150, 255), speed=260, life=0.5, size=4)
+            self.staff_item.kill()
+            self.staff_item = None
+        self.has_staff = True
+        self.guard_regalia()
+        self.orb = 1.0
+        self.game.effects.text(self.x, self.y - self.h * 0.8, "REFOCUSED",
+                               (208, 160, 255), 22)
+
     def think(self, dt):
         self.anim += dt * 2.0
         self.orb = max(0.0, self.orb - dt * 2.0)
         self.shield = max(0.0, self.shield - dt)
+
+        # disarmed: no bolts, no summons, no ward -- just standing there
+        if self.disarm > 0:
+            self.disarm -= dt
+            self.state = "attack"
+            if self.disarm <= 0:
+                self.recover_staff()
+            return
 
         if self.x > self.standoff_x:
             self.x -= self.speed * dt
@@ -2248,15 +2572,24 @@ class LichLord(Boss):
             pygame.draw.polygon(surf, (168, 140, 220), [
                 (sx + i * 8 - 3, sy - 12), (sx + i * 8 + 3, sy - 12),
                 (sx + i * 8, sy - 24)])
-        # staff
-        stx = r.right + 6
-        pygame.draw.line(surf, (76, 62, 96), (stx, r.bottom), (stx, r.y - 14), 5)
-        gr = 10 + int(7 * self.orb)
-        glow = pygame.Surface((gr * 4, gr * 4), pygame.SRCALPHA)
-        pygame.draw.circle(glow, (170, 120, 255, 90), (gr * 2, gr * 2), gr * 2)
-        surf.blit(glow, (stx - gr * 2, r.y - 16 - gr * 2))
-        pygame.draw.circle(surf, (196, 150, 255), (stx, r.y - 16), gr)
-        pygame.draw.circle(surf, (240, 220, 255), (stx, r.y - 16), max(2, gr - 4))
+        # staff -- gone while disarmed
+        if self.has_staff:
+            stx = r.right + 6
+            pygame.draw.line(surf, (76, 62, 96), (stx, r.bottom), (stx, r.y - 14), 5)
+            gr = 10 + int(7 * self.orb)
+            glow = pygame.Surface((gr * 4, gr * 4), pygame.SRCALPHA)
+            pygame.draw.circle(glow, (170, 120, 255, 90), (gr * 2, gr * 2), gr * 2)
+            surf.blit(glow, (stx - gr * 2, r.y - 16 - gr * 2))
+            pygame.draw.circle(surf, (196, 150, 255), (stx, r.y - 16), gr)
+            pygame.draw.circle(surf, (240, 220, 255), (stx, r.y - 16), max(2, gr - 4))
+        else:
+            draw_text(surf, f"DISARMED  {self.disarm:.1f}s", self.x,
+                      r.y - 54, 20, (208, 160, 255), "center", True)
+            for i in range(3):      # dazed sparks circling his head
+                a = self.anim * 3 + i * 2.1
+                pygame.draw.circle(surf, (180, 150, 240),
+                                   (int(sx + math.cos(a) * 22),
+                                    int(sy - 26 + math.sin(a) * 7)), 3)
 
 
 # ------------------------------------------------------------------------------
@@ -2393,6 +2726,7 @@ class Game:
         self.enemies = []
         self.projectiles = []
         self.effects = Effects()
+        self.items = []
         self.spawn_queue = []
         self.spawn_timer = 0.0
         self.spawn_interval = 1.0
@@ -2403,12 +2737,19 @@ class Game:
         self.grabbed = None
         self.stripping = None          # heavy unit currently being dismantled
         self.strip_anchor = (0, 0)
+        self.items = []                # crowns / staves knocked loose
+        self.held_item = None
         self.grab_cd = 0.0
         self.mouse_hist = deque(maxlen=12)
         self.mouse_pos = (WIDTH // 2, HEIGHT // 2)
         self.stats_kills = 0
         self.stats_thrown_damage = 0.0
         self.stats_plates_torn = 0
+        self.score = 0
+        self.best_fling = 0
+        self.best_combo = 1.0
+        self.combo_flash = 0.0
+        self.bounce_level = 0
         self.purchases = {"bowman": 0, "ballista": 0, "cannon": 0}
         self.shop_items = self._build_shop()
         self.shop_msg = ""
@@ -2452,6 +2793,16 @@ class Game:
                               speed=520, life=0.7, size=5)
             return True, f"{before} -> {self.castle.tier_name}!"
 
+        def bounce_cost():
+            return 200 * (1.55 ** self.bounce_level)
+
+        def buy_bounce():
+            if self.bounce_level >= BOUNCE_MAX_LEVEL:
+                return False, "Bounce is already maxed out."
+            self.bounce_level += 1
+            n = self.bounce_level + 1
+            return True, f"Thrown mobs now bounce up to {n} times!"
+
         def repair_cost():
             missing = self.castle.max_hp - self.castle.hp
             return max(50, int(missing * 0.55))
@@ -2472,14 +2823,14 @@ class Game:
                      buy_tower(Bowman, "bowman"),
                      tower_status(Bowman, "bowman")),
             ShopItem("ballista", "Ballista", Ballista.COLOR,
-                     "Heavy piercing bolt, slow reload. HARD COUNTER to "
-                     "flyers: +200% damage to anything airborne.",
+                     "Heavy piercing bolt, slow reload. +200% damage to "
+                     "anything airborne.",
                      lambda: 250 * (1.28 ** self.purchases["ballista"]),
                      buy_tower(Ballista, "ballista"),
                      tower_status(Ballista, "ballista")),
             ShopItem("cannon", "Cannon", (168, 174, 196),
-                     "Explosive splash on the densest cluster. HARD COUNTER "
-                     "to tanks: +200% damage to Heavy ground units.",
+                     "Explosive splash on the densest cluster. +200% damage "
+                     "to Heavy ground units.",
                      lambda: 380 * (1.28 ** self.purchases["cannon"]),
                      buy_tower(Cannon, "cannon"),
                      tower_status(Cannon, "cannon")),
@@ -2490,6 +2841,14 @@ class Game:
                      lambda: f"Lv.{self.castle.wall_level}/{self.castle.max_level}"
                              f"   {len(self.castle.towers)}/"
                              f"{self.castle.slot_capacity} slots"),
+            ShopItem("bounce", "Bounce", (120, 214, 240),
+                     "Thrown mobs bounce again and again. Every bounce adds "
+                     "impact damage and a longer stun.",
+                     bounce_cost, buy_bounce,
+                     lambda: (f"Lv.{self.bounce_level}/{BOUNCE_MAX_LEVEL}"
+                              f"   {self.bounce_level + 1} bounce"
+                              f"{'' if self.bounce_level == 0 else 's'}"),
+                     lambda: self.bounce_level < BOUNCE_MAX_LEVEL),
             ShopItem("repair", "Repair", C_GREEN,
                      "Instantly restore 40% of maximum castle health.",
                      repair_cost, buy_repair,
@@ -2538,6 +2897,25 @@ class Game:
         return bg
 
     # -- helpers ---------------------------------------------------------
+    @property
+    def gold_multiplier(self):
+        """Risk vs reward: a crowded screen pays far better, but a crowd is
+        exactly what flattens the castle."""
+        n = sum(1 for e in self.enemies if e.alive)
+        return min(POP_GOLD_CAP,
+                   1.0 + POP_GOLD_STEP * max(0, n - POP_GOLD_FREE))
+
+    def add_score(self, pts, x, y, hits, combo):
+        self.score += pts
+        self.best_fling = max(self.best_fling, pts)
+        if hits > 0:
+            self.best_combo = max(self.best_combo, combo)
+            self.combo_flash = 1.0
+            self.effects.text(x, y, f"+{pts}   x{combo:.2f} COMBO",
+                              (255, 214, 120), 27, 1.35)
+        else:
+            self.effects.text(x, y, f"+{pts}", (196, 216, 248), 20, 0.9)
+
     def add_shake(self, amount):
         # capped: the world is blitted at an offset, so a big shake would
         # expose bare edges at the screen border
@@ -2595,6 +2973,8 @@ class Game:
         self.projectiles.clear()
         self.grabbed = None
         self.stripping = None
+        self.held_item = None
+        self.items.clear()
         self.shop_msg = f"Wave {self.wave} cleared!  Bonus +{bonus} gold."
         self.shop_msg_t = 4.0
         self.state = self.SHOP
@@ -2603,12 +2983,16 @@ class Game:
         self.state = self.GAMEOVER
         self.grabbed = None
         self.stripping = None
+        self.held_item = None
         self.add_shake(14.0)
         self.effects.burst(CASTLE_FRONT * 0.5, WALL_TOP + 60, 160,
                            (200, 120, 90), speed=700, life=1.4, size=6)
 
     # -- purchasing ------------------------------------------------------
     def try_buy(self, item):
+        if not item.avail_fn():
+            self.shop_msg, self.shop_msg_t = f"{item.name} is maxed out.", 2.0
+            return
         cost = item.cost
         if self.gold < cost:
             self.shop_msg, self.shop_msg_t = "Not enough gold!", 2.0
@@ -2642,9 +3026,48 @@ class Game:
                     best = e
         return best
 
+    def regalia_under_mouse(self, pos):
+        """A boss item (crown / staff) still attached to its owner."""
+        for e in self.enemies:
+            if not e.alive:
+                continue
+            r = e.regalia_rect()
+            if r is not None and r.collidepoint(pos):
+                return e
+        return None
+
+    def item_on_ground_at(self, pos):
+        for it in self.items:
+            if it.alive and it.state == "ground" and it.rect.collidepoint(pos):
+                return it
+        return None
+
     def try_grab(self, pos):
-        if self.grab_cd > 0 or self.grabbed is not None or self.stripping:
+        if (self.grab_cd > 0 or self.grabbed is not None or self.stripping
+                or self.held_item is not None):
             return
+
+        # boss regalia wins the click -- it sits on top of a big target
+        owner = self.regalia_under_mouse(pos)
+        if owner is not None:
+            item = owner.detach_regalia()
+            if item is not None:
+                self.items.append(item)
+                self.held_item = item
+                self.mouse_hist.clear()
+                self.mouse_hist.append((self.time, pos[0], pos[1]))
+                self.add_shake(5.0)
+                return
+
+        # a crown already lying about can be picked up and thrown again
+        loose = self.item_on_ground_at(pos)
+        if loose is not None:
+            loose.state = "held"
+            self.held_item = loose
+            self.mouse_hist.clear()
+            self.mouse_hist.append((self.time, pos[0], pos[1]))
+            return
+
         e = self.enemy_under_mouse(pos)
         if e is None:
             # nothing liftable here -- is there a tank to dismantle instead?
@@ -2663,6 +3086,13 @@ class Game:
                           life=0.3, size=3)
 
     def release_grab(self):
+        if self.held_item is not None:
+            it = self.held_item
+            self.held_item = None
+            self.grab_cd = GRAB_COOLDOWN
+            vx, vy = self.mouse_velocity()
+            it.throw(vx, vy)
+            return
         if self.stripping is not None:
             self.stripping = None
             self.grab_cd = GRAB_COOLDOWN
@@ -2672,22 +3102,38 @@ class Game:
         self.grab_cd = GRAB_COOLDOWN
         if e is None or not e.alive:
             return
-        vx = vy = 0.0
-        if len(self.mouse_hist) >= 2:
-            t1, x1, y1 = self.mouse_hist[-1]
-            # sample ~90 ms back for a stable velocity
-            t0, x0, y0 = self.mouse_hist[0]
-            for sample in self.mouse_hist:
-                if t1 - sample[0] <= 0.09:
-                    t0, x0, y0 = sample
-                    break
-            dt = max(1e-3, t1 - t0)
-            vx = clamp((x1 - x0) / dt, -2600, 2600)
-            vy = clamp((y1 - y0) / dt, -2600, 2600)
+        vx, vy = self.mouse_velocity()
         e.on_release(vx, vy)
+
+    def mouse_velocity(self):
+        """Cursor speed sampled ~90 ms back, so a flick reads cleanly."""
+        if len(self.mouse_hist) < 2:
+            return 0.0, 0.0
+        t1, x1, y1 = self.mouse_hist[-1]
+        t0, x0, y0 = self.mouse_hist[0]
+        for sample in self.mouse_hist:
+            if t1 - sample[0] <= 0.09:
+                t0, x0, y0 = sample
+                break
+        dt = max(1e-3, t1 - t0)
+        return (clamp((x1 - x0) / dt, -2600, 2600),
+                clamp((y1 - y0) / dt, -2600, 2600))
 
     def update_grab(self, dt):
         self.grab_cd = max(0.0, self.grab_cd - dt)
+
+        # --- carrying a crown or staff --------------------------------
+        it = self.held_item
+        if it is not None:
+            if not it.alive:
+                self.held_item = None
+            else:
+                mx, my = self.mouse_pos
+                self.mouse_hist.append((self.time, mx, my))
+                it.x += (mx - it.x) * 0.55
+                it.y += (my - it.y) * 0.55
+                it.spin += 0.25
+                return
 
         # --- dismantling a heavy unit ---------------------------------
         h = self.stripping
@@ -2726,6 +3172,7 @@ class Game:
     def update(self, dt):
         self.time += dt
         self.shake = max(0.0, self.shake - dt * 42.0)
+        self.combo_flash = max(0.0, self.combo_flash - dt * 1.6)
         for b in self.banners:
             b[2] -= dt
         self.banners = [b for b in self.banners if b[2] > 0]
@@ -2754,6 +3201,9 @@ class Game:
                     self.add_shake(8.0)
 
         self.castle.update(dt)
+        for it in self.items:
+            it.update(dt)
+        self.items = [it for it in self.items if it.alive]
         for e in self.enemies:
             e.update(dt)
         self.separate_enemies(dt)
@@ -2767,6 +3217,14 @@ class Game:
             self.grabbed = None
         if self.stripping is not None and not self.stripping.alive:
             self.stripping = None
+        # a dead owner's regalia is just scenery -- clear it out, including
+        # the piece the player may still be carrying
+        for it in self.items:
+            if it.owner is not None and not it.owner.alive:
+                it.kill()
+        self.items = [it for it in self.items if it.alive]
+        if self.held_item is not None and not self.held_item.alive:
+            self.held_item = None
 
         # wave completion
         if self.wave_active and not self.spawn_queue and not self.alive_enemies():
@@ -2827,7 +3285,7 @@ class Game:
             elif ev.key == pygame.K_r and self.state == self.GAMEOVER:
                 self.reset()
                 self.state = self.MENU
-            elif self.state == self.SHOP and pygame.K_1 <= ev.key <= pygame.K_5:
+            elif self.state == self.SHOP and pygame.K_1 <= ev.key <= pygame.K_6:
                 idx = ev.key - pygame.K_1
                 if idx < len(self.shop_items):
                     self.try_buy(self.shop_items[idx])
@@ -2854,7 +3312,8 @@ class Game:
 
         if ev.type == pygame.MOUSEBUTTONUP and ev.button == 1:
             self.mouse_pos = ev.pos
-            if self.grabbed is not None or self.stripping is not None:
+            if (self.grabbed is not None or self.stripping is not None
+                    or self.held_item is not None):
                 self.release_grab()
             return
 
@@ -2869,6 +3328,8 @@ class Game:
                        key=lambda e: (0 if e.flying else 1, e.depth, e.x))
         for e in order:
             e.draw(s)
+        for it in self.items:
+            it.draw(s)
         for p in self.projectiles:
             p.draw(s)
         self.effects.draw(s)
@@ -2898,6 +3359,21 @@ class Game:
 
     def draw_grab_cursor(self, s):
         mx, my = self.mouse_pos
+
+        # boss regalia under the cursor -- how the player discovers this at all
+        if self.held_item is None:
+            owner = self.regalia_under_mouse(self.mouse_pos)
+            if owner is not None:
+                r = owner.regalia_rect()
+                pygame.draw.rect(s, (255, 226, 140), r, 2, border_radius=5)
+                label = ("RIP OFF THE CROWN" if isinstance(owner, TrollKing)
+                         else "FLICK THE STAFF AWAY")
+                draw_text(s, label, r.centerx, r.top - 46, 18,
+                          (255, 226, 140), "center", True)
+        elif self.held_item is not None:
+            it = self.held_item
+            draw_text(s, "FLING IT!", it.x, it.y - 34, 18,
+                      (255, 226, 140), "center", True)
 
         # heavy unit under the cursor (or being dismantled right now)
         heavy = self.stripping or self.heavy_under_mouse(self.mouse_pos)
@@ -2938,7 +3414,7 @@ class Game:
 
     def draw_hud(self, surf):
         # top-left status block
-        panel = pygame.Surface((360, 96), pygame.SRCALPHA)
+        panel = pygame.Surface((360, 124), pygame.SRCALPHA)
         panel.fill((*C_PANEL, 190))
         pygame.draw.rect(panel, (*C_PANEL_EDGE, 200), panel.get_rect(), 2,
                          border_radius=6)
@@ -2948,11 +3424,26 @@ class Game:
         draw_text(surf, f"{self.gold} G", 346, 24, 28, C_GOLD, "right", True)
         draw_text(surf, self.castle.tier_name, 28, 52, 18, C_DIM)
 
+        # crowd bonus: the risk/reward readout
+        mult = self.gold_multiplier
+        if self.state in (self.PLAYING, self.PAUSED) and mult > 1.005:
+            n = sum(1 for e in self.enemies if e.alive)
+            hot = mult / POP_GOLD_CAP
+            draw_text(surf, f"x{mult:.2f} gold  ({n} mobs)", 346, 52, 18,
+                      mix((255, 214, 120), (255, 110, 90), hot), "right", True)
+
         frac = self.castle.hp / max(1.0, self.castle.max_hp)
         col = C_GREEN if frac > 0.5 else (C_GOLD if frac > 0.25 else C_RED)
         draw_bar(surf, 28, 74, 318, 16, frac, col)
         draw_text(surf, f"{int(self.castle.hp)} / {int(self.castle.max_hp)}",
                   187, 75, 18, C_WHITE, "center")
+
+        sc_col = mix(C_GOLD, (255, 255, 255), self.combo_flash)
+        draw_text(surf, f"SCORE {self.score:,}", 28, 96,
+                  24 + int(4 * self.combo_flash), sc_col, bold=True)
+        if self.best_fling:
+            draw_text(surf, f"best fling {self.best_fling:,}", 346, 100, 16,
+                      C_DIM, "right")
 
         # top-right wave progress
         if self.state in (self.PLAYING, self.PAUSED):
@@ -3021,8 +3512,11 @@ class Game:
             ("repeatedly to rip its armour plates off, slowing it and", (255, 200, 140)),
             ("leaving it wide open to your guns.", (255, 200, 140)),
             ("", C_DIM),
-            ("Bowmen reach high, Ballistas shred flyers (+200%),", C_HILITE),
-            ("Cannons shred tanks (+200%). Bosses need pure firepower.", C_HILITE),
+            ("BOSSES:  rip the Troll King's CROWN off and fling it -- he", C_WHITE),
+            ("must fetch it. Flick the Lich Lord's STAFF away to disarm him.", (200, 170, 255)),
+            ("", C_DIM),
+            ("Long flings score big; hitting mobs mid-flight multiplies it.", C_HILITE),
+            ("A crowded screen pays more gold -- if you dare leave it alive.", C_HILITE),
             ("", C_DIM),
             ("Click or press SPACE to visit the armoury", C_GOLD),
         ]
@@ -3035,15 +3529,18 @@ class Game:
 
     def draw_gameover(self, surf):
         self.draw_center_panel(surf, "THE CASTLE HAS FALLEN", [
+            f"FINAL SCORE   {self.score:,}",
             f"You survived {max(0, self.wave - 1)} full waves"
             f" (fell on wave {self.wave}).",
             f"Enemies slain: {self.stats_kills}",
+            f"Best single fling: {self.best_fling:,}"
+            f"   Best combo: x{self.best_combo:.2f}",
             f"Damage dealt by throwing: {int(self.stats_thrown_damage)}",
             f"Armour plates torn off: {self.stats_plates_torn}",
             f"Final walls: {self.castle.tier_name}",
             "",
             "Press R or click to play again.",
-        ], w=700, h=340)
+        ], w=760, h=400)
 
     def draw_shop(self, surf):
         veil = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
@@ -3067,7 +3564,7 @@ class Game:
 
         # cards
         n = len(self.shop_items)
-        cw, gap = 200, 18
+        cw, gap = 176, 13
         total = n * cw + (n - 1) * gap
         x0 = panel.centerx - total // 2
         cy, ch = panel.top + 96, 300
@@ -3076,7 +3573,8 @@ class Game:
             r = pygame.Rect(x0 + i * (cw + gap), cy, cw, ch)
             item.rect = r
             cost = item.cost
-            afford = self.gold >= cost
+            available = item.avail_fn()
+            afford = self.gold >= cost and available
             hover = r.collidepoint(mouse)
             bgc = (40, 44, 62) if afford else (32, 32, 40)
             if hover and afford:
@@ -3088,7 +3586,7 @@ class Game:
             pygame.draw.rect(surf, item.color, (r.x + 12, r.y + 12, r.w - 24, 6),
                              border_radius=3)
             draw_text(surf, f"[{i + 1}]", r.x + 12, r.y + 24, 18, C_DIM)
-            draw_text(surf, item.name, r.centerx, r.y + 42, 26,
+            draw_text(surf, item.name, r.centerx, r.y + 42, 24,
                       C_WHITE if afford else (130, 130, 140), "center", True)
 
             self._draw_shop_icon(surf, item.key, r.centerx, r.y + 108, item.color)
@@ -3099,15 +3597,20 @@ class Game:
                           (255, 206, 120), "center", True)
 
             ty = r.y + 150
-            for ln in wrap_text(item.desc, 17, r.w - 26):
-                draw_text(surf, ln, r.centerx, ty, 17, C_DIM, "center")
-                ty += 20
+            # clipped so long copy can never collide with the status/price
+            for ln in wrap_text(item.desc, 16, r.w - 20)[:4]:
+                draw_text(surf, ln, r.centerx, ty, 16, C_DIM, "center")
+                ty += 18
 
-            draw_text(surf, item.status_fn(), r.centerx, r.bottom - 62, 18,
+            draw_text(surf, item.status_fn(), r.centerx, r.bottom - 62, 17,
                       (170, 205, 235), "center")
-            price_col = C_GOLD if afford else (140, 120, 80)
-            draw_text(surf, f"{cost} G", r.centerx, r.bottom - 38, 30,
-                      price_col, "center", True)
+            if not available:
+                draw_text(surf, "MAXED", r.centerx, r.bottom - 38, 28,
+                          (140, 200, 150), "center", True)
+            else:
+                price_col = C_GOLD if afford else (140, 120, 80)
+                draw_text(surf, f"{cost} G", r.centerx, r.bottom - 38, 30,
+                          price_col, "center", True)
 
         # start button
         bw, bh = 360, 62
@@ -3163,6 +3666,18 @@ class Game:
                                  (cx - 30 + i * 21, cy - 6, 19, 26), 2)
             for i in range(4):
                 pygame.draw.rect(surf, color, (cx - 30 + i * 16, cy - 20, 11, 14))
+        elif key == "bounce":
+            pygame.draw.line(surf, (86, 92, 108), (cx - 34, cy + 22),
+                             (cx + 34, cy + 22), 3)
+            for i, (bx, by, rr) in enumerate([(-24, 6, 9), (-2, -8, 8),
+                                              (18, 2, 7), (32, 12, 5)]):
+                pygame.draw.circle(surf, color, (cx + bx, cy + by), rr)
+                pygame.draw.circle(surf, shade(color, 0.6),
+                                   (cx + bx, cy + by), rr, 2)
+                if i < 3:
+                    pygame.draw.arc(surf, shade(color, 0.75),
+                                    pygame.Rect(cx + bx, cy + by - 4, 22, 26),
+                                    0.4, 2.6, 2)
         elif key == "repair":
             pygame.draw.rect(surf, color, (cx - 6, cy - 20, 12, 40),
                              border_radius=3)
@@ -3180,7 +3695,8 @@ class Game:
                 self.handle_event(ev)
             self.mouse_pos = pygame.mouse.get_pos()
             # if the button-up was swallowed (focus loss, alt-tab), drop the mob
-            if ((self.grabbed is not None or self.stripping is not None)
+            if ((self.grabbed is not None or self.stripping is not None
+                    or self.held_item is not None)
                     and not pygame.mouse.get_pressed()[0]):
                 self.release_grab()
             self.update(dt)
@@ -3311,6 +3827,117 @@ def _ui_smoke(g):
     print("selftest: stripping OK (3 plates -> armour "
           f"{before[0]:.2f}->{ram.armor:.2f}, speed {before[1]:.0f}->{ram.speed:.0f}"
           f", damage taken x{ram.vulnerable:.2f}); bosses immune")
+    # --- boss disruption: crown ---
+    g.reset(); g.state = Game.PLAYING; g.wave = 5; g.wave_active = True
+    troll = TrollKing(g, 5); troll.x = 700; troll.y = troll.ground_y
+    g.enemies.append(troll)
+    cr = troll.regalia_rect()
+    assert cr is not None and troll.has_crown
+    g.mouse_pos = cr.center
+    g.try_grab(cr.center)
+    assert g.held_item is not None and g.held_item.kind == "crown"
+    assert not troll.has_crown, "grabbing the crown must remove it"
+    for k in range(6):
+        g.mouse_pos = (cr.center[0] - k * 80, cr.center[1] - k * 25)
+        g.update_grab(1 / 60.0)
+    g.release_grab()
+    assert g.held_item is None and troll.crown_item.state == "flying"
+    troll.x = CASTLE_FRONT + 60          # parked at the wall, would be smashing
+    hp_before = g.castle.hp
+    saw_retrieve = False
+    for _ in range(900):
+        g.update(1 / 60.0)
+        if troll.state == "retrieve":
+            saw_retrieve = True
+        if troll.has_crown:
+            break
+    assert saw_retrieve, "an uncrowned Troll King must enter Retrieve Crown"
+    assert g.castle.hp == hp_before, "he must not attack while uncrowned"
+    assert troll.has_crown, "he must eventually pick his crown back up"
+
+    # regalia must not be re-stealable instantly, or a boss is stun-locked
+    assert troll.regalia_cd > 0 and troll.regalia_rect() is None, \
+        "a recovered crown must be guarded for a while"
+    first_guard = troll.regalia_cd
+    troll.regalia_taken += 1
+    troll.guard_regalia()
+    assert troll.regalia_cd > first_guard, \
+        "each theft must make the next guard window longer"
+
+    # --- boss disruption: staff ---
+    g.reset(); g.state = Game.PLAYING; g.wave = 15; g.wave_active = True
+    lich = LichLord(g, 15); lich.x = lich.standoff_x; lich.y = lich.ground_y
+    g.enemies.append(lich)
+    for _ in range(60):
+        g.update(1 / 60.0)
+    sr = lich.regalia_rect()
+    assert sr is not None and lich.has_staff
+    g.mouse_pos = sr.center
+    g.try_grab(sr.center)
+    for k in range(5):
+        g.mouse_pos = (sr.center[0] + k * 90, sr.center[1] - k * 30)
+        g.update_grab(1 / 60.0)
+    g.release_grab()
+    assert not lich.has_staff and abs(lich.disarm - STAFF_DISARM_TIME) < 0.2
+    hp_before, n_before = g.castle.hp, len(g.enemies)
+    for _ in range(int(STAFF_DISARM_TIME * 60) - 30):
+        g.update(1 / 60.0)
+    assert g.castle.hp == hp_before, "a disarmed Lich must not attack"
+    assert len(g.enemies) <= n_before, "a disarmed Lich must not summon"
+    for _ in range(120):
+        g.update(1 / 60.0)
+    assert lich.has_staff, "he must recover his staff after the stun"
+    assert lich.regalia_cd > 0 and lich.regalia_rect() is None, \
+        "a recovered staff must be guarded too"
+
+    # --- gold multiplier rises with the crowd ---
+    g.reset(); g.state = Game.PLAYING
+    g.enemies = []
+    assert abs(g.gold_multiplier - 1.0) < 1e-9
+    g.enemies = [Scout(g, 1) for _ in range(40)]
+    crowded = g.gold_multiplier
+    assert crowded > 1.5 and crowded <= POP_GOLD_CAP + 1e-9, \
+        "a packed screen must pay substantially more"
+
+    # --- score: further/longer pays more, collisions multiply it ---
+    def _fling(vx, vy, bystanders=0, lvl=0):
+        gg = Game(g.screen); gg.state = Game.PLAYING
+        gg.wave, gg.wave_active, gg.bounce_level = 1, True, lvl
+        m = ShieldBearer(gg, 1); m.depth = 0; m.x = 1200; m.y = m.ground_y
+        m.max_hp *= 60; m.hp = m.max_hp
+        gg.enemies.append(m)
+        for i in range(bystanders):
+            o = FootSoldier(gg, 1); o.depth = 0; o.x = 700 - i * 30
+            o.y = o.ground_y; o.max_hp *= 60; o.hp = o.max_hp
+            gg.enemies.append(o)
+        m.on_grab(); m.on_release(vx, vy)
+        for _ in range(1200):
+            gg.update(1 / 60.0)
+            if not m.fling_active:
+                break
+        return gg.score, m.fling_hits, m.bounce_count, m.stagger
+
+    small, _, _, _ = _fling(220, -260)
+    big, _, _, _ = _fling(2400, -2300)
+    assert big > small * 3, "a longer fling must score far more"
+    solo, h0, _, _ = _fling(-1900, -900)
+    combo, h1, _, _ = _fling(-1900, -900, bystanders=8)
+    assert h1 > h0 == 0 and combo > solo, "mid-air collisions must combo"
+
+    # --- bounce upgrade: more bounces, more damage, longer stun ---
+    _, _, b0, st0 = _fling(500, -800, lvl=0)
+    _, _, b5, st5 = _fling(500, -800, lvl=BOUNCE_MAX_LEVEL)
+    assert b5 > b0 and st5 > st0, "Bounce must add rebounds and recovery time"
+    assert b0 == 1, "at Bounce Lv.0 a mob just hits the floor once"
+
+    print(f"selftest: boss disruption OK (crown retrieval halts the Troll "
+          f"King; staff flick disarms the Lich for {STAFF_DISARM_TIME:.0f}s; "
+          f"regalia guarded {first_guard:.1f}s+ after recovery)")
+    print(f"selftest: scoring OK (fling {small} -> {big} pts by distance, "
+          f"x{1 + SCORE_COMBO_STEP * h1:.2f} combo on {h1} mobs struck)")
+    print(f"selftest: bounce OK (Lv.0 {b0} bounce/{st0:.2f}s stun -> "
+          f"Lv.{BOUNCE_MAX_LEVEL} {b5} bounces/{st5:.2f}s stun); "
+          f"crowd gold x{crowded:.2f}")
     print("selftest: UI paths OK (menu, shop clicks + hotkeys, pause, "
           "throw, defeat, restart)")
 
