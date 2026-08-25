@@ -3339,10 +3339,23 @@ class ShopItem:
         return int(self.cost_fn())
 
 
-def wrap_text(text, size, max_w):
-    f = font(size)
-    words, lines, cur = text.split(), [], ""
-    for wd in words:
+def wrap_text(text, size, max_w, bold=False):
+    """Greedy word wrap measured with font.size() -- pygame's render() has no
+    notion of wrapping, so every break has to be measured by hand."""
+    f = font(size, bold)
+    lines, cur = [], ""
+    for wd in text.split():
+        # a single word wider than the box has to be broken by character,
+        # otherwise it would hang out over the edge no matter where it goes
+        while f.size(wd)[0] > max_w and len(wd) > 1:
+            cut = len(wd)
+            while cut > 1 and f.size(wd[:cut])[0] > max_w:
+                cut -= 1
+            if cur:
+                lines.append(cur)
+                cur = ""
+            lines.append(wd[:cut])
+            wd = wd[cut:]
         trial = (cur + " " + wd).strip()
         if f.size(trial)[0] <= max_w or not cur:
             cur = trial
@@ -3352,6 +3365,76 @@ def wrap_text(text, size, max_w):
     if cur:
         lines.append(cur)
     return lines
+
+
+# Line height is tied to the font size rather than hard-coded, so nothing
+# overlaps when a paragraph is rendered at a different size.
+LINE_SPACING = 1.22
+
+
+def line_height(size):
+    return max(size + 4, int(size * LINE_SPACING))
+
+
+def layout_paragraphs(paragraphs, max_w, scale=1.0):
+    """Wrap (text, size, colour, bold) paragraphs to `max_w`.
+
+    Returns (lines, total_height) where each line is a ready-to-draw
+    (text, size, colour, bold, height) tuple.  An empty paragraph becomes a
+    half-height spacer.
+    """
+    out, total = [], 0
+    for text, size, colour, bold in paragraphs:
+        size = max(11, int(round(size * scale)))
+        lh = line_height(size)
+        if not text:
+            out.append(("", size, colour, bold, lh // 2))
+            total += lh // 2
+            continue
+        for ln in wrap_text(text, size, max_w, bold):
+            out.append((ln, size, colour, bold, lh))
+            total += lh
+    return out, total
+
+
+def fit_paragraphs(paragraphs, max_w, max_h):
+    """Wrap to `max_w`, shrinking the type a step at a time until the block
+    also fits inside `max_h`.  Guarantees the caller a block that fits."""
+    lines, total = [], 0
+    scale = 1.0
+    for scale in (1.0, 0.94, 0.88, 0.82, 0.76, 0.7, 0.64, 0.58):
+        lines, total = layout_paragraphs(paragraphs, max_w, scale)
+        if total <= max_h:
+            break
+    return lines, total, scale
+
+
+# --- the start screen's copy, as paragraphs rather than pre-broken lines ---
+MENU_PARAGRAPHS = (
+    ("Endless waves. 8 mob types, 3 bosses, one castle.", 21, C_DIM, False),
+    ("", 20, C_DIM, False),
+    ("THROW  -  hold LEFT MOUSE on a ground mob, then flick and release to "
+     "hurl it. The fall hurts, and it crushes whatever it lands on.",
+     20, C_WHITE, False),
+    ("", 20, C_DIM, False),
+    ("TANKS  -  a Siege Ram's plating comes off first: drag AWAY from the "
+     "castle to rip it apart. Once bare, drag TOWARDS the castle to shove it "
+     "forward, or lift it outright with enough Grab Strength.",
+     20, (255, 200, 140), False),
+    ("", 20, C_DIM, False),
+    ("BOSSES  -  rip the Troll King's CROWN off and fling it, flick the Lich "
+     "Lord's STAFF out of his hands, batter the Dragon's CLAWS.",
+     20, (200, 170, 255), False),
+    ("", 20, C_DIM, False),
+    ("Drag back on a Ballista or Cannon to overcharge-fire it.",
+     20, (150, 200, 255), False),
+    ("", 20, C_DIM, False),
+    ("Long flings score big and mid-air hits multiply them. A crowded screen "
+     "pays more gold - blow the CHALLENGE HORN for even more.",
+     20, C_HILITE, False),
+    ("", 20, C_DIM, False),
+    ("Click or press SPACE to visit the armoury", 25, C_GOLD, True),
+)
 
 
 # ------------------------------------------------------------------------------
@@ -4575,51 +4658,52 @@ class Game:
                       WIDTH // 2, HEIGHT - 24, 18, (170, 176, 194), "center")
 
     # -- overlay panels --------------------------------------------------
-    def draw_center_panel(self, surf, title, lines, w=620, h=280):
+    # padding inside a centred panel, and the space the title block eats
+    PANEL_PAD = 34
+    PANEL_TITLE_H = 74
+
+    @staticmethod
+    def panel_layout(paragraphs, w, title_size=44):
+        """Measure a panel's contents and give back everything needed to draw
+        it: the wrapped lines, the panel rect, and where the text starts.
+
+        The panel is sized to its content instead of a hard-coded height,
+        which is what used to push the start screen's text out of the box.
+        """
+        max_w = w - Game.PANEL_PAD * 2
+        avail = HEIGHT - 40 - Game.PANEL_TITLE_H - Game.PANEL_PAD * 2
+        lines, total, scale = fit_paragraphs(paragraphs, max_w, avail)
+        h = min(HEIGHT - 40,
+                Game.PANEL_TITLE_H + total + Game.PANEL_PAD * 2)
+        rect = pygame.Rect((WIDTH - w) // 2, (HEIGHT - h) // 2, w, h)
+        return lines, rect, rect.top + Game.PANEL_TITLE_H + Game.PANEL_PAD, scale
+
+    def draw_center_panel(self, surf, title, body, w=620, title_size=44):
+        """Centred modal panel. `body` is a list of paragraphs -- either plain
+        strings or (text, size, colour, bold) tuples -- and every one of them
+        is word-wrapped to the panel width."""
+        paragraphs = [p if isinstance(p, tuple) else (p, 22, C_WHITE, False)
+                      for p in body]
+        lines, r, y, scale = self.panel_layout(paragraphs, w, title_size)
+
         veil = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
         veil.fill((6, 8, 16, 170))
         surf.blit(veil, (0, 0))
-        r = pygame.Rect((WIDTH - w) // 2, (HEIGHT - h) // 2, w, h)
         pygame.draw.rect(surf, C_PANEL, r, border_radius=10)
         pygame.draw.rect(surf, C_PANEL_EDGE, r, 3, border_radius=10)
-        draw_text(surf, title, r.centerx, r.top + 26, 44, C_GOLD, "center", True)
-        y = r.top + 90
-        for ln in lines:
-            draw_text(surf, ln, r.centerx, y, 22, C_WHITE, "center")
-            y += 30
+        draw_text(surf, title, r.centerx, r.top + 22,
+                  max(24, int(title_size * scale)), C_GOLD, "center", True)
+
+        for text, size, colour, bold, lh in lines:
+            if text:
+                draw_text(surf, text, r.centerx, y, size, colour, "center",
+                          bold=bold)
+            y += lh
         return r
 
     def draw_menu(self, surf):
-        r = self.draw_center_panel(surf, "CASTLE DEFENSE", [], w=760, h=440)
-        lines = [
-            ("Endless waves. 8 mob types, 3 bosses, one castle.", C_DIM),
-            ("", C_DIM),
-            ("THROW:  hold LEFT MOUSE on a ground mob, then FLICK", C_WHITE),
-            ("and release to hurl it. Falls hurt; landings crush others.", C_GREEN),
-            ("", C_DIM),
-            ("STRIP:  Siege Rams refuse to be lifted -- drag on one", C_WHITE),
-            ("repeatedly to rip its armour plates off, slowing it and", (255, 200, 140)),
-            ("leaving it wide open to your guns.", (255, 200, 140)),
-            ("", C_DIM),
-            ("TANKS:  drag AWAY from the castle to rip a Siege Ram's armour", C_WHITE),
-            ("off, or drag TOWARDS it to shove the tank forward fast.", (255, 200, 140)),
-            ("", C_DIM),
-            ("BOSSES:  rip the Troll King's CROWN and fling it, flick the", C_WHITE),
-            ("Lich Lord's STAFF away, batter the Dragon's CLAWS.", (200, 170, 255)),
-            ("", C_DIM),
-            ("Drag back on a Ballista or Cannon to overcharge-fire it.", (150, 200, 255)),
-            ("", C_DIM),
-            ("Long flings score big; mid-air hits multiply it. A crowded", C_HILITE),
-            ("screen pays more gold. Blow the CHALLENGE HORN for even more.", C_HILITE),
-            ("", C_DIM),
-            ("Click or press SPACE to visit the armoury", C_GOLD),
-        ]
-        y = r.top + 84
-        for text, col in lines:
-            size = 24 if col is C_GOLD else 20
-            draw_text(surf, text, r.centerx, y, size, col, "center",
-                      bold=(col is C_GOLD))
-            y += 27
+        self.draw_center_panel(surf, "CASTLE DEFENSE",
+                               list(MENU_PARAGRAPHS), w=780)
 
     def draw_gameover(self, surf):
         self.draw_center_panel(surf, "THE CASTLE HAS FALLEN", [
@@ -4633,8 +4717,8 @@ class Game:
             f"Armour plates torn off: {self.stats_plates_torn}",
             f"Final walls: {self.castle.tier_name}",
             "",
-            "Press R or click to play again.",
-        ], w=760, h=400)
+            ("Press R or click to play again.", 24, C_GOLD, True),
+        ], w=760)
 
     def draw_shop(self, surf):
         veil = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
@@ -4904,6 +4988,49 @@ def _ui_smoke(g):
         ev(type=pygame.MOUSEBUTTONUP, button=1, pos=(int(g.mouse_pos[0]),
                                                      int(g.mouse_pos[1])))
         assert g.grabbed is None
+
+    # ---------- every modal panel must contain its own text ----------
+    def _panel_fits(paragraphs, w):
+        paragraphs = [p if isinstance(p, tuple) else (p, 22, C_WHITE, False)
+                      for p in paragraphs]
+        lines, rect, y, _scale = Game.panel_layout(paragraphs, w)
+        inner = w - Game.PANEL_PAD * 2
+        widest = 0
+        for text, size, _c, bold, lh in lines:
+            if text:
+                widest = max(widest, font(size, bold).size(text)[0])
+            y += lh
+        return (y <= rect.bottom and widest <= inner
+                and rect.top >= 0 and rect.bottom <= HEIGHT)
+
+    assert _panel_fits(list(MENU_PARAGRAPHS), 780), \
+        "the start screen must not overflow its panel"
+    assert _panel_fits(["Press P or ESC to resume."], 620)
+    assert _panel_fits([
+        f"FINAL SCORE   {9876543:,}",
+        "You survived 129 full waves (fell on wave 130).",
+        "Enemies slain: 99999",
+        "Best single fling: 123,456   Best combo: x12.75",
+        "Damage dealt by throwing: 8120433",
+        "Armour plates torn off: 1140",
+        "Final walls: Runed Obsidian",
+        "",
+        ("Press R or click to play again.", 24, C_GOLD, True),
+    ], 760), "the defeat screen must not overflow either"
+
+    # the wrapper must reflow to any width, and never exceed it
+    for w in (1000, 780, 560, 420, 320):
+        assert _panel_fits(list(MENU_PARAGRAPHS), w), \
+            f"menu copy must re-wrap cleanly at width {w}"
+    narrow = len(wrap_text(MENU_PARAGRAPHS[2][0], 20, 300))
+    wide = len(wrap_text(MENU_PARAGRAPHS[2][0], 20, 900))
+    assert narrow > wide > 0, "wrapping must actually respond to the width"
+    # a word too long for the box is broken rather than left hanging out
+    for line in wrap_text("X" * 90, 20, 300):
+        assert font(20).size(line)[0] <= 300, \
+            "an oversized word must be split by character"
+    # line height has to track the font size or lines overlap
+    assert line_height(16) < line_height(24) < line_height(44)
 
     g.castle.take_damage(g.castle.max_hp * 2)        # force the defeat screen
     assert g.state == Game.GAMEOVER
@@ -5444,6 +5571,10 @@ def _ui_smoke(g):
           "Bloodied/Frostbound/Voidtouched tiers)")
     print("selftest: world OK (Dragon claws stagger, wind drifts throws, "
           "storm lightning, Challenge Horn)")
+    _mlines, _mrect, _my, _ms = Game.panel_layout(list(MENU_PARAGRAPHS), 780)
+    print(f"selftest: text layout OK (menu wraps to "
+          f"{sum(1 for t, *_ in _mlines if t)} lines in a "
+          f"{_mrect.w}x{_mrect.h} panel; all modals contain their text)")
     print("selftest: UI paths OK (menu, shop clicks + hotkeys, pause, "
           "throw, defeat, restart)")
 
