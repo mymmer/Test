@@ -436,7 +436,7 @@ class FireZone:
     def update(self, dt):
         self.life -= dt
         self.phase += dt * 9.0
-        for e in self.game.enemies:
+        for e in list(self.game.enemies):
             if e.alive and not e.flying and abs(e.x - self.x) <= self.radius:
                 e.take_damage(self.dps * dt, "fire")
         if random.random() < 0.5:
@@ -488,7 +488,7 @@ class Tornado:
                 e.state = "air"
                 e.on_release(0.0, 0.0)        # counts as a player fling
                 e.fling_hits = 0
-                self.caught[id(e)] = True
+                self.caught[e.uid] = True
             if e.state == "air":
                 # spiral inward and upward; the hold cancels most of gravity
                 # so they really do get carried, not merely slowed
@@ -512,10 +512,10 @@ class Tornado:
         g.effects.ring(self.x, GROUND_Y - 120, 30, (200, 230, 240),
                        speed=560, life=0.7, size=5)
         thrown = 0
-        for e in g.enemies:
+        for e in list(g.enemies):
             if not e.alive or e.state != "air":
                 continue
-            if id(e) not in self.caught and abs(e.x - self.x) > self.radius * 1.4:
+            if e.uid not in self.caught and abs(e.x - self.x) > self.radius * 1.4:
                 continue
             e.tornado_hold = 0.0
             e.vx = abs(e.vx) + random.uniform(760, 1180)
@@ -578,7 +578,7 @@ class LightningStrike(Skill):
         t = game.talents
         radius = LIGHTNING_RADIUS * t.skill_area
         hit = 0
-        for e in game.enemies:
+        for e in list(game.enemies):
             if not e.alive or abs(e.x - x) > radius:
                 continue
             dmg = e.max_hp * LIGHTNING_DAMAGE * t.skill_power * t.lightning_mult
@@ -1194,19 +1194,23 @@ class Game:
         everything it drops for the rest of the round is worth more."""
         if self.horn_used or not self.wave_active:
             return False
+        if self.state != self.PLAYING:
+            return False
+        # Build the whole pack before touching self.enemies, so the list is
+        # extended exactly once no matter who is mid-update.
         if self.endless:
-            # no queue to empty in Endless -- call in a rush instead
             pending = ENDLESS_HORN_RUSH
-            for _ in range(pending):
-                self.spawn_enemy(self.roll_endless_mob()(self, self.wave))
+            pack = [self.roll_endless_mob()(self, self.wave)
+                    for _ in range(pending)]
         else:
-            pending = len(self.spawn_queue)
+            queued = list(self.spawn_queue)
+            pending = len(queued)
             if pending == 0:
                 self.shop_msg, self.shop_msg_t = "Nothing left to call in.", 1.5
                 return False
-            for cls in self.spawn_queue:
-                self.spawn_enemy(cls(self, self.wave))
+            pack = [cls(self, self.wave) for cls in queued]
             self.spawn_queue = []
+        self.enemies.extend(pack)
         self.horn_used = True
         self.horn_bonus = HORN_BONUS
         self.horn_glow = 1.0
@@ -1324,6 +1328,11 @@ class Game:
             if e.alive and e.IS_BOSS:
                 return e
         return None
+
+    def current_bosses(self):
+        """Every live boss.  From wave 20 build_wave fields a second one, and
+        the HUD used to draw a bar for only the first."""
+        return [e for e in self.enemies if e.alive and e.IS_BOSS]
 
     # -- wave control ----------------------------------------------------
     def roll_weather(self, announce=True):
@@ -1874,7 +1883,12 @@ class Game:
         for it in self.items:
             it.update(dt)
         self.items = [it for it in self.items if it.alive]
-        for e in self.enemies:
+        # Iterate a snapshot.  Mid-loop spawns (a Necromancer summoning, the
+        # Lich raising dead, the horn) used to be stepped on their own spawn
+        # frame, and Outpost.trap() removing the current enemy made the loop
+        # skip the next one entirely.  Lists never raise for this -- it just
+        # silently mis-steps, which is why it went unnoticed.
+        for e in list(self.enemies):
             e.update(dt)
         for a in self.allies:
             a.update(dt)
@@ -2388,16 +2402,20 @@ class Game:
                           (200, 220, 255), "right", True)
 
         # boss bar
-        boss = self.current_boss()
-        if boss is not None and self.state == self.PLAYING:
-            bw = 620
-            bx = (WIDTH - bw) // 2
-            draw_text(surf, boss.NAME, WIDTH // 2, HEIGHT - 78, 26,
-                      (255, 210, 130), "center", True)
-            draw_bar(surf, bx, HEIGHT - 50, bw, 20,
-                     boss.hp / max(1.0, boss.max_hp), (208, 62, 60))
-            draw_text(surf, f"{int(boss.hp)} / {int(boss.max_hp)}",
-                      WIDTH // 2, HEIGHT - 48, 18, C_WHITE, "center")
+        bosses = self.current_bosses()[:2]
+        if bosses and self.state == self.PLAYING:
+            bw = 620 if len(bosses) == 1 else 400
+            step = bw + 24
+            x0 = WIDTH // 2 - (len(bosses) * step - 24) // 2
+            for i, boss in enumerate(bosses):
+                bx = x0 + i * step
+                cx = bx + bw // 2
+                draw_text(surf, boss.NAME, cx, HEIGHT - 78, 24,
+                          (255, 210, 130), "center", True)
+                draw_bar(surf, bx, HEIGHT - 50, bw, 20,
+                         boss.hp / max(1.0, boss.max_hp), (208, 62, 60))
+                draw_text(surf, f"{int(boss.hp)} / {int(boss.max_hp)}",
+                          cx, HEIGHT - 48, 18, C_WHITE, "center")
 
         # banners
         y = 130
@@ -3558,6 +3576,89 @@ def _ui_smoke(g):
     ev(type=pygame.KEYDOWN, key=pygame.K_t)
     assert g.state == Game.SHOP, "T must close the tree again"
 
+    # ---------- iteration safety: mid-frame spawns and removals ----------
+    # Note: CPython lists never raise on mutation during iteration (only
+    # dicts and sets do), so these were silent mis-steps, not crashes.
+    g.reset(MODE_CLASSIC); g.choose_mode(MODE_CLASSIC); g.begin_play()
+    g.wave, g.wave_active = 12, True
+    g.enemies.clear()
+    for i in range(20):
+        mob = FootSoldier(g, 12); mob.x = 800 + i * 20; mob.y = mob.ground_y
+        g.enemies.append(mob)
+    g.spawn_queue = [Scout] * 12
+    steps = {"n": 0}
+    real_update = Enemy.update
+
+    def _counting_update(self, dt):
+        steps["n"] += 1
+        if steps["n"] == 2 and not g.horn_used:
+            g.blow_horn()          # fired from deep inside the enemy loop
+        real_update(self, dt)
+
+    Enemy.update = _counting_update
+    try:
+        start_n = len(g.enemies)
+        g.update(1 / 60.0)
+    finally:
+        Enemy.update = real_update
+    assert len(g.enemies) > start_n, "the horn must actually spawn its pack"
+    assert steps["n"] == start_n, \
+        "a mob spawned mid-frame must not be stepped on its own spawn frame"
+
+    # trapping removes the *current* enemy; the next one must still be stepped
+    g.reset(MODE_CLASSIC); g.choose_mode(MODE_CLASSIC); g.begin_play()
+    g.wave, g.wave_active = 9, False
+    g.enemies.clear()
+    flier = Necromancer(g, 9); flier.x = g.outpost.x - 200; flier.y = 250
+    flier.state = "air"; flier.vx, flier.vy = 420, 60
+    g.enemies.append(flier)
+    trailing = []
+    for i in range(3):
+        sk = Skeleton(g, 9); sk.depth = 0; sk.x = 900 + i * 40
+        sk.y = sk.ground_y
+        g.enemies.append(sk); trailing.append(sk)
+    seen = {"n": 0}
+
+    def _seen_update(self, dt):
+        seen["n"] += 1
+        real_update(self, dt)
+
+    Enemy.update = _seen_update
+    trapped_frame = None
+    try:
+        for _ in range(60):
+            seen["n"] = 0
+            count = len(g.enemies)
+            g.update(1 / 60.0)
+            if g.outpost.has_prisoner:
+                trapped_frame = (count, seen["n"])
+                break
+    finally:
+        Enemy.update = real_update
+    assert trapped_frame is not None, "the probe throw must land in the Outpost"
+    count, ran = trapped_frame
+    assert ran == count, \
+        "removing the current enemy must not make the loop skip the next"
+
+    # the horn refuses outside play, and only fires once
+    g.reset(MODE_CLASSIC); g.choose_mode(MODE_CLASSIC); g.begin_play()
+    g.state = Game.SHOP
+    assert not g.blow_horn(), "the horn must not fire from a menu"
+    g.state = Game.PLAYING
+    g.spawn_queue = [Scout] * 4
+    assert g.blow_horn() and not g.blow_horn()
+
+    # two bosses can be alive at once past wave 20 -- both get a bar
+    g.reset(MODE_CLASSIC); g.state = Game.PLAYING
+    g.wave, g.wave_active = 25, False
+    g.enemies.clear()
+    for cls in (Dragon, LichLord):
+        b = cls(g, 25); g.enemies.append(b)
+    assert len(g.current_bosses()) == 2, \
+        "current_bosses must report every live boss, not just the first"
+    g.draw()
+    g.enemies.clear()
+
     # ---------- infinite progression ----------
     g.reset(MODE_CLASSIC)
     g.gold = 10 ** 9
@@ -4097,6 +4198,9 @@ def _ui_smoke(g):
           "Bloodied/Frostbound/Voidtouched tiers)")
     print("selftest: world OK (Dragon claws stagger, wind drifts throws, "
           "storm lightning, Challenge Horn)")
+    print("selftest: iteration OK (mid-frame spawns are not stepped early, "
+          "a trapped enemy's removal no longer skips its neighbour, the horn "
+          "is guarded, both live bosses get a health bar)")
     print(f"selftest: progression OK (walls keep gaining health past the "
           f"{len(Castle.TIERS)}-tier visual cap; the Outpost stops adding crew "
           "at 6 and multiplies their damage instead)")

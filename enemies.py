@@ -145,6 +145,8 @@ def wave_scaling(wave):
 
 
 class Enemy:
+    _next_uid = 0
+
     """
     Base class for every hostile unit.  Behaviour is a small state machine:
 
@@ -177,6 +179,10 @@ class Enemy:
     def __init__(self, game, wave, x=None, y=None):
         self.game = game
         self.wave = wave
+        # a stable identity: CPython recycles id() values, which could make a
+        # fresh mob inherit a dead one's "already hit" marker
+        Enemy._next_uid += 1
+        self.uid = Enemy._next_uid
         hp_m, dmg_m, spd_m = wave_scaling(wave)
         # difficulty stretches or compresses the whole scaling curve
         diff = getattr(game, "enemy_scale", 1.0)
@@ -255,6 +261,20 @@ class Enemy:
     def hit_rect(self):
         return pygame.Rect(int(self.x - self.w / 2), int(self.y - self.h / 2),
                            int(self.w), int(self.h))
+
+    def covers(self, px, py):
+        """Point-in-hitbox without building a Rect.
+
+        This is the single hottest call in the game -- once per projectile
+        per enemy per frame -- and allocating a pygame.Rect for it dominated
+        the profile at high waves.  The arithmetic is equivalent."""
+        return (abs(px - self.x) <= self.w * 0.5
+                and abs(py - self.y) <= self.h * 0.5)
+
+    def overlaps(self, other):
+        """Box overlap against another entity, allocation-free."""
+        return (abs(self.x - other.x) * 2.0 <= self.w + other.w
+                and abs(self.y - other.y) * 2.0 <= self.h + other.h)
 
     @property
     def grab_rect(self):
@@ -512,7 +532,7 @@ class Enemy:
             other.vx = self.vx * 0.4
             other.vy = min(-140.0, self.vy * 0.5)
             other.slam_cooldown.clear()
-            other.slam_cooldown[id(self)] = 0.4
+            other.slam_cooldown[self.uid] = 0.4
         self.vx *= 0.55
         self.vy *= 0.55
 
@@ -579,14 +599,15 @@ class Enemy:
                 post.trap(self)
                 return
 
-        # mid-air collisions
-        for o in self.game.enemies:
-            if o is self or not o.alive or id(o) in self.slam_cooldown:
+        # mid-air collisions -- snapshot: Outpost.trap() above can have just
+        # removed an entry, and a slam may yet change the roster
+        for o in list(self.game.enemies):
+            if o is self or not o.alive or o.uid in self.slam_cooldown:
                 continue
             if o.state == "grabbed":
                 continue
-            if self.hit_rect.colliderect(o.hit_rect):
-                self.slam_cooldown[id(o)] = 0.35
+            if self.overlaps(o):
+                self.slam_cooldown[o.uid] = 0.35
                 self.slam_into(o)
                 if not self.alive:
                     return
@@ -1198,6 +1219,11 @@ class Necromancer(Enemy):
             math.sin(a) * speed, "magic", self.damage, hostile=True))
         self.glow = 1.0
 
+    def on_trapped(self):
+        """He stops thinking in the cage, so drop the minion list now rather
+        than pinning dead Skeletons for as long as he lives."""
+        self.minions = []
+
     def cast_at_prisoner(self):
         """Punish the turncoat: a bolt aimed at the Outpost cage."""
         post = self.game.outpost
@@ -1381,7 +1407,7 @@ class Volatile(Enemy):
         g.effects.burst(self.x, self.y, 34, (255, 140, 60), speed=380,
                         life=0.7, size=5)
         g.effects.text(self.x, self.y - self.h, "BOOM!", (255, 170, 80), 26)
-        for o in g.enemies:
+        for o in list(g.enemies):
             if o is self or not o.alive:
                 continue
             d = math.hypot(o.x - self.x, o.y - self.y)

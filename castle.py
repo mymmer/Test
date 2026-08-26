@@ -119,7 +119,8 @@ class Projectile:
         self.y += self.vy * dt
         self.life -= dt
 
-        if self.life <= 0 or self.x < -120 or self.x > WIDTH + 220 or self.y > HEIGHT + 200:
+        if (self.life <= 0 or self.x < -120 or self.x > WIDTH + 220
+                or self.y > HEIGHT + 200 or self.y < -600):
             if self.splash > 0 and self.life <= 0:
                 self.explode()
             else:
@@ -137,23 +138,29 @@ class Projectile:
             self._update_friendly()
 
     def _update_friendly(self):
+        px, py = self.x, self.y
         for e in self.game.enemies:
-            if not e.alive or id(e) in self.hit_ids or not e.targetable:
+            # Bounds first, and without building a pygame.Rect: this runs once
+            # per projectile per enemy per frame, and that allocation was the
+            # single biggest cost in the profile at high waves.  Sized from the
+            # enemy itself, so no unit can slip through a fixed band.
+            if abs(px - e.x) > e.w * 0.5 or abs(py - e.y) > e.h * 0.5:
                 continue
-            if e.hit_rect.collidepoint(self.x, self.y):
-                self.hit_ids.add(id(e))
-                if self.splash > 0:
-                    self.explode()
-                    return
-                e.take_damage(self.damage_for(e), "projectile")
-                self.game.effects.burst(self.x, self.y, 5, self.color,
-                                        speed=120, life=0.25, size=2)
-                if self.pierce > 0:
-                    self.pierce -= 1
-                    self.damage *= 0.72
-                else:
-                    self.kill()
+            if not e.alive or e.uid in self.hit_ids or not e.targetable:
+                continue
+            self.hit_ids.add(e.uid)
+            if self.splash > 0:
+                self.explode()
                 return
+            e.take_damage(self.damage_for(e), "projectile")
+            self.game.effects.burst(px, py, 5, self.color,
+                                    speed=120, life=0.25, size=2)
+            if self.pierce > 0:
+                self.pierce -= 1
+                self.damage *= 0.72
+            else:
+                self.kill()
+            return
 
     def _update_hostile(self):
         # a rival Necromancer's bolt ignores the walls -- it wants the cage
@@ -1142,6 +1149,7 @@ class Outpost:
         raising skeletons for the horde, he raises them for the castle."""
         if not self.can_trap(enemy):
             return False
+        enemy.on_trapped()
         self.prisoner = enemy
         self.prisoner_max = PRISONER_HP
         self.prisoner_hp = PRISONER_HP
@@ -1226,11 +1234,11 @@ class Outpost:
         frac = self.prisoner_hp / max(1.0, self.prisoner_max)
         col = C_ALLY if frac > 0.35 else C_RED
         draw_bar(surf, cage.left - 4, cage.top - 10, cage.w + 8, 5, frac, col)
-        if self.prisoner_hit > 0:
-            draw_text(surf, "UNDER FIRE", self.x, cage.top - 26, 15, C_RED,
-                      "center", True)
         draw_text(surf, "TRAPPED", self.x, cage.bottom + 2, 15, C_ALLY,
                   "center", True)
+        if self.prisoner_hit > 0:
+            draw_text(surf, "UNDER FIRE", self.x, cage.bottom + 17, 15, C_RED,
+                      "center", True)
 
     def upgrade(self):
         """Always succeeds.  New crew arrive up to the visual cap; after
