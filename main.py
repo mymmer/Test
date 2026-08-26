@@ -9,17 +9,74 @@ Self-test: python main.py --selftest
 
 """
 
+import logging
+import logging.handlers
 import math
 import random
 import json
 import os
 import sys
+import traceback
 from collections import deque
+from typing import NamedTuple
 import pygame
 
 from sprites import *  # noqa: F401,F403
 from castle import *  # noqa: F401,F403
 from enemies import *  # noqa: F401,F403
+
+# ==============================================================================
+#  CRASH LOGGING
+# ==============================================================================
+#  Everything the game does at runtime funnels through main(), and main()
+#  funnels through one try/except.  When something blows up -- especially the
+#  late-game, tier-20+ boss paths that are painful to reproduce by hand -- the
+#  full traceback lands in game_errors.log next to the script, so a player can
+#  just send the file over.
+
+LOG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                        "game_errors.log")
+
+log = logging.getLogger("castle_defense")
+
+
+def setup_logging(path=LOG_FILE, level=logging.INFO):
+    """Attach a file handler to the game logger.
+
+    Safe to call twice (the second call is a no-op) and safe to call from a
+    read-only folder -- if the log file cannot be opened we fall back to
+    stderr rather than taking the game down with us.
+    """
+    if getattr(setup_logging, "_done", False):
+        return log
+    log.setLevel(level)
+    log.propagate = False
+    fmt = logging.Formatter(
+        "%(asctime)s  %(levelname)-8s  %(message)s", "%Y-%m-%d %H:%M:%S")
+    try:
+        # rotate so a long endless run cannot fill the disk with warnings
+        fh = logging.handlers.RotatingFileHandler(
+            path, maxBytes=512 * 1024, backupCount=2, encoding="utf-8")
+        fh.setFormatter(fmt)
+        log.addHandler(fh)
+    except OSError:
+        sh = logging.StreamHandler(sys.stderr)
+        sh.setFormatter(fmt)
+        log.addHandler(sh)
+    setup_logging._done = True
+    return log
+
+
+def log_exception(exc, where="game"):
+    """Write a full traceback to the log file *and* echo it to the console."""
+    setup_logging()
+    text = "".join(traceback.format_exception(
+        type(exc), exc, exc.__traceback__)).rstrip()
+    log.critical("unhandled exception in %s\n%s", where, text)
+    print(f"\n--- CRASH in {where} ---", file=sys.stderr)
+    print(text, file=sys.stderr)
+    print(f"--- full traceback written to {LOG_FILE} ---\n", file=sys.stderr)
+
 
 # Shop
 # ------------------------------------------------------------------------------
@@ -50,16 +107,41 @@ MODE_INFO = {
 # ==============================================================================
 #  DIFFICULTY
 # ==============================================================================
-#  (key, label, enemy scaling mult, gold mult, boss head-start, blurb)
+#  Every knob a difficulty can turn lives in one record, so tuning Hard is a
+#  matter of editing numbers here rather than hunting through the codebase.
+#
+#    scale      -- multiplies enemy health and damage scaling
+#    gold       -- payout multiplier
+#    headstart  -- extra effective waves a boss spawns with
+#    speed      -- FLAT multiplier on every enemy's base movement speed
+#    hp_curve   -- multiplies the per-tier health growth (1.60 = +60% a tier)
+#    boss_fire  -- boss projectile interval multiplier (0.50 = twice as fast)
+#    elite_horn -- Challenge Horn calls in elites/heavies instead of a mixed mob
+
+class Difficulty(NamedTuple):
+    key: str
+    label: str
+    scale: float
+    gold: float
+    headstart: float
+    speed: float
+    hp_curve: float
+    boss_fire: float
+    elite_horn: bool
+    blurb: str
+
+
 DIFFICULTIES = (
-    ("easy",   "EASY",   0.80, 1.15, 0.00,
-     "Enemies scale 20% slower and you earn 15% more gold."),
-    ("normal", "NORMAL", 1.00, 1.00, 0.00,
-     "The game as designed. Standard scaling, standard pay."),
-    ("hard",   "HARD",   1.30, 1.00, 0.25,
-     "Enemies scale 30% faster and bosses arrive already reinforced."),
+    Difficulty("easy", "EASY", 0.80, 1.15, 0.00, 0.90, 0.80, 1.00, False,
+               "Enemies scale 20% slower, walk 10% slower, and you earn 15% "
+               "more gold."),
+    Difficulty("normal", "NORMAL", 1.00, 1.00, 0.00, 1.00, 1.00, 1.00, False,
+               "The game as designed. Standard scaling, standard pay."),
+    Difficulty("hard", "HARD", 1.30, 1.00, 0.25, 1.40, 1.60, 0.50, True,
+               "Enemies move 40% faster, health scales 60% harder per tier, "
+               "bosses fire twice as fast and the horn calls in elites."),
 )
-DIFFICULTY_BY_KEY = {d[0]: d for d in DIFFICULTIES}
+DIFFICULTY_BY_KEY = {d.key: d for d in DIFFICULTIES}
 DEFAULT_DIFFICULTY = "normal"
 
 SETTINGS_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)),
@@ -154,6 +236,24 @@ ENDLESS_BOSS_REPEAT = 120.0    # 2 minutes
 
 #  How many mobs the Challenge Horn calls in at once in Endless mode
 ENDLESS_HORN_RUSH = 12
+
+#  --- Hard-mode Challenge Horn ---------------------------------------------
+#  On Hard the horn is not a crowd of chaff: it drops a pack of heavies and
+#  detonators, rolled a few tiers above the current one so they arrive as
+#  elites rather than as free gold.
+HARD_HORN_RUSH = 10          # units in a Hard horn pack
+HARD_HORN_TIER_BONUS = 3     # scaled as if this many tiers deeper
+#  weight per class -- Tanks (SiegeRam) and Volatiles carry the pack
+HARD_HORN_UNITS = {
+    SiegeRam: 3.0,
+    Volatile: 3.0,
+    Berzerker: 1.6,
+    ShieldBearer: 1.4,
+    Gargoyle: 1.2,
+    Necromancer: 0.8,
+}
+#  chaff the horn upgrades away from in Classic mode
+HORN_CHAFF = (Scout, FootSoldier)
 
 # ------------------------------------------------------------------------------
 
@@ -837,6 +937,8 @@ class Game:
         self.play_time = 0.0          # elapsed play, Endless mode's clock
         self.next_boss = 0            # index into ENDLESS_BOSS_SCHEDULE
         self.extra_bosses = 0         # random bosses spawned after the script
+        self.active_boss = None       # the boss currently on the field
+        self.boss_spawned = False     # is any boss alive right now
         self.realtime_shop = False    # shop opened mid-fight rather than between waves
         self.started = False
         self.mode_buttons = {}
@@ -1161,16 +1263,37 @@ class Game:
     @property
     def enemy_scale(self):
         """How much harder the horde scales on this difficulty."""
-        return self.difficulty[2]
+        return self.difficulty.scale
 
     @property
     def gold_scale(self):
-        return self.difficulty[3]
+        return self.difficulty.gold
 
     @property
     def boss_headstart(self):
         """Extra effective waves a boss spawns with on Hard."""
-        return self.difficulty[4]
+        return self.difficulty.headstart
+
+    @property
+    def enemy_speed_scale(self):
+        """Flat multiplier on every enemy's base walking speed."""
+        return self.difficulty.speed
+
+    @property
+    def enemy_hp_curve(self):
+        """How much steeper health grows per tier (1.60 = +60% a tier)."""
+        return self.difficulty.hp_curve
+
+    @property
+    def boss_fire_scale(self):
+        """Multiplier on boss projectile intervals -- 0.50 fires twice as
+        fast."""
+        return self.difficulty.boss_fire
+
+    @property
+    def elite_horn(self):
+        """True when the Challenge Horn should call in elites and heavies."""
+        return self.difficulty.elite_horn
 
     @property
     def grab_capacity(self):
@@ -1189,6 +1312,42 @@ class Game:
         return (base * (1.0 + self.horn_bonus) * self.talents.kill_gold
                 * self.gold_scale)
 
+    def elite_roster(self):
+        """Which heavy/elite classes are unlocked at the current tier."""
+        avail = [c for (first, c, _w) in UNLOCKS
+                 if self.wave >= first and c in HARD_HORN_UNITS]
+        if avail:
+            return avail
+        # very early waves: nothing heavy exists yet, so take the toughest
+        # thing that does rather than falling back to Scouts
+        opened = [c for (first, c, _w) in UNLOCKS if self.wave >= first]
+        return opened[-2:] or [Scout]
+
+    def elite_horn_pack(self, count):
+        """A Hard-mode horn pack: heavies and detonators, rolled as if the
+        run were several tiers deeper than it is."""
+        roster = self.elite_roster()
+        weights = [HARD_HORN_UNITS.get(c, 1.0) for c in roster]
+        wave = self.wave + HARD_HORN_TIER_BONUS
+        return [random.choices(roster, weights=weights, k=1)[0](self, wave)
+                for _ in range(count)]
+
+    def upgrade_horn_queue(self, queued):
+        """Classic mode: swap the chaff left in the wave for elites, keeping
+        the head-count identical so wave completion still adds up."""
+        roster = self.elite_roster()
+        weights = [HARD_HORN_UNITS.get(c, 1.0) for c in roster]
+        out = []
+        swapped = 0
+        cap = max(1, len(queued) // 2)
+        for cls in queued:
+            if cls in HORN_CHAFF and swapped < cap:
+                swapped += 1
+                out.append(random.choices(roster, weights=weights, k=1)[0])
+            else:
+                out.append(cls)
+        return out
+
     def blow_horn(self):
         """Taunt the horde: the rest of the wave charges in at once, and
         everything it drops for the rest of the round is worth more."""
@@ -1198,16 +1357,25 @@ class Game:
             return False
         # Build the whole pack before touching self.enemies, so the list is
         # extended exactly once no matter who is mid-update.
+        elite = self.elite_horn
         if self.endless:
-            pending = ENDLESS_HORN_RUSH
-            pack = [self.roll_endless_mob()(self, self.wave)
-                    for _ in range(pending)]
+            if elite:
+                pending = HARD_HORN_RUSH
+                pack = self.elite_horn_pack(pending)
+            else:
+                pending = ENDLESS_HORN_RUSH
+                pack = [self.roll_endless_mob()(self, self.wave)
+                        for _ in range(pending)]
         else:
             queued = list(self.spawn_queue)
             pending = len(queued)
             if pending == 0:
                 self.shop_msg, self.shop_msg_t = "Nothing left to call in.", 1.5
                 return False
+            if elite:
+                # same head-count, harder heads: the chaff in the remaining
+                # wave answers the horn as heavies instead
+                queued = self.upgrade_horn_queue(queued)
             pack = [cls(self, self.wave) for cls in queued]
             self.spawn_queue = []
         self.enemies.extend(pack)
@@ -1217,8 +1385,13 @@ class Game:
         self.add_shake(10.0)
         self.effects.ring(CASTLE_FRONT * 0.6, WALL_TOP + 40, 34, C_GOLD,
                           speed=560, life=0.8, size=5)
-        self.announce(f"CHALLENGE HORN! {pending} more incoming, "
-                      f"+{int(HORN_BONUS * 100)}% rewards", C_GOLD, 3.2)
+        if elite:
+            self.announce(f"CHALLENGE HORN! {pending} ELITES incoming, "
+                          f"+{int(HORN_BONUS * 100)}% rewards",
+                          (255, 130, 110), 3.2)
+        else:
+            self.announce(f"CHALLENGE HORN! {pending} more incoming, "
+                          f"+{int(HORN_BONUS * 100)}% rewards", C_GOLD, 3.2)
         return True
 
     def strike_lightning(self, enemy):
@@ -1284,7 +1457,60 @@ class Game:
         self.banners.append([text, color, life, life])
 
     def spawn_enemy(self, e):
+        if e.IS_BOSS:
+            # every boss arrives on a clean field, whichever path spawned it
+            self.clear_dead_bosses()
         self.enemies.append(e)
+        if e.IS_BOSS:
+            self.active_boss = e
+            self.boss_spawned = True
+
+    # -- boss lifecycle --------------------------------------------------
+    #  A boss leaves debris behind it: its regalia, its projectiles, and
+    #  whatever the cursor was doing to it when it died.  Each of those is a
+    #  live reference to a corpse, and a repeat boss -- the second Dragon of
+    #  an Endless run, the twin bosses build_wave fields from wave 20 -- must
+    #  never inherit any of it.  So the field is scrubbed the moment a boss
+    #  dies, and scrubbed again just before the next one is built.
+    def purge_boss(self, boss):
+        """Drop every reference the game still holds to a dead boss."""
+        uid = getattr(boss, "uid", None)
+        # 1. the sprite itself, off the field and out of the enemy list
+        boss.alive = False
+        self.enemies = [e for e in self.enemies if e is not boss]
+        # 2. anything the cursor is still holding on to
+        if self.grabbed is boss:
+            self.grabbed, self.grabbed_extra = None, []
+        self.grabbed_extra = [e for e in self.grabbed_extra if e is not boss]
+        for attr in ("stripping", "charging", "smacking"):
+            if getattr(self, attr, None) is boss:
+                setattr(self, attr, None)
+        # 3. its regalia, including the piece the player may be carrying
+        for it in self.items:
+            if getattr(it, "owner", None) is boss:
+                it.kill()
+        self.items = [it for it in self.items if it.alive]
+        if self.held_item is not None and not self.held_item.alive:
+            self.held_item = None
+        # 4. its projectiles -- a dead boss's fire goes out with it
+        if uid is not None:
+            self.projectiles = [p for p in self.projectiles
+                                if getattr(p, "owner_uid", 0) != uid]
+        # 5. and the flags that say a boss is on the field
+        if self.active_boss is boss:
+            self.active_boss = None
+        log.info("boss purged: %s (uid %s)", boss.NAME, uid)
+
+    def clear_dead_bosses(self):
+        """Reset boss bookkeeping before a new boss is created."""
+        for e in [e for e in self.enemies if e.IS_BOSS and not e.alive]:
+            self.purge_boss(e)
+        live = self.current_bosses()
+        if self.active_boss is not None and self.active_boss not in live:
+            self.active_boss = None
+        if self.active_boss is None and live:
+            self.active_boss = live[0]
+        self.boss_spawned = bool(live)
 
     def make_ally(self, x):
         """Built here so castle.py never has to import from enemies.py."""
@@ -1306,6 +1532,8 @@ class Game:
 
     def on_boss_defeated(self, boss):
         """Every boss killed lights up the next slot on the skill bar."""
+        self.purge_boss(boss)
+        self.boss_spawned = bool(self.current_bosses())
         skill = self.skills.unlock_next()
         if skill is None:
             self.talents.award(3, " -- boss bounty")
@@ -1372,6 +1600,8 @@ class Game:
         self.play_time = 0.0
         self.next_boss = 0
         self.extra_bosses = 0
+        self.active_boss = None        # the boss currently on the field
+        self.boss_spawned = False      # is any boss alive right now
         self.wave_active = True
         self.spawn_queue = []
         self.spawn_timer = 1.2
@@ -1384,8 +1614,13 @@ class Game:
         self.announce("They do not stop coming. Good luck.", C_DIM, 3.0)
 
     def summon_boss(self, cls, scripted=True):
+        # scrub the last boss's remains before the new one exists, so no
+        # state from its first appearance can reach its second
+        self.clear_dead_bosses()
         wave = self.wave + int(round(self.wave * self.boss_headstart))
         boss = cls(self, max(1, wave))
+        log.info("summoning %s at effective wave %d (run t=%.1fs)",
+                 boss.NAME, wave, self.time)
         self.spawn_enemy(boss)
         self.add_shake(9.0)
         self.announce(f"!! {boss.NAME} arrives !!", (255, 120, 100), 4.0)
@@ -2045,7 +2280,8 @@ class Game:
                 if w.get("clear", pygame.Rect(0, 0, 0, 0)).collidepoint(ev.pos):
                     self.settings.clear_high_score()
                     return
-                for key, _l, _h, _g, _hs, _b in DIFFICULTIES:
+                for d in DIFFICULTIES:
+                    key = d.key
                     if w.get("diff_" + key, pygame.Rect(0, 0, 0, 0)).collidepoint(ev.pos):
                         self.settings.difficulty = key
                         self.settings.save()
@@ -2302,80 +2538,188 @@ class Game:
         pygame.draw.line(s, (230, 235, 250), (mx, my - 13), (mx, my - 4), 1)
         pygame.draw.line(s, (230, 235, 250), (mx, my + 4), (mx, my + 13), 1)
 
-    def draw_hud(self, surf):
-        # top-left status block
-        # Endless needs an extra row for the run clock and the SHOP button
-        panel_h = (176 if self.endless else 148)
-        panel = pygame.Surface((360, panel_h), pygame.SRCALPHA)
-        panel.fill((*C_PANEL, 190))
-        pygame.draw.rect(panel, (*C_PANEL_EDGE, 200), panel.get_rect(), 2,
-                         border_radius=6)
-        surf.blit(panel, (14, 12))
+    # ------------------------------------------------------------------
+    #  HUD panel layout
+    # ------------------------------------------------------------------
+    #  The status panel is built as a single vertical stack: every row is
+    #  measured before anything is drawn, the panel is sized to the rows it
+    #  actually holds, and a row that carries two items only puts them on
+    #  one line when both halves genuinely fit side by side.  Nothing is
+    #  ever painted on top of a neighbour, whatever the wall label says or
+    #  how big the gold total gets.
+    HUD_X, HUD_Y = 14, 12       # panel origin
+    HUD_W = 372                 # panel width
+    HUD_PAD = 14                # inner padding
+    HUD_GAP = 16                # minimum gap between two items on a row
+    HUD_ROW_GAP = 6             # vertical breathing room between rows
 
-        if self.endless:
-            draw_text(surf, f"TIER {max(1, self.wave)}", 28, 22, 30,
-                      C_WHITE, bold=True)
-        else:
-            draw_text(surf, f"WAVE {max(1, self.wave)}", 28, 22, 30,
-                      C_WHITE, bold=True)
-        draw_text(surf, f"{self.gold} G", 346, 24, 28, C_GOLD, "right", True)
+    def hud_right_cluster(self, inner, title_w):
+        """Fit the difficulty badge and the gold counter into the space the
+        title leaves on row 1.  Returns (gold_size, badge_size, badge_text),
+        with badge_size 0 when the badge has to move to its own row."""
+        badge = ""
+        if self.settings.difficulty != DEFAULT_DIFFICULTY:
+            badge = f"[ {self.difficulty.label} ]"
+        gold_txt = f"{self.gold} G"
+        room = inner - title_w - self.HUD_GAP
+        for gold_size in (28, 26, 24, 22):
+            gw = font(gold_size, True).size(gold_txt)[0]
+            if not badge:
+                if gw <= room:
+                    return gold_size, 0, ""
+                continue
+            for badge_size in (17, 16, 15):
+                bw = font(badge_size, True).size(badge)[0]
+                if gw + self.HUD_GAP + bw <= room:
+                    return gold_size, badge_size, badge
+        # nothing fits on one line -- the badge gets a row of its own
+        return 22, 0, badge
+
+    def draw_hud(self, surf):
+        left = self.HUD_X + self.HUD_PAD
+        right = self.HUD_X + self.HUD_W - self.HUD_PAD
+        inner = right - left
+        centre = (left + right) // 2
+        playing = self.state in (self.PLAYING, self.PAUSED)
+
+        rows = []                       # (height, draw callback taking y)
+
+        def row(height, fn):
+            rows.append((height, fn))
+
+        # --- row 1: WAVE/TIER on the left, badge + gold on the right ----
+        title = (f"TIER {max(1, self.wave)}" if self.endless
+                 else f"WAVE {max(1, self.wave)}")
+        title_w = font(30, True).size(title)[0]
+        gold_size, badge_size, badge = self.hud_right_cluster(inner, title_w)
+        gold_txt = f"{self.gold} G"
+        badge_col = (C_GREEN if self.settings.difficulty == "easy" else C_RED)
+
+        def draw_row1(y, gold_size=gold_size, badge_size=badge_size):
+            draw_text(surf, title, left, y, 30, C_WHITE, bold=True)
+            # the gold sits flush right; the badge rides just inside it,
+            # nudged down so the two baselines line up instead of colliding
+            gx = right
+            draw_text(surf, gold_txt, gx, y + 2, gold_size, C_GOLD,
+                      "right", True)
+            if badge_size:
+                bx = gx - font(gold_size, True).size(gold_txt)[0] - self.HUD_GAP
+                drop = (font(gold_size, True).get_height()
+                        - font(badge_size, True).get_height()) // 2
+                draw_text(surf, badge, bx, y + 2 + drop, badge_size,
+                          badge_col, "right", True)
+
+        row(font(30, True).get_height(), draw_row1)
+
+        # --- row 1b: the badge only when row 1 could not hold it --------
+        if badge and not badge_size:
+            def draw_badge_row(y):
+                draw_text(surf, badge, right, y, 17, badge_col, "right", True)
+            row(font(17, True).get_height(), draw_badge_row)
+
+        # --- row 2: the wall material, on a dedicated line of its own ---
         tier = endgame_tier(max(1, self.wave))
         if tier >= 0:
             tname, _f, ttint, _s, _h, _d, _sp = ENDGAME_TIERS[tier]
-            draw_text(surf, f"{self.castle.tier_label}  -  {tname} horde",
-                      28, 52, 18, mix(ttint, C_WHITE, 0.35))
+            wall_txt = f"{self.castle.tier_label}  -  {tname} horde"
+            wall_col = mix(ttint, C_WHITE, 0.35)
         else:
-            draw_text(surf, self.castle.tier_label, 28, 52, 18, C_DIM)
+            wall_txt = self.castle.tier_label
+            wall_col = C_DIM
+        wall_size = 18
+        while wall_size > 14 and font(wall_size).size(wall_txt)[0] > inner:
+            wall_size -= 1
 
-        # crowd bonus: the risk/reward readout
-        mult = self.gold_multiplier
-        if self.state in (self.PLAYING, self.PAUSED) and mult > 1.005:
+        def draw_wall(y, size=wall_size):
+            draw_text(surf, wall_txt, left, y, size, wall_col)
+
+        row(font(wall_size).get_height(), draw_wall)
+
+        # --- row 3: the crowd multiplier, centred right above the bar ---
+        #  Given its own band well clear of the gold/tier line: the payout
+        #  notification is the one number that changes every few frames and
+        #  it must never land on top of anything else.
+        if playing:
+            mult = self.gold_multiplier
             n = sum(1 for e in self.enemies if e.alive)
             hot = mult / POP_GOLD_CAP
-            draw_text(surf, f"x{mult:.2f} gold  ({n} mobs)", 346, 52, 18,
-                      mix((255, 214, 120), (255, 110, 90), hot), "right", True)
 
+            def draw_mult(y, mult=mult, n=n, hot=hot):
+                if mult <= 1.005:
+                    return
+                draw_text(surf, f"x{mult:.2f} gold  ({n} mobs)", centre, y, 18,
+                          mix((255, 214, 120), (255, 110, 90), hot),
+                          "center", True)
+
+            row(font(18, True).get_height(), draw_mult)
+
+        # --- row 4: castle health ---------------------------------------
         frac = self.castle.hp / max(1.0, self.castle.max_hp)
         col = C_GREEN if frac > 0.5 else (C_GOLD if frac > 0.25 else C_RED)
-        draw_bar(surf, 28, 74, 318, 16, frac, col)
-        draw_text(surf, f"{int(self.castle.hp)} / {int(self.castle.max_hp)}",
-                  187, 75, 18, C_WHITE, "center")
 
-        sc_col = mix(C_GOLD, (255, 255, 255), self.combo_flash)
-        draw_text(surf, f"SCORE {self.score:,}", 28, 96,
-                  24 + int(4 * self.combo_flash), sc_col, bold=True)
-        if self.best_fling:
-            draw_text(surf, f"best fling {self.best_fling:,}", 346, 100, 16,
-                      C_DIM, "right")
-        # talent points get their own row, clear of the health bar
-        ty = 150 if self.endless else 120
-        pts = self.talents.points
-        draw_text(surf, f"{pts} TALENT POINT{'S' if pts != 1 else ''}  [T]",
-                  28, ty, 19, C_TALENT_ON if pts else C_DIM, bold=bool(pts))
-        if self.settings.difficulty != DEFAULT_DIFFICULTY:
-            draw_text(surf, self.difficulty[1], 346, 26, 17,
-                      C_GREEN if self.settings.difficulty == "easy" else C_RED,
-                      "right", True)
-        if self.skills.skills:
-            ready = sum(1 for s in self.skills.skills if s.ready)
-            draw_text(surf, f"skills {ready}/{len(self.skills.skills)} ready",
-                      346, ty + 2, 16,
-                      C_SKILL_READY if ready else C_DIM, "right")
+        def draw_health(y):
+            draw_bar(surf, left, y, inner, 16, frac, col)
+            draw_text(surf, f"{int(self.castle.hp)} / {int(self.castle.max_hp)}",
+                      centre, y + 1, 18, C_WHITE, "center")
 
-        # Endless: the run clock and the live armoury button get their own row
+        row(18, draw_health)
+
+        # --- row 5: score, and the best fling of the run ----------------
+        def draw_score(y):
+            sc_col = mix(C_GOLD, (255, 255, 255), self.combo_flash)
+            draw_text(surf, f"SCORE {self.score:,}", left, y,
+                      24 + int(4 * self.combo_flash), sc_col, bold=True)
+            if self.best_fling:
+                draw_text(surf, f"best fling {self.best_fling:,}", right,
+                          y + 4, 16, C_DIM, "right")
+
+        row(font(28, True).get_height(), draw_score)
+
+        # --- row 6: talent points, and skill readiness ------------------
+        def draw_talents(y):
+            pts = self.talents.points
+            draw_text(surf, f"{pts} TALENT POINT{'S' if pts != 1 else ''}  [T]",
+                      left, y, 19, C_TALENT_ON if pts else C_DIM,
+                      bold=bool(pts))
+            if self.skills.skills:
+                ready = sum(1 for s in self.skills.skills if s.ready)
+                draw_text(surf, f"skills {ready}/{len(self.skills.skills)}"
+                          " ready", right, y + 2, 16,
+                          C_SKILL_READY if ready else C_DIM, "right")
+
+        row(font(19, True).get_height(), draw_talents)
+
+        # --- row 7 (Endless only): run clock + live armoury button ------
         self.shop_btn = pygame.Rect(0, 0, 0, 0)
         if self.endless:
-            draw_text(surf, format_clock(self.play_time), 28, 122, 24,
-                      (150, 220, 255), bold=True)
-            if self.state in (self.PLAYING, self.PAUSED):
-                b = pygame.Rect(240, 118, 106, 26)
-                self.shop_btn = b
-                hot = b.collidepoint(self.mouse_pos)
-                pygame.draw.rect(surf, (46, 92, 74) if hot else (34, 66, 54),
-                                 b, border_radius=6)
-                pygame.draw.rect(surf, C_GREEN, b, 2, border_radius=6)
-                draw_text(surf, "SHOP", b.centerx, b.y + 4, 21, C_WHITE,
-                          "center", True)
+            def draw_clock(y):
+                draw_text(surf, format_clock(self.play_time), left, y, 24,
+                          (150, 220, 255), bold=True)
+                if self.state in (self.PLAYING, self.PAUSED):
+                    b = pygame.Rect(right - 106, y - 4, 106, 26)
+                    self.shop_btn = b
+                    hot = b.collidepoint(self.mouse_pos)
+                    pygame.draw.rect(surf, (46, 92, 74) if hot else (34, 66, 54),
+                                     b, border_radius=6)
+                    pygame.draw.rect(surf, C_GREEN, b, 2, border_radius=6)
+                    draw_text(surf, "SHOP", b.centerx, b.y + 4, 21, C_WHITE,
+                              "center", True)
+
+            row(26, draw_clock)
+
+        # --- lay the stack out and paint it -----------------------------
+        total = sum(h for h, _fn in rows) + self.HUD_ROW_GAP * (len(rows) - 1)
+        panel_h = total + self.HUD_PAD * 2
+        panel = pygame.Surface((self.HUD_W, panel_h), pygame.SRCALPHA)
+        panel.fill((*C_PANEL, 190))
+        pygame.draw.rect(panel, (*C_PANEL_EDGE, 200), panel.get_rect(), 2,
+                         border_radius=6)
+        surf.blit(panel, (self.HUD_X, self.HUD_Y))
+
+        y = self.HUD_Y + self.HUD_PAD
+        for h, fn in rows:
+            fn(y)
+            y += h + self.HUD_ROW_GAP
 
         # top-right wave progress
         if self.state in (self.PLAYING, self.PAUSED):
@@ -2515,7 +2859,8 @@ class Game:
         dx = r.centerx - total_d // 2 - 90
         self.difficulty_buttons = {}
         draw_text(surf, "DIFFICULTY", dx - 14, row_y + 10, 18, C_DIM, "right")
-        for i, (key, label, _hp, _gold, _hs, blurb) in enumerate(DIFFICULTIES):
+        for i, d in enumerate(DIFFICULTIES):
+            key, label, blurb = d.key, d.label, d.blurb
             b = pygame.Rect(dx + i * (dw + dgap), row_y, dw, 40)
             self.difficulty_buttons[key] = b
             on = self.settings.difficulty == key
@@ -2735,7 +3080,8 @@ class Game:
                   "center")
         y += 26
         dw = (panel.w - 100) // 3
-        for i, (key, label, _h, _g, _hs, _b) in enumerate(DIFFICULTIES):
+        for i, d in enumerate(DIFFICULTIES):
+            key, label = d.key, d.label
             b = pygame.Rect(panel.left + 40 + i * (dw + 10), y, dw, 44)
             self.settings_widgets["diff_" + key] = b
             on = self.settings.difficulty == key
@@ -2993,13 +3339,44 @@ def init_pygame():
     pygame.font.init()
 
 
-def main():
-    init_pygame()
-    pygame.display.set_caption(TITLE)
-    screen = pygame.display.set_mode((WIDTH, HEIGHT))
-    game = Game(screen)
+def describe_state(game):
+    """One-line snapshot of what the game was doing, for the crash log."""
+    if game is None:
+        return "game had not been constructed yet"
     try:
-        game.run()
+        bosses = [b.NAME for b in game.current_bosses()]
+        return (f"mode={game.mode} state={game.state} wave={game.wave} "
+                f"difficulty={game.settings.difficulty} "
+                f"t={game.time:.1f}s enemies={len(game.enemies)} "
+                f"bosses={bosses or 'none'} "
+                f"projectiles={len(game.projectiles)} "
+                f"hp={game.castle.hp:.0f}/{game.castle.max_hp:.0f}")
+    except Exception as probe:              # never crash inside the handler
+        return f"state unavailable ({probe!r})"
+
+
+def main():
+    """Run the game with a global crash handler.
+
+    Initialisation and the whole main loop live inside one try/except: any
+    unhandled exception is written to game_errors.log with its full
+    traceback, echoed to the console, and then pygame is shut down cleanly
+    instead of leaving a dead window behind.
+    """
+    setup_logging()
+    game = None
+    try:
+        init_pygame()
+        pygame.display.set_caption(TITLE)
+        screen = pygame.display.set_mode((WIDTH, HEIGHT))
+        game = Game(screen)
+        log.info("game started (%s)", describe_state(game))
+        game.run()                       # contains the `while running:` loop
+        log.info("game exited cleanly (%s)", describe_state(game))
+    except Exception as e:
+        log_exception(e, where="main loop")
+        log.critical("state at crash: %s", describe_state(game))
+        print(f"state at crash: {describe_state(game)}", file=sys.stderr)
     finally:
         pygame.quit()
 
@@ -3204,6 +3581,9 @@ def _ui_smoke(g):
         g.update_grab(1 / 60.0)
     g.release_grab()
     assert not lich.has_staff and abs(lich.disarm - STAFF_DISARM_TIME) < 0.2
+    # a bolt already in the air still lands -- disarming stops him casting,
+    # it does not un-fire what he cast a moment earlier
+    g.projectiles = [p for p in g.projectiles if not getattr(p, "hostile", False)]
     hp_before, n_before = g.castle.hp, len(g.enemies)
     for _ in range(int(STAFF_DISARM_TIME * 60) - 30):
         g.update(1 / 60.0)
@@ -3381,6 +3761,10 @@ def _ui_smoke(g):
     assert FriendlySkeleton.BASE_HP < 20.0, "and their health cut by 60%"
 
     # ---------- rival Necromancers hunt the prisoner ----------
+    # Pin the stream from here on.  Everything below is an assertion about
+    # behaviour, not about luck, and the frames played before this point
+    # leave the RNG in a different place every time the balance changes.
+    random.seed(20240)
     g.reset(MODE_CLASSIC); g.state = Game.PLAYING
     g.wave, g.wave_active = 8, False
     post = g.outpost
@@ -3701,7 +4085,7 @@ def _ui_smoke(g):
     # ---------- difficulty ----------
     g.reset(MODE_CLASSIC)
     stats = {}
-    for key, _label, _hp, _gold, _hs, _blurb in DIFFICULTIES:
+    for key in DIFFICULTY_BY_KEY:
         g.settings.difficulty = key
         probe = Scout(g, 12)
         g.enemies = [Scout(g, 1) for _ in range(20)]
@@ -3729,6 +4113,170 @@ def _ui_smoke(g):
     g.enemies.clear()
     g.settings.difficulty = DEFAULT_DIFFICULTY
 
+    # ---------- Hard-mode overhaul ----------
+    g.reset(MODE_CLASSIC)
+    g.settings.difficulty = "normal"
+    n_scout, n_lich = Scout(g, 20), LichLord(g, 20)
+    n_drag = Dragon(g, 20)
+    g.settings.difficulty = "hard"
+    h_scout, h_lich = Scout(g, 20), LichLord(g, 20)
+    h_drag = Dragon(g, 20)
+    g.enemies.clear()
+    assert abs(h_scout.speed / n_scout.speed - 1.40) < 0.001, \
+        "Hard must add 40% flat movement speed"
+    hp_gain = (h_scout.max_hp - Scout.BASE_HP) / (n_scout.max_hp - Scout.BASE_HP)
+    assert hp_gain > 1.55, \
+        f"Hard health scaling must be ~60% steeper per tier, got x{hp_gain:.2f}"
+    assert abs(h_drag.fire_delay(1.0) - 0.5) < 1e-9 \
+        and abs(n_drag.fire_delay(1.0) - 1.0) < 1e-9, \
+        "Hard bosses must fire twice as fast"
+    assert h_drag.breath_timer < n_drag.breath_timer \
+        and h_lich.bolt_timer < n_lich.bolt_timer, \
+        "and open fire sooner than a Normal boss"
+    # the Hard horn calls in elites, not a crowd of chaff
+    g.reset(MODE_ENDLESS); g.begin_endless()
+    g.settings.difficulty = "hard"
+    g.state = Game.PLAYING; g.wave = 14; g.wave_active = True
+    g.enemies.clear(); g.horn_used = False
+    assert g.elite_horn and g.blow_horn()
+    pack = list(g.enemies)
+    assert len(pack) == HARD_HORN_RUSH, \
+        f"a Hard horn must call in {HARD_HORN_RUSH} elites"
+    assert not any(isinstance(e, HORN_CHAFF) for e in pack), \
+        "and not a single Scout or Foot Soldier"
+    heavies = sum(1 for e in pack if isinstance(e, (SiegeRam, Volatile)))
+    assert heavies >= 3, f"Tanks and Volatiles must carry the pack, got {heavies}"
+    assert all(e.wave > g.wave for e in pack), \
+        "elites must be rolled above the current tier"
+    g.enemies.clear()
+    g.settings.difficulty = DEFAULT_DIFFICULTY
+
+    # ---------- boss recurrence: no state survives a boss ----------
+    g.reset(MODE_ENDLESS); g.begin_endless()
+    g.state = Game.PLAYING; g.wave = 22; g.wave_active = True
+    g.summon_boss(LichLord)
+    first = g.active_boss
+    assert first is not None and g.boss_spawned, \
+        "summoning must flag the boss as active"
+    for _ in range(240):
+        g.update(1 / 60.0)
+    first_uid = first.uid
+    # give the run every kind of dangling reference to that boss
+    sr = first.regalia_rect()
+    if sr is not None:
+        g.mouse_pos = sr.center
+        g.try_grab(sr.center)
+    g.projectiles.append(Projectile(g, 100, 100, -10, 0, "magic", 5,
+                                    hostile=True, owner_uid=first_uid))
+    first.die()
+    assert first not in g.enemies, "a dead boss must leave the field"
+    assert g.active_boss is None and not g.boss_spawned, \
+        "and clear the active-boss flags"
+    assert not [p for p in g.projectiles
+                if getattr(p, "owner_uid", 0) == first_uid], \
+        "its projectiles must go with it"
+    assert not [it for it in g.items if it.owner is first], \
+        "and so must its regalia"
+    assert g.held_item is None, "including the piece the cursor was holding"
+    # now bring the same boss back -- nothing may carry over
+    g.summon_boss(LichLord)
+    second = g.active_boss
+    assert second is not None and second is not first, "a repeat boss is new"
+    assert second.uid != first_uid and second.hp == second.max_hp \
+        and second.has_staff and second.disarm == 0.0 \
+        and second.regalia_taken == 0, \
+        "a repeat boss must not inherit the first one's state"
+    assert not [e for e in g.enemies if e.IS_BOSS and not e.alive], \
+        "no dead boss may linger in the enemy list"
+    for _ in range(600):                 # and it must run without blowing up
+        g.update(1 / 60.0)
+    g.reset(MODE_CLASSIC)
+
+    # ---------- crash logging ----------
+    log_path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                            "_selftest_errors.log")
+    probe = logging.getLogger("castle_defense_selftest")
+    probe.setLevel(logging.INFO)
+    handler = logging.FileHandler(log_path, encoding="utf-8")
+    probe.addHandler(handler)
+    try:
+        try:
+            raise ValueError("selftest boom")
+        except ValueError as exc:
+            probe.critical("unhandled exception in %s\n%s", "selftest",
+                           "".join(traceback.format_exception(
+                               type(exc), exc, exc.__traceback__)))
+        handler.flush()
+        with open(log_path, encoding="utf-8") as fh:
+            written = fh.read()
+        assert "selftest boom" in written and "Traceback" in written, \
+            "the logger must write the whole traceback, not just the message"
+    finally:
+        probe.removeHandler(handler)
+        handler.close()
+        try:
+            os.remove(log_path)
+        except OSError:
+            pass
+    assert callable(setup_logging) and setup_logging() is log
+    assert describe_state(None) and "wave=" in describe_state(g), \
+        "the crash log must describe what the game was doing"
+
+    # ---------- HUD layout: nothing may overlap ----------
+    g.reset(MODE_ENDLESS); g.begin_endless()
+    g.settings.difficulty = "hard"
+    g.state = Game.PLAYING; g.wave = 22; g.wave_active = True
+    g.gold, g.score, g.best_fling = 4270, 918233, 4821
+    g.castle.wall_level = 12                 # the longest wall label there is
+    g.enemies = [Scout(g, 22) for _ in range(26)]
+    g.talents.points = 3
+    drawn = []
+    real_draw_text = globals()["draw_text"]
+
+    def spy_draw_text(surf, text, x, y, size=22, color=C_WHITE, align="left",
+                      bold=False, shadow=True):
+        w, h = font(size, bold).size(str(text))
+        bx = x - w if align == "right" else (x - w // 2 if align == "center" else x)
+        drawn.append((str(text), pygame.Rect(bx, y, w, h)))
+        return real_draw_text(surf, text, x, y, size, color, align, bold,
+                              shadow)
+
+    globals()["draw_text"] = spy_draw_text
+    try:
+        g.draw()
+    finally:
+        globals()["draw_text"] = real_draw_text
+    panel = pygame.Rect(Game.HUD_X, Game.HUD_Y, Game.HUD_W, HEIGHT)
+    hud = [(t, r) for (t, r) in drawn
+           if panel.contains(r.clip(panel)) and r.width and r.top < 400
+           and r.colliderect(panel)]
+    hud = [(t, r) for (t, r) in hud if panel.collidepoint(r.center)]
+    for i, (t1, r1) in enumerate(hud):
+        for t2, r2 in hud[i + 1:]:
+            # the health readout is deliberately centred inside its bar
+            if "/" in t1 or "/" in t2:
+                continue
+            assert not r1.colliderect(r2), \
+                f"HUD text overlaps: {t1!r} {tuple(r1)} vs {t2!r} {tuple(r2)}"
+    texts = [t for (t, _r) in hud]
+    assert "TIER 22" in texts and "4270 G" in texts and "[ HARD ]" in texts, \
+        "row 1 must carry the tier, the gold and the difficulty badge"
+    row1 = {t: r for (t, r) in hud if t in ("TIER 22", "4270 G", "[ HARD ]")}
+    assert row1["4270 G"].right <= panel.right - Game.HUD_PAD + 1
+    assert row1["[ HARD ]"].right <= row1["4270 G"].left - Game.HUD_GAP + 1, \
+        "the badge must be spaced clear of the gold, not printed over it"
+    wall_label = g.castle.tier_label
+    wall = next(r for (t, r) in hud if t.startswith(wall_label))
+    assert wall.top >= row1["TIER 22"].bottom, \
+        "the wall material needs a dedicated line of its own"
+    mult = next(r for (t, r) in hud if t.startswith("x") and "mobs" in t)
+    assert mult.top >= wall.bottom, \
+        "the multiplier must sit below the wall line, not beside it"
+    assert abs(mult.centerx - panel.centerx) <= 3, \
+        "and be centred right above the health bar"
+    g.settings.difficulty = DEFAULT_DIFFICULTY
+    g.reset(MODE_CLASSIC)
+
     # ---------- settings ----------
     st = Settings(path=os.path.join(
         os.path.dirname(os.path.abspath(__file__)), "_selftest_settings.json"))
@@ -3748,7 +4296,7 @@ def _ui_smoke(g):
 
     g.reset(MODE_CLASSIC)
     g.draw()
-    assert set(g.difficulty_buttons) == {d[0] for d in DIFFICULTIES}, \
+    assert set(g.difficulty_buttons) == {d.key for d in DIFFICULTIES}, \
         "the menu must offer all three difficulties"
     ev(type=pygame.MOUSEBUTTONDOWN, button=1,
        pos=g.difficulty_buttons["hard"].center)
@@ -4206,6 +4754,20 @@ def _ui_smoke(g):
           "at 6 and multiplies their damage instead)")
     print("selftest: difficulty OK (Easy/Normal/Hard scale health, speed, gold "
           "and boss strength; settings persist, mute and clear-score work)")
+    hard = DIFFICULTY_BY_KEY["hard"]
+    print(f"selftest: Hard overhaul OK (+{(hard.speed - 1) * 100:.0f}% move "
+          f"speed, health scaling x{hard.hp_curve:.1f} per tier, bosses fire "
+          f"{1 / hard.boss_fire:.0f}x faster, the horn calls in "
+          f"{HARD_HORN_RUSH} elites instead of chaff)")
+    print("selftest: boss recurrence OK (a dead boss's sprite, regalia and "
+          "projectiles are all purged and the active-boss flags cleared, so a "
+          "repeat boss inherits nothing from its first appearance)")
+    print("selftest: HUD layout OK (tier/badge/gold, wall material and the "
+          "gold multiplier each own a line; no two labels overlap at tier 22 "
+          "with the longest wall name on Hard)")
+    print(f"selftest: crash logging OK (full tracebacks written to "
+          f"{os.path.basename(LOG_FILE)} and echoed to the console, with the "
+          "mode, tier, difficulty and live bosses at the moment it broke)")
     print(f"selftest: betrayal OK (a flung Necromancer is imprisoned, raises "
           f"up to {TRAP_SKELETON_CAP} allies every {TRAP_SKELETON_RATE:.0f}s; "
           "rivals shoot the prisoner, Undead Sentinels make allies chase "
@@ -4242,6 +4804,12 @@ def selftest(frames=32000):
     init_pygame()
     screen = pygame.display.set_mode((WIDTH, HEIGHT))
     g = Game(screen)
+    # the UI smoke test clicks the difficulty buttons, which saves.  Point the
+    # settings at a scratch file so a self-test can never leave the player's
+    # real settings.json (and therefore the next run) on another difficulty.
+    g.settings = Settings(path=os.path.join(
+        os.path.dirname(os.path.abspath(__file__)), "_selftest_run.json"))
+    g.settings.difficulty = DEFAULT_DIFFICULTY
     g.start_wave()
     dt = 1.0 / 60.0
     seen_types, held, hold_left = set(), None, 0
@@ -4315,6 +4883,10 @@ def selftest(frames=32000):
     else:
         extra = " (plus summoned Skeletons)" if "Skeleton" in seen_types else ""
         print(f"selftest: all 8 mob types and all 3 bosses appeared{extra}.")
+    try:
+        os.remove(g.settings.path)
+    except OSError:
+        pass
     pygame.quit()
     return not missing
 

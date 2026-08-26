@@ -1,3 +1,7 @@
 __pycache__/
 *.py[cod]
 settings.json
+game_errors.log
+game_errors.log.*
+_selftest_*.json
+_selftest_*.log

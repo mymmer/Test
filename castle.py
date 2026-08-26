@@ -27,7 +27,8 @@ class Projectile:
     def __init__(self, game, x, y, vx, vy, kind, damage,
                  splash=0.0, pierce=0, grav=0.0, hostile=False,
                  color=None, life=5.0, stun=0.0,
-                 bonus_air=1.0, bonus_heavy=1.0, at_prisoner=False):
+                 bonus_air=1.0, bonus_heavy=1.0, at_prisoner=False,
+                 owner_uid=0):
         self.game = game
         self.x, self.y = float(x), float(y)
         self.vx, self.vy = float(vx), float(vy)
@@ -38,6 +39,9 @@ class Projectile:
         self.grav = float(grav)
         self.hostile = bool(hostile)
         self.at_prisoner = bool(at_prisoner)   # a rival's shot at the cage
+        # who fired it: lets the game drop a dead boss's shots along with the
+        # boss itself, so nothing outlives its owner
+        self.owner_uid = int(owner_uid)
         # counter multipliers travel with the shot and are resolved against
         # each victim individually
         self.bonus_air = float(bonus_air)

@@ -189,7 +189,13 @@ class Enemy:
         if diff != 1.0:
             hp_m *= diff
             dmg_m *= diff
-            spd_m = 1.0 + (spd_m - 1.0) * diff
+            # speed is deliberately not stretched here: difficulty moves it
+            # with one flat multiplier instead, applied further down.
+        # Hard steepens the health curve itself -- the growth *earned per
+        # tier* is multiplied, so tier 1 is barely touched and tier 20 hurts.
+        curve = getattr(game, "enemy_hp_curve", 1.0)
+        if curve != 1.0:
+            hp_m = 1.0 + (hp_m - 1.0) * curve
         # endgame tiers stack on top of the normal per-wave scaling and
         # repaint the mob so the danger is readable at a glance
         self.tier = endgame_tier(wave)
@@ -210,7 +216,10 @@ class Enemy:
         self.layers = self.ARMOR_LAYERS
         self.strip_progress = 0.0      # 0..1 toward prying the next plate
         self.vulnerable = 1.0          # damage taken multiplier once stripped
-        self.speed = self.BASE_SPEED * spd_m
+        # a flat base-speed multiplier on top of the wave curve --
+        # Hard mobs close the distance 40% sooner at every tier
+        self.speed = (self.BASE_SPEED * spd_m
+                      * getattr(game, "enemy_speed_scale", 1.0))
         self.damage = self.BASE_DAMAGE * dmg_m
         self.gold = int(round(self.GOLD * (1.0 + 0.05 * (wave - 1))))
 
@@ -1216,7 +1225,8 @@ class Necromancer(Enemy):
         speed = 430.0
         self.game.projectiles.append(Projectile(
             self.game, self.x, self.y - 8, math.cos(a) * speed,
-            math.sin(a) * speed, "magic", self.damage, hostile=True))
+            math.sin(a) * speed, "magic", self.damage, hostile=True,
+            owner_uid=self.uid))
         self.glow = 1.0
 
     def on_trapped(self):
@@ -1233,7 +1243,8 @@ class Necromancer(Enemy):
         self.game.projectiles.append(Projectile(
             self.game, self.x, self.y - 8, math.cos(a) * speed,
             math.sin(a) * speed, "magic", RIVAL_BOLT_DAMAGE,
-            hostile=True, color=(214, 130, 255), at_prisoner=True))
+            hostile=True, color=(214, 130, 255), at_prisoner=True,
+            owner_uid=self.uid))
         self.glow = 1.0
 
     def draw_body(self, surf):
@@ -1525,6 +1536,13 @@ class Boss(Enemy):
         super().__init__(game, wave, x, y)
         self.intro = 1.6
         self.aura = 0.0
+        # interval multiplier for every projectile a boss throws: Hard sets
+        # this to 0.5, which is literally twice the rate of fire
+        self.fire_scale = getattr(game, "boss_fire_scale", 1.0)
+
+    def fire_delay(self, seconds):
+        """Scale a reload time by the difficulty's boss fire rate."""
+        return seconds * self.fire_scale
 
     def take_damage(self, amount, kind="projectile"):
         dealt = super().take_damage(amount, kind)
@@ -1713,7 +1731,7 @@ class Dragon(Boss):
 
     def __init__(self, game, wave, x=None, y=None):
         super().__init__(game, wave, x, y)
-        self.breath_timer = 4.0
+        self.breath_timer = self.fire_delay(4.0)
         self.breathing = 0.0
         self.shot_timer = 0.0
         self.standoff_x = CASTLE_FRONT + 330
@@ -1744,13 +1762,13 @@ class Dragon(Boss):
             self.breathing -= dt
             self.shot_timer -= dt
             if self.shot_timer <= 0:
-                self.shot_timer = self.SHOT_INTERVAL
+                self.shot_timer = self.fire_delay(self.SHOT_INTERVAL)
                 self.spit_fire(self.BREATH_POWER)
             return
 
         self.breath_timer -= dt
         if self.breath_timer <= 0:
-            self.breath_timer = random.uniform(4.4, 5.8)
+            self.breath_timer = self.fire_delay(random.uniform(4.4, 5.8))
             self.breathing = self.BREATH_TIME
             self.shot_timer = 0.0
             self.game.effects.text(self.x, self.y - self.h, "FIRE BREATH!",
@@ -1806,7 +1824,7 @@ class Dragon(Boss):
         self.game.projectiles.append(Projectile(
             self.game, mx, my, vx, vy, "fire", self.damage * power,
             splash=92.0, grav=GRAVITY * 0.35, hostile=True, life=t + 1.2,
-            stun=0.8))
+            stun=0.8, owner_uid=self.uid))
         self.game.effects.burst(mx, my, 8, (255, 180, 80), speed=200,
                                 life=0.35, grav=-60)
 
@@ -1878,7 +1896,7 @@ class LichLord(Boss):
         # always be finished, whatever the player built
         self.standoff_x = CASTLE_FRONT + 400
         self.summon_timer = 3.0
-        self.bolt_timer = 2.0
+        self.bolt_timer = self.fire_delay(2.0)
         self.phase_timer = 0.0
         self.shield = 0.0
         self.orb = 0.0
@@ -1959,7 +1977,7 @@ class LichLord(Boss):
 
         self.bolt_timer -= dt
         if self.bolt_timer <= 0:
-            self.bolt_timer = random.uniform(1.2, 2.0)
+            self.bolt_timer = self.fire_delay(random.uniform(1.2, 2.0))
             self.death_bolt()
 
         self.phase_timer -= dt
@@ -2014,7 +2032,7 @@ class LichLord(Boss):
         self.game.projectiles.append(Projectile(
             self.game, self.x, self.y - 20, math.cos(a) * speed,
             math.sin(a) * speed, "magic", self.damage, splash=54.0,
-            hostile=True, life=4.0))
+            hostile=True, life=4.0, owner_uid=self.uid))
         self.orb = 1.0
 
     def draw_body(self, surf):
