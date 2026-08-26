@@ -81,6 +81,593 @@ def format_clock(seconds):
     return f"{seconds // 60:02d}:{seconds % 60:02d}"
 
 
+# ==============================================================================
+#  TALENT TREE
+# ==============================================================================
+#
+#  Six branches.  A node only becomes available once enough points have gone
+#  into its own branch, so each branch deepens as you commit to it.
+#  Talent(key, branch, tier, name, max_rank, per_rank, description)
+#  `tier` is the number of points that must already be in the branch.
+# ==============================================================================
+
+class Talent:
+    def __init__(self, key, branch, tier, name, max_rank, per_rank, desc):
+        self.key = key
+        self.branch = branch
+        self.tier = tier
+        self.name = name
+        self.max_rank = max_rank
+        self.per_rank = per_rank
+        self.desc = desc
+        self.rect = pygame.Rect(0, 0, 0, 0)
+
+
+TALENT_BRANCHES = (
+    ("offense", "OFFENSE"),
+    ("defense", "DEFENCE"),
+    ("utility", "UTILITY"),
+    ("aero", "AERO-MASTERY"),
+    ("necromancy", "NECROMANCY"),
+    ("arcane", "ARCANE"),
+)
+
+TALENTS = [
+    # --- OFFENCE ---------------------------------------------------------
+    Talent("rate", "offense", 0, "Rapid Fire", 5, 0.06,
+           "Every emplacement reloads {v:.0%} faster."),
+    Talent("power", "offense", 0, "Sharpened Heads", 5, 0.08,
+           "All tower damage +{v:.0%}."),
+    Talent("crit", "offense", 2, "Critical Aim", 5, 0.05,
+           "{v:.0%} chance for a shot to hit for triple."),
+    Talent("pierce", "offense", 4, "Piercing Shot", 3, 1.0,
+           "Bolts and arrows punch through {v:.0f} extra bodies."),
+    Talent("splash", "offense", 6, "Wide Ordnance", 4, 0.10,
+           "Explosive blast radius +{v:.0%}."),
+    Talent("overcharge", "offense", 9, "Hair Trigger", 3, 0.18,
+           "Manual overcharge recharges {v:.0%} sooner."),
+
+    # --- DEFENCE ---------------------------------------------------------
+    Talent("maxhp", "defense", 0, "Deep Foundations", 5, 0.10,
+           "Castle maximum health +{v:.0%}."),
+    Talent("regen", "defense", 0, "Barricade Repair Crew", 4, 0.012,
+           "The outer barricade regrows {v:.1%} of its health a second."),
+    Talent("spikedot", "defense", 2, "Barbed Spikes", 4, 0.9,
+           "Spiked walls also bleed attackers for {v:.1f}x damage over time."),
+    Talent("towerhp", "defense", 3, "Reinforced Platforms", 4, 0.18,
+           "Emplacements have +{v:.0%} health."),
+    Talent("rebuild", "defense", 5, "Standby Crews", 3, 0.20,
+           "Downed emplacements rebuild {v:.0%} faster."),
+    Talent("thorns", "defense", 8, "Iron Bulwark", 3, 0.07,
+           "The castle takes {v:.0%} less damage."),
+
+    # --- UTILITY ---------------------------------------------------------
+    Talent("greed", "utility", 0, "Crowd Financier", 5, 0.12,
+           "Screen-population gold bonus is {v:.0%} stronger."),
+    Talent("lighthands", "utility", 0, "Light Hands", 4, 0.14,
+           "Heavy units feel {v:.0%} lighter on the cursor."),
+    Talent("haggle", "utility", 2, "Haggler", 4, 0.06,
+           "Everything in the armoury costs {v:.0%} less."),
+    Talent("purse", "utility", 3, "Fat Purse", 4, 40.0,
+           "Start each wave with {v:.0f} extra gold."),
+    Talent("showman", "utility", 5, "Showman", 4, 0.15,
+           "Fling scores are worth +{v:.0%}."),
+    Talent("scavenge", "utility", 7, "Scavenger", 3, 0.10,
+           "Every kill pays {v:.0%} more gold."),
+
+    # --- AERO-MASTERY ----------------------------------------------------
+    Talent("stormwinds", "aero", 0, "Storm Winds", 1, STORM_WIND_SLOW,
+           "While a high HEADWIND blows, every enemy is {v:.0%} slower."),
+    Talent("throwarm", "aero", 0, "Throwing Arm", 5, 0.08,
+           "Your throws leave the hand {v:.0%} faster."),
+    Talent("updraft", "aero", 2, "Updraft", 4, 0.12,
+           "Fall damage from your throws +{v:.0%}."),
+    Talent("conductor", "aero", 4, "Lightning Rod", 4, 0.15,
+           "Storm lightning hits for +{v:.0%}."),
+    Talent("gale", "aero", 6, "Gale Force", 3, 0.25,
+           "Wind pushes {v:.0%} harder -- on your throws only."),
+    Talent("tempest", "aero", 9, "Tempest Caller", 1, 1.0,
+           "Thunderstorms roll in twice as often."),
+
+    # --- NECROMANCY ------------------------------------------------------
+    Talent("bonecraft", "necromancy", 0, "Bonecraft", 5, 0.16,
+           "Friendly skeletons have +{v:.0%} health and damage."),
+    Talent("hostmaster", "necromancy", 0, "Host Master", 4, 1.0,
+           "{v:.0f} more friendly skeletons may stand at once."),
+    Talent("quickraise", "necromancy", 2, "Quick Raise", 4, 0.12,
+           "The imprisoned Necromancer works {v:.0%} faster."),
+    Talent("gravechill", "necromancy", 4, "Grave Chill", 3, 0.06,
+           "Enemies fighting your skeletons are {v:.0%} slower."),
+    Talent("secondwind", "necromancy", 7, "Second Wind", 2, 20.0,
+           "Friendly skeletons last {v:.0f}s longer before crumbling."),
+    Talent("bonewall", "necromancy", 9, "Bone Wall", 3, 0.12,
+           "Friendly skeletons shrug off {v:.0%} of incoming damage."),
+
+    # --- ARCANE ----------------------------------------------------------
+    Talent("focus", "arcane", 0, "Arcane Focus", 5, 0.07,
+           "Active skills come off cooldown {v:.0%} sooner."),
+    Talent("amplify", "arcane", 0, "Amplify", 5, 0.10,
+           "Active skills hit for +{v:.0%}."),
+    Talent("widecast", "arcane", 3, "Wide Cast", 4, 0.12,
+           "Active skill areas are {v:.0%} larger."),
+    Talent("emberfall", "arcane", 5, "Emberfall", 3, 0.30,
+           "Meteor fire burns {v:.0%} longer."),
+    Talent("eyeofstorm", "arcane", 8, "Eye of the Storm", 2, 0.25,
+           "Tornadoes last {v:.0%} longer and pull harder."),
+    Talent("twincast", "arcane", 10, "Twin Cast", 2, 0.5,
+           "Meteor Shower drops {v:.0%} more rocks."),
+]
+
+TALENTS_BY_KEY = {t.key: t for t in TALENTS}
+
+
+class TalentTree:
+    """Passive progression. Points are earned per wave (Classic) or per
+    minute survived (Endless) and spent on tier-gated nodes."""
+
+    def __init__(self, game):
+        self.game = game
+        self.points = 0
+        self.earned = 0
+        self.ranks = {t.key: 0 for t in TALENTS}
+        self.scroll = 0
+
+    # -- economy ---------------------------------------------------------
+    def award(self, n=1, reason=""):
+        if n <= 0:
+            return
+        self.points += n
+        self.earned += n
+        self.game.announce(f"+{n} TALENT POINT{'S' if n > 1 else ''}{reason}",
+                           C_TALENT, 2.4)
+
+    def branch_points(self, branch):
+        return sum(r for k, r in self.ranks.items()
+                   if TALENTS_BY_KEY[k].branch == branch)
+
+    def unlocked(self, talent):
+        return self.branch_points(talent.branch) >= talent.tier
+
+    def can_buy(self, talent):
+        return (self.points > 0 and self.unlocked(talent)
+                and self.ranks[talent.key] < talent.max_rank)
+
+    def buy(self, talent):
+        if not self.can_buy(talent):
+            return False
+        self.ranks[talent.key] += 1
+        self.points -= 1
+        return True
+
+    def rank(self, key):
+        return self.ranks.get(key, 0)
+
+    def value(self, key):
+        """Total magnitude of a talent: rank x per-rank."""
+        t = TALENTS_BY_KEY[key]
+        return self.ranks[key] * t.per_rank
+
+    # -- the effects, read by the rest of the game ------------------------
+    @property
+    def tower_rate(self):        return 1.0 - min(0.45, self.value("rate"))
+    @property
+    def tower_damage(self):      return 1.0 + self.value("power")
+    @property
+    def crit_chance(self):       return self.value("crit")
+    @property
+    def extra_pierce(self):      return int(self.value("pierce"))
+    @property
+    def splash_mult(self):       return 1.0 + self.value("splash")
+    @property
+    def overcharge_cd(self):     return 1.0 - min(0.5, self.value("overcharge"))
+
+    @property
+    def castle_hp(self):         return 1.0 + self.value("maxhp")
+    @property
+    def barricade_regen(self):   return self.value("regen")
+    @property
+    def spike_dot(self):         return self.value("spikedot")
+    @property
+    def tower_hp(self):          return 1.0 + self.value("towerhp")
+    @property
+    def rebuild_mult(self):      return 1.0 - min(0.6, self.value("rebuild"))
+    @property
+    def damage_taken(self):      return 1.0 - min(0.4, self.value("thorns"))
+
+    @property
+    def gold_pop(self):          return 1.0 + self.value("greed")
+    @property
+    def grab_bonus(self):        return 1.0 + self.value("lighthands")
+    @property
+    def shop_discount(self):     return 1.0 - min(0.4, self.value("haggle"))
+    @property
+    def wave_purse(self):        return self.value("purse")
+    @property
+    def score_mult(self):        return 1.0 + self.value("showman")
+    @property
+    def kill_gold(self):         return 1.0 + self.value("scavenge")
+
+    @property
+    def storm_wind_slow(self):   return self.value("stormwinds")
+    @property
+    def throw_power(self):       return 1.0 + self.value("throwarm")
+    @property
+    def fall_damage(self):       return 1.0 + self.value("updraft")
+    @property
+    def lightning_mult(self):    return 1.0 + self.value("conductor")
+    @property
+    def wind_mult(self):         return 1.0 + self.value("gale")
+    @property
+    def storm_chance(self):      return 2.0 if self.rank("tempest") else 1.0
+
+    @property
+    def ally_power(self):        return 1.0 + self.value("bonecraft")
+    @property
+    def ally_cap_bonus(self):    return int(self.value("hostmaster"))
+    @property
+    def ally_rate(self):         return 1.0 - min(0.5, self.value("quickraise"))
+    @property
+    def grave_chill(self):       return self.value("gravechill")
+    @property
+    def ally_life(self):         return self.value("secondwind")
+
+    @property
+    def skill_cd(self):          return 1.0 - min(0.45, self.value("focus"))
+    @property
+    def skill_power(self):       return 1.0 + self.value("amplify")
+    @property
+    def skill_area(self):        return 1.0 + self.value("widecast")
+    @property
+    def fire_time(self):         return 1.0 + self.value("emberfall")
+    @property
+    def tornado_mult(self):      return 1.0 + self.value("eyeofstorm")
+    @property
+    def ally_tough(self):        return 1.0 - min(0.5, self.value("bonewall"))
+    @property
+    def meteor_count(self):      return 1.0 + self.value("twincast")
+
+
+# ==============================================================================
+#  ACTIVE SKILLS  (one slot unlocked per boss defeated)
+# ==============================================================================
+
+class FireZone:
+    """Burning ground left by a meteor."""
+
+    def __init__(self, game, x, life, dps, radius=70.0):
+        self.game = game
+        self.x = float(x)
+        self.life = self.max_life = float(life)
+        self.dps = float(dps)
+        self.radius = float(radius)
+        self.phase = random.uniform(0, 6.28)
+
+    @property
+    def alive(self):
+        return self.life > 0
+
+    def update(self, dt):
+        self.life -= dt
+        self.phase += dt * 9.0
+        for e in self.game.enemies:
+            if e.alive and not e.flying and abs(e.x - self.x) <= self.radius:
+                e.take_damage(self.dps * dt, "fire")
+        if random.random() < 0.5:
+            self.game.effects.burst(
+                self.x + random.uniform(-self.radius, self.radius),
+                GROUND_Y - 4, 1, (255, 160, 60), speed=70, life=0.5,
+                grav=-140, size=3)
+
+    def draw(self, surf):
+        a = clamp(self.life / self.max_life, 0.0, 1.0)
+        for i in range(7):
+            fx = self.x - self.radius + i * (self.radius * 2 / 6)
+            fh = (14 + 12 * math.sin(self.phase + i)) * a
+            pygame.draw.polygon(surf, (255, 150 - i * 8, 60), [
+                (fx - 7, GROUND_Y), (fx + 7, GROUND_Y),
+                (fx, GROUND_Y - fh - 10)])
+            pygame.draw.polygon(surf, (255, 226, 140), [
+                (fx - 3, GROUND_Y), (fx + 3, GROUND_Y),
+                (fx, GROUND_Y - fh * 0.55 - 5)])
+
+
+class Tornado:
+    """Sucks up regular mobs, spins them, then hurls them downfield."""
+
+    def __init__(self, game, x, life, radius, power=1.0):
+        self.game = game
+        self.x = float(x)
+        self.life = self.max_life = float(life)
+        self.radius = float(radius)
+        self.power = power
+        self.phase = 0.0
+        self.caught = {}
+
+    @property
+    def alive(self):
+        return self.life > 0
+
+    def update(self, dt):
+        self.life -= dt
+        self.phase += dt * 7.0
+        self.x += TORNADO_SPEED * dt          # drifts away from the castle
+        for e in list(self.game.enemies):
+            if not e.alive or e.IS_BOSS or not e.GRABBABLE or e.armored:
+                continue
+            d = abs(e.x - self.x)
+            if d > self.radius:
+                continue
+            if e.state in ("walk", "attack"):
+                e.state = "air"
+                e.on_release(0.0, 0.0)        # counts as a player fling
+                e.fling_hits = 0
+                self.caught[id(e)] = True
+            if e.state == "air":
+                # spiral inward and upward; the hold cancels most of gravity
+                # so they really do get carried, not merely slowed
+                pull = (1.0 - d / self.radius) * self.power
+                e.tornado_hold = 0.12
+                e.vx += ((self.x - e.x) * TORNADO_SWIRL - e.vx * 1.4) * pull * dt
+                e.vy += (-TORNADO_LIFT * pull - e.vy) * 2.4 * dt
+                e.vy = clamp(e.vy, -900.0, 220.0)
+                e.spin += dt * 16.0
+        if self.life <= 0:
+            self.burst()
+
+    def burst(self):
+        """Time's up -- everything it picked up is hurled downfield.
+
+        Keyed off what the funnel actually caught rather than what happens to
+        be near it now: heavy mobs lag behind as the tornado drifts, and they
+        should still be thrown."""
+        g = self.game
+        g.add_shake(9.0)
+        g.effects.ring(self.x, GROUND_Y - 120, 30, (200, 230, 240),
+                       speed=560, life=0.7, size=5)
+        thrown = 0
+        for e in g.enemies:
+            if not e.alive or e.state != "air":
+                continue
+            if id(e) not in self.caught and abs(e.x - self.x) > self.radius * 1.4:
+                continue
+            e.tornado_hold = 0.0
+            e.vx = abs(e.vx) + random.uniform(760, 1180)
+            e.vy = -random.uniform(520, 820)
+            thrown += 1
+        if thrown:
+            g.effects.text(self.x, GROUND_Y - 190, f"{thrown} HURLED BACK",
+                           (200, 230, 245), 26)
+
+    def draw(self, surf):
+        a = clamp(self.life / self.max_life, 0.0, 1.0)
+        top = GROUND_Y - 250
+        for i in range(13):
+            t = i / 12.0
+            y = GROUND_Y - t * 250
+            w = self.radius * (0.28 + 0.72 * t) * a
+            off = math.sin(self.phase + t * 5.0) * 12 * t
+            col = mix((150, 190, 214), (232, 244, 250), t)
+            pygame.draw.ellipse(surf, col,
+                                (self.x - w + off, y - 12, w * 2, 20), 3)
+        pygame.draw.line(surf, (210, 232, 244), (self.x, GROUND_Y),
+                         (self.x + math.sin(self.phase) * 10, top), 2)
+
+
+class Skill:
+    """One slot on the skill bar."""
+
+    def __init__(self, key, name, hotkey, cooldown, desc, needs_target=True):
+        self.key = key
+        self.name = name
+        self.hotkey = hotkey
+        self.base_cooldown = cooldown
+        self.desc = desc
+        self.needs_target = needs_target
+        self.cooldown = 0.0
+        self.rect = pygame.Rect(0, 0, 0, 0)
+
+    def full_cooldown(self, game):
+        return self.base_cooldown * game.talents.skill_cd
+
+    @property
+    def ready(self):
+        return self.cooldown <= 0
+
+    def update(self, dt):
+        self.cooldown = max(0.0, self.cooldown - dt)
+
+    def cast(self, game, x, y):
+        raise NotImplementedError
+
+
+class LightningStrike(Skill):
+    def __init__(self):
+        super().__init__("lightning", "Lightning Strike", pygame.K_q,
+                         LIGHTNING_COOLDOWN,
+                         "Call a bolt down anywhere. Vaporises a cluster of "
+                         "ground mobs.")
+
+    def cast(self, game, x, y):
+        t = game.talents
+        radius = LIGHTNING_RADIUS * t.skill_area
+        hit = 0
+        for e in game.enemies:
+            if not e.alive or abs(e.x - x) > radius:
+                continue
+            dmg = e.max_hp * LIGHTNING_DAMAGE * t.skill_power * t.lightning_mult
+            if e.IS_BOSS:
+                dmg *= 0.25          # bosses are shaken, not vaporised
+            e.take_damage(dmg, "lightning")
+            hit += 1
+        game.bolts.append([x, GROUND_Y - 40, 0.45])
+        for k in range(4):
+            game.bolts.append([x + random.uniform(-radius, radius),
+                               GROUND_Y - 30, 0.3])
+        game.storm_flash = 1.0
+        game.add_shake(13.0)
+        game.effects.ring(x, GROUND_Y - 20, 34, (200, 230, 255),
+                          speed=radius * 4, life=0.55, size=6)
+        game.effects.text(x, GROUND_Y - 150, f"{hit} VAPORISED",
+                          (190, 225, 255), 30)
+        return True
+
+
+class MeteorShower(Skill):
+    def __init__(self):
+        super().__init__("meteor", "Meteor Shower", pygame.K_w,
+                         METEOR_COOLDOWN,
+                         "Rains fireballs across the field and sets the "
+                         "ground alight.", needs_target=False)
+
+    def cast(self, game, x, y):
+        t = game.talents
+        radius = METEOR_RADIUS * t.skill_area
+        dmg = METEOR_DAMAGE * t.skill_power
+        left = max(CASTLE_FRONT + 40, x - 430)
+        for i in range(int(METEOR_COUNT * t.meteor_count)):
+            mx = clamp(left + random.uniform(0, 860), CASTLE_FRONT + 30,
+                       WIDTH - 20)
+            game.projectiles.append(Projectile(
+                game, mx + random.uniform(-90, -40), -60 - i * 26,
+                random.uniform(60, 140), random.uniform(520, 700),
+                "fire", dmg, splash=radius, grav=GRAVITY * 0.4,
+                life=5.0, color=(255, 150, 70)))
+            game.fire_zones.append(FireZone(
+                game, mx, FIRE_ZONE_TIME * t.fire_time,
+                FIRE_ZONE_DPS * t.skill_power, radius * 0.75))
+        game.add_shake(10.0)
+        game.announce("METEOR SHOWER!", (255, 170, 90), 2.2)
+        return True
+
+
+class TornadoSkill(Skill):
+    def __init__(self):
+        super().__init__("tornado", "Tornado", pygame.K_e,
+                         TORNADO_COOLDOWN,
+                         "Whips mobs into the air for maximum fall damage, "
+                         "then hurls them downfield.")
+
+    def cast(self, game, x, y):
+        t = game.talents
+        game.tornados.append(Tornado(
+            game, x, TORNADO_LIFE * t.tornado_mult,
+            TORNADO_RADIUS * t.skill_area, t.tornado_mult))
+        game.add_shake(7.0)
+        game.announce("TORNADO!", (190, 226, 240), 2.0)
+        return True
+
+
+#  Boss defeated -> the next slot on the bar lights up, in this order
+SKILL_UNLOCK_ORDER = (LightningStrike, MeteorShower, TornadoSkill)
+
+
+class SkillPanel:
+    """The skill bar: unlocking, cooldowns, targeting and drawing."""
+    SLOT = 62
+    GAP = 12
+
+    def __init__(self, game):
+        self.game = game
+        self.skills = []
+        self.aiming = None          # skill waiting for a click to place it
+
+    def unlock_next(self):
+        if len(self.skills) >= len(SKILL_UNLOCK_ORDER):
+            return None
+        skill = SKILL_UNLOCK_ORDER[len(self.skills)]()
+        self.skills.append(skill)
+        return skill
+
+    def update(self, dt):
+        for s in self.skills:
+            s.update(dt)
+        if self.aiming is not None and not self.aiming.ready:
+            self.aiming = None
+
+    # -- input -----------------------------------------------------------
+    def activate(self, skill):
+        """Arm a skill: targeted ones wait for a click, the rest fire now."""
+        if not skill.ready:
+            self.game.shop_msg = f"{skill.name} is still recharging."
+            self.game.shop_msg_t = 1.2
+            return False
+        if skill.needs_target:
+            self.aiming = skill
+            return True
+        return self.cast(skill, *self.game.mouse_pos)
+
+    def cast(self, skill, x, y):
+        if not skill.ready:
+            return False
+        skill.cast(self.game, x, y)
+        skill.cooldown = skill.full_cooldown(self.game)
+        self.aiming = None
+        self.game.stats_casts += 1
+        return True
+
+    def handle_key(self, key):
+        for s in self.skills:
+            if s.hotkey == key:
+                return self.activate(s)
+        return False
+
+    def handle_click(self, pos):
+        """Returns True when the click was consumed by the skill bar."""
+        for s in self.skills:
+            if s.rect.collidepoint(pos):
+                self.activate(s)
+                return True
+        if self.aiming is not None:
+            self.cast(self.aiming, pos[0], pos[1])
+            return True
+        return False
+
+    # -- drawing ---------------------------------------------------------
+    def bar_rect(self):
+        n = max(1, len(self.skills))
+        w = n * self.SLOT + (n - 1) * self.GAP
+        return pygame.Rect(WIDTH // 2 - w // 2, HEIGHT - 96, w, self.SLOT)
+
+    def draw(self, surf):
+        if not self.skills:
+            return
+        base = self.bar_rect()
+        for i, s in enumerate(self.skills):
+            r = pygame.Rect(base.x + i * (self.SLOT + self.GAP), base.y,
+                            self.SLOT, self.SLOT)
+            s.rect = r
+            colour = SKILL_COLORS.get(s.key, C_WHITE)
+            ready = s.ready
+            pygame.draw.rect(surf, (26, 30, 46), r, border_radius=8)
+            edge = colour if ready else C_SKILL_COOL
+            if self.aiming is s:
+                edge = C_SKILL_READY
+            pygame.draw.rect(surf, edge, r, 3, border_radius=8)
+            draw_skill_glyph(surf, s.key, r.centerx, r.centery - 2,
+                             self.SLOT * 0.62,
+                             colour if ready else shade(colour, 0.45))
+            if not ready:
+                frac = s.cooldown / max(0.01, s.full_cooldown(self.game))
+                veil = pygame.Surface((r.w - 6, int((r.h - 6) * frac)),
+                                      pygame.SRCALPHA)
+                veil.fill((8, 10, 18, 190))
+                surf.blit(veil, (r.x + 3, r.y + 3))
+                draw_text(surf, f"{s.cooldown:.0f}", r.centerx, r.centery - 9,
+                          24, C_WHITE, "center", True)
+            key_name = pygame.key.name(s.hotkey).upper()
+            draw_text(surf, key_name, r.centerx, r.bottom - 15, 16,
+                      C_DIM if not ready else C_WHITE, "center", True)
+        if self.aiming is not None:
+            mx, my = self.game.mouse_pos
+            colour = SKILL_COLORS.get(self.aiming.key, C_WHITE)
+            rad = int((LIGHTNING_RADIUS if self.aiming.key == "lightning"
+                       else TORNADO_RADIUS) * self.game.talents.skill_area)
+            pygame.draw.circle(surf, colour, (mx, GROUND_Y - 10), rad, 2)
+            pygame.draw.line(surf, colour, (mx, 0), (mx, GROUND_Y), 1)
+            draw_text(surf, f"CLICK TO PLACE {self.aiming.name.upper()}",
+                      mx, GROUND_Y + 8, 18, colour, "center", True)
+
+
 # lets the shop cards show each tower's strategic counter tag
 TOWER_FOR_KEY = {"bowman": Bowman, "ballista": Ballista, "cannon": Cannon}
 
@@ -96,11 +683,12 @@ class ShopItem:
         self.buy_fn = buy_fn
         self.status_fn = status_fn
         self.avail_fn = avail_fn or (lambda: True)
+        self.discount = 1.0        # set from the talent tree each frame
         self.rect = pygame.Rect(0, 0, 0, 0)
 
     @property
     def cost(self):
-        return int(self.cost_fn())
+        return int(self.cost_fn() * self.discount)
 
 
 
@@ -140,6 +728,7 @@ MENU_PARAGRAPHS = (
 
 class Game:
     MENU, PLAYING, SHOP, PAUSED, GAMEOVER = "menu", "playing", "shop", "paused", "over"
+    TALENTS = "talents"
 
     def __init__(self, screen=None, headless=False):
         self.headless = headless
@@ -162,16 +751,27 @@ class Game:
         self.started = False
         self.mode_buttons = {}
         self.shop_btn = pygame.Rect(0, 0, 0, 0)
+        self.talent_btn = pygame.Rect(0, 0, 0, 0)
+        self.talent_back_btn = pygame.Rect(0, 0, 0, 0)
+        self.talent_return = self.SHOP
         self.wave = 0
         self.gold = STARTING_GOLD
         self.castle = Castle(self)
         self.outpost = Outpost(self)
         self.barricade = Barricade(self)
         self.spikes = SpikeWalls(self)
+        self.talents = TalentTree(self)
+        self.skills = SkillPanel(self)
         self.enemies = []
+        self.allies = []              # friendly skeletons, never targeted by towers
+        self.fire_zones = []
+        self.tornados = []
         self.projectiles = []
         self.effects = Effects()
         self.items = []
+        self.allies = []
+        self.fire_zones = []
+        self.tornados = []
         self.bolts = []
         self.spawn_queue = []
         self.spawn_timer = 0.0
@@ -200,6 +800,9 @@ class Game:
         self.stats_kills = 0
         self.stats_thrown_damage = 0.0
         self.stats_plates_torn = 0
+        self.stats_trapped = 0
+        self.stats_casts = 0
+        self.talent_seconds = 0.0     # Endless: drip-feeds talent points
         self.score = 0
         self.best_fling = 0
         self.best_combo = 1.0
@@ -449,16 +1052,18 @@ class Game:
     @property
     def grab_capacity(self):
         """Heaviest MASS the cursor can currently lift."""
-        return GRAB_CAPACITY[int(clamp(self.grab_level, 0, GRAB_MAX_LEVEL))]
+        return (GRAB_CAPACITY[int(clamp(self.grab_level, 0, GRAB_MAX_LEVEL))]
+                * self.talents.grab_bonus)
 
     @property
     def gold_multiplier(self):
         """Risk vs reward: a crowded screen pays far better, but a crowd is
         exactly what flattens the castle."""
         n = sum(1 for e in self.enemies if e.alive)
-        base = min(POP_GOLD_CAP,
-                   1.0 + POP_GOLD_STEP * max(0, n - POP_GOLD_FREE))
-        return base * (1.0 + self.horn_bonus)
+        step = POP_GOLD_STEP * self.talents.gold_pop
+        base = min(POP_GOLD_CAP * self.talents.gold_pop,
+                   1.0 + step * max(0, n - POP_GOLD_FREE))
+        return base * (1.0 + self.horn_bonus) * self.talents.kill_gold
 
     def blow_horn(self):
         """Taunt the horde: the rest of the wave charges in at once, and
@@ -493,7 +1098,7 @@ class Game:
         if not self.storm or not enemy.alive or enemy.storm_cd > 0:
             return
         enemy.storm_cd = STORM_COOLDOWN
-        dmg = enemy.max_hp * STORM_DAMAGE
+        dmg = enemy.max_hp * STORM_DAMAGE * self.talents.lightning_mult
         enemy.take_damage(dmg, "lightning")
         self.storm_flash = 1.0
         self.add_shake(8.0)
@@ -504,7 +1109,7 @@ class Game:
                           (190, 225, 255), 26)
 
     def add_score(self, pts, x, y, hits, combo):
-        pts = int(pts * (1.0 + self.horn_bonus))
+        pts = int(pts * (1.0 + self.horn_bonus) * self.talents.score_mult)
         self.score += pts
         self.best_fling = max(self.best_fling, pts)
         if hits > 0:
@@ -531,6 +1136,17 @@ class Game:
         """Anything that strikes a spiked wall takes damage straight back."""
         self.spikes.bite(enemy)
 
+    def enemy_slow(self, enemy):
+        """Combined speed multiplier the talent tree imposes on an enemy."""
+        slow = 1.0
+        gale = self.talents.storm_wind_slow
+        if gale > 0 and self.wind < 0 and abs(self.wind) >= WIND_MAX * HEADWIND_THRESHOLD:
+            slow *= (1.0 - gale)
+        chill = self.talents.grave_chill
+        if chill > 0 and enemy.state == "attack" and self.allies:
+            slow *= (1.0 - min(0.6, chill))
+        return slow
+
     def add_shake(self, amount):
         # capped: the world is blitted at an offset, so a big shake would
         # expose bare edges at the screen border
@@ -541,6 +1157,35 @@ class Game:
 
     def spawn_enemy(self, e):
         self.enemies.append(e)
+
+    def make_ally(self, x):
+        """Built here so castle.py never has to import from enemies.py."""
+        ally = FriendlySkeleton(self, max(1, self.wave), x)
+        ally.life += self.talents.ally_life
+        return ally
+
+    def ally_in_front(self, enemy):
+        """The friendly skeleton blocking this enemy's path, if any."""
+        for a in self.allies:
+            if not a.alive:
+                continue
+            if abs(a.depth - enemy.depth) > 22:
+                continue
+            gap = enemy.x - a.x
+            if 0 <= gap <= (enemy.w + a.w) * 0.5 + ALLY_ENGAGE_RANGE * 0.5:
+                return a
+        return None
+
+    def on_boss_defeated(self, boss):
+        """Every boss killed lights up the next slot on the skill bar."""
+        skill = self.skills.unlock_next()
+        if skill is None:
+            self.talents.award(3, " -- boss bounty")
+            return
+        self.announce(f"SKILL UNLOCKED: {skill.name}  [{pygame.key.name(skill.hotkey).upper()}]",
+                      SKILL_COLORS.get(skill.key, C_GOLD), 5.0)
+        self.announce(skill.desc, C_DIM, 5.0)
+        self.talents.award(2, " -- boss bounty")
 
     def summonable_types(self):
         pool = [c for (c, _) in unlocked_types(max(1, self.wave))
@@ -560,7 +1205,7 @@ class Game:
     def roll_weather(self, announce=True):
         """Pick this stretch's wind and storm."""
         self.wind = random.uniform(-1.0, 1.0) * WIND_MAX
-        self.storm = random.random() < STORM_CHANCE
+        self.storm = random.random() < STORM_CHANCE * self.talents.storm_chance
         if not announce:
             return
         if abs(self.wind) > WIND_MAX * 0.45:
@@ -617,6 +1262,10 @@ class Game:
         """Advance the run clock, step the difficulty, and run the boss
         timetable defined in the tuning block at the top of this file."""
         self.play_time += dt
+        self.talent_seconds += dt
+        if self.talent_seconds >= TALENT_SECONDS_PER_POINT:
+            self.talent_seconds -= TALENT_SECONDS_PER_POINT
+            self.talents.award(1, " -- another minute survived")
 
         tier = 1 + int(self.play_time / ENDLESS_TIER_SECONDS)
         if tier != self.wave:
@@ -732,7 +1381,8 @@ class Game:
 
     def end_wave(self):
         self.wave_active = False
-        bonus = 80 + self.wave * 22
+        self.talents.award(TALENT_POINTS_PER_WAVE, f" -- wave {self.wave}")
+        bonus = 80 + self.wave * 22 + int(self.talents.wave_purse)
         self.gold += bonus
         self.castle.restore_towers()
         self.effects.clear()
@@ -1059,6 +1709,9 @@ class Game:
         if self.shop_msg_t > 0:
             self.shop_msg_t -= dt
 
+        if self.state == self.TALENTS:
+            self.effects.update(dt)
+            return
         if self.state != self.PLAYING:
             # the hit flash must keep fading even on the pause / defeat
             # screens, or the castle stays frozen mid-flash
@@ -1083,14 +1736,29 @@ class Game:
                 if e.IS_BOSS:
                     self.add_shake(8.0)
 
+        self.skills.update(dt)
         self.castle.update(dt)
         self.outpost.update(dt)
         self.barricade.update(dt)
+        regen = self.talents.barricade_regen
+        if regen > 0 and self.barricade.alive:
+            self.barricade.hp = min(self.barricade.max_hp,
+                                    self.barricade.hp
+                                    + self.barricade.max_hp * regen * dt)
         for it in self.items:
             it.update(dt)
         self.items = [it for it in self.items if it.alive]
         for e in self.enemies:
             e.update(dt)
+        for a in self.allies:
+            a.update(dt)
+        self.allies = [a for a in self.allies if a.alive]
+        for z in self.fire_zones:
+            z.update(dt)
+        self.fire_zones = [z for z in self.fire_zones if z.alive]
+        for t in self.tornados:
+            t.update(dt)
+        self.tornados = [t for t in self.tornados if t.alive]
         self.separate_enemies(dt)
         for p in self.projectiles:
             p.update(dt)
@@ -1163,6 +1831,20 @@ class Game:
             return
 
         if ev.type == pygame.KEYDOWN:
+            # --- talent tree door, and the skill hotkeys ---
+            if ev.key == pygame.K_t:
+                if self.state == self.TALENTS:
+                    self.close_talents()
+                elif self.state in (self.SHOP, self.PLAYING):
+                    self.open_talents()
+                return
+            if self.state == self.TALENTS:
+                if ev.key == pygame.K_ESCAPE:
+                    self.close_talents()
+                return
+            if (self.state == self.PLAYING
+                    and self.skills.handle_key(ev.key)):
+                return
             if ev.key in (pygame.K_ESCAPE, pygame.K_p):
                 if self.state == self.PLAYING:
                     self.state = self.PAUSED
@@ -1187,7 +1869,21 @@ class Game:
 
         if ev.type == pygame.MOUSEBUTTONDOWN and ev.button == 1:
             self.mouse_pos = ev.pos
+            if self.state == self.TALENTS:
+                if self.talent_back_btn.collidepoint(ev.pos):
+                    self.close_talents()
+                    return
+                for t in TALENTS:
+                    if t.rect.collidepoint(ev.pos) and self.talents.can_buy(t):
+                        self.talents.buy(t)
+                        self.effects.text(t.rect.centerx, t.rect.top - 6,
+                                          "+1", BRANCH_COLORS[t.branch], 22)
+                        return
+                return
             if self.state == self.PLAYING:
+                # the skill bar gets first refusal on a click
+                if self.skills.handle_click(ev.pos):
+                    return
                 if self.shop_btn.collidepoint(ev.pos):
                     self.open_realtime_shop()
                     return
@@ -1201,6 +1897,9 @@ class Game:
                         self.choose_mode(mode)
                         return
             elif self.state == self.SHOP:
+                if self.talent_btn.collidepoint(ev.pos):
+                    self.open_talents()
+                    return
                 if self.start_btn.collidepoint(ev.pos):
                     self.begin_play()
                     return
@@ -1234,12 +1933,20 @@ class Game:
                        key=lambda e: (0 if e.flying else 1, e.depth, e.x))
         for e in order:
             e.draw(s)
+        for a in self.allies:
+            a.draw(s)
         for it in self.items:
             it.draw(s)
+        for z in self.fire_zones:
+            z.draw(s)
+        for t in self.tornados:
+            t.draw(s)
         for p in self.projectiles:
             p.draw(s)
         self.effects.draw(s)
         self.draw_weather(s)
+        if self.state in (self.PLAYING, self.PAUSED):
+            self.skills.draw(s)
         if self.state in (self.PLAYING, self.PAUSED):
             self.draw_horn(s)
 
@@ -1260,6 +1967,8 @@ class Game:
             self.draw_menu(self.screen)
         elif self.state == self.SHOP:
             self.draw_shop(self.screen)
+        elif self.state == self.TALENTS:
+            self.draw_talents(self.screen)
         elif self.state == self.PAUSED:
             self.draw_center_panel(self.screen, "PAUSED",
                                    ["Press P or ESC to resume."])
@@ -1424,7 +2133,7 @@ class Game:
     def draw_hud(self, surf):
         # top-left status block
         # Endless needs an extra row for the run clock and the SHOP button
-        panel_h = 152 if self.endless else 124
+        panel_h = (176 if self.endless else 148)
         panel = pygame.Surface((360, panel_h), pygame.SRCALPHA)
         panel.fill((*C_PANEL, 190))
         pygame.draw.rect(panel, (*C_PANEL_EDGE, 200), panel.get_rect(), 2,
@@ -1466,14 +2175,24 @@ class Game:
         if self.best_fling:
             draw_text(surf, f"best fling {self.best_fling:,}", 346, 100, 16,
                       C_DIM, "right")
+        # talent points get their own row, clear of the health bar
+        ty = 150 if self.endless else 120
+        pts = self.talents.points
+        draw_text(surf, f"{pts} TALENT POINT{'S' if pts != 1 else ''}  [T]",
+                  28, ty, 19, C_TALENT_ON if pts else C_DIM, bold=bool(pts))
+        if self.skills.skills:
+            ready = sum(1 for s in self.skills.skills if s.ready)
+            draw_text(surf, f"skills {ready}/{len(self.skills.skills)} ready",
+                      346, ty + 2, 16,
+                      C_SKILL_READY if ready else C_DIM, "right")
 
         # Endless: the run clock and the live armoury button get their own row
         self.shop_btn = pygame.Rect(0, 0, 0, 0)
         if self.endless:
-            draw_text(surf, format_clock(self.play_time), 28, 124, 24,
+            draw_text(surf, format_clock(self.play_time), 28, 122, 24,
                       (150, 220, 255), bold=True)
             if self.state in (self.PLAYING, self.PAUSED):
-                b = pygame.Rect(240, 120, 106, 26)
+                b = pygame.Rect(240, 118, 106, 26)
                 self.shop_btn = b
                 hot = b.collidepoint(self.mouse_pos)
                 pygame.draw.rect(surf, (46, 92, 74) if hot else (34, 66, 54),
@@ -1624,6 +2343,127 @@ class Game:
             ("Press R or click to play again.", 24, C_GOLD, True),
         ], w=760)
 
+    def open_talents(self):
+        """The tree sits alongside the armoury -- reachable from the shop in
+        Classic, and from the same mid-fight button in Endless."""
+        self.talent_return = self.state
+        self.state = self.TALENTS
+        return True
+
+    def close_talents(self):
+        self.state = getattr(self, "talent_return", self.SHOP)
+        if self.state not in (self.SHOP, self.PLAYING):
+            self.state = self.SHOP
+
+    def draw_talents(self, surf):
+        veil = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
+        veil.fill((6, 8, 16, 205))
+        surf.blit(veil, (0, 0))
+        panel = pygame.Rect(16, 26, WIDTH - 32, HEIGHT - 52)
+        pygame.draw.rect(surf, C_PANEL, panel, border_radius=12)
+        pygame.draw.rect(surf, C_TALENT, panel, 3, border_radius=12)
+
+        draw_text(surf, "TALENT TREE", panel.centerx, panel.top + 10, 36,
+                  C_TALENT_ON, "center", True)
+        pts = self.talents.points
+        draw_text(surf, f"{pts} POINT{'S' if pts != 1 else ''} UNSPENT",
+                  panel.right - 24, panel.top + 16, 26,
+                  C_GOLD if pts else C_DIM, "right", True)
+        draw_text(surf, f"spent {self.talents.earned - pts}/{self.talents.earned}",
+                  panel.left + 24, panel.top + 20, 20, C_DIM)
+
+        cols = len(TALENT_BRANCHES)
+        cw = (panel.w - 40) // cols
+        top = panel.top + 54
+        mouse = self.mouse_pos
+        hover = None
+        for ci, (branch, label) in enumerate(TALENT_BRANCHES):
+            bx = panel.left + 20 + ci * cw
+            colour = BRANCH_COLORS[branch]
+            invested = self.talents.branch_points(branch)
+            draw_text(surf, label, bx + cw // 2, top, 21, colour, "center", True)
+            draw_text(surf, f"{invested} invested", bx + cw // 2, top + 22, 15,
+                      C_DIM, "center")
+            nodes = [t for t in TALENTS if t.branch == branch]
+            ny = top + 44
+            prev_centre = None
+            for t in nodes:
+                nh = 62
+                r = pygame.Rect(bx + 8, ny, cw - 20, nh)
+                t.rect = r
+                rank = self.talents.rank(t.key)
+                unlocked = self.talents.unlocked(t)
+                maxed = rank >= t.max_rank
+                buyable = self.talents.can_buy(t)
+                if prev_centre is not None:
+                    pygame.draw.line(surf, shade(colour, 0.5 if not unlocked else 1.0),
+                                     prev_centre, (r.centerx, r.top), 2)
+                prev_centre = (r.centerx, r.bottom)
+
+                if not unlocked:
+                    bg, edge = (24, 26, 36), (62, 66, 80)
+                elif maxed:
+                    bg, edge = (34, 46, 40), C_GREEN
+                elif buyable:
+                    bg = (56, 48, 74) if r.collidepoint(mouse) else (40, 38, 60)
+                    edge = colour
+                else:
+                    bg, edge = (30, 32, 46), shade(colour, 0.6)
+                pygame.draw.rect(surf, bg, r, border_radius=7)
+                pygame.draw.rect(surf, edge, r, 2, border_radius=7)
+
+                name_col = C_WHITE if unlocked else (110, 114, 128)
+                draw_text(surf, t.name, r.centerx, r.top + 5, 18, name_col,
+                          "center", True)
+                # rank pips
+                pip_w = 12
+                total_w = t.max_rank * pip_w
+                px = r.centerx - total_w // 2
+                for k in range(t.max_rank):
+                    pr = pygame.Rect(px + k * pip_w, r.top + 26, pip_w - 3, 7)
+                    pygame.draw.rect(surf, colour if k < rank else (56, 58, 72),
+                                     pr, border_radius=2)
+                if not unlocked:
+                    draw_text(surf, f"needs {t.tier} in branch", r.centerx,
+                              r.bottom - 22, 15, (128, 132, 148), "center")
+                elif maxed:
+                    draw_text(surf, "MAXED", r.centerx, r.bottom - 22, 16,
+                              C_GREEN, "center", True)
+                else:
+                    draw_text(surf, f"rank {rank}/{t.max_rank}   1 pt",
+                              r.centerx, r.bottom - 22, 15,
+                              C_GOLD if buyable else C_DIM, "center")
+                if r.collidepoint(mouse):
+                    hover = t
+                ny += nh + 8
+
+        # tooltip for whatever the cursor is over
+        if hover is not None:
+            rank = self.talents.rank(hover.key)
+            shown = max(1, rank)
+            body = hover.desc.format(v=hover.per_rank * shown)
+            note = ("current" if rank else "at rank 1")
+            lines = wrap_text(f"{body}  ({note})", 18, 620)
+            th = 26 + len(lines) * 20
+            tip = pygame.Rect(panel.centerx - 330, panel.bottom - th - 46, 660, th)
+            pygame.draw.rect(surf, (18, 20, 32), tip, border_radius=8)
+            pygame.draw.rect(surf, BRANCH_COLORS[hover.branch], tip, 2,
+                             border_radius=8)
+            ty = tip.top + 6
+            for ln in lines:
+                draw_text(surf, ln, tip.centerx, ty, 18, C_WHITE, "center")
+                ty += 20
+
+        bw, bh = 300, 44
+        self.talent_back_btn = pygame.Rect(panel.centerx - bw // 2,
+                                           panel.bottom - bh - 8, bw, bh)
+        hot = self.talent_back_btn.collidepoint(mouse)
+        pygame.draw.rect(surf, (58, 118, 92) if hot else (42, 92, 72),
+                         self.talent_back_btn, border_radius=9)
+        pygame.draw.rect(surf, C_GREEN, self.talent_back_btn, 3, border_radius=9)
+        draw_text(surf, "BACK   [T / ESC]", self.talent_back_btn.centerx,
+                  self.talent_back_btn.y + 11, 24, C_WHITE, "center", True)
+
     def draw_shop(self, surf):
         veil = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
         veil.fill((6, 8, 16, 195))
@@ -1655,6 +2495,8 @@ class Game:
         x0 = panel.centerx - total // 2
         cy = panel.top + 76
         mouse = self.mouse_pos
+        for item in self.shop_items:
+            item.discount = self.talents.shop_discount
         for i, item in enumerate(self.shop_items):
             col, row = i % cols, i // cols
             r = pygame.Rect(x0 + col * (cw + gap), cy + row * (ch + vgap),
@@ -1705,6 +2547,19 @@ class Game:
         bw, bh = 360, 54
         self.start_btn = pygame.Rect(panel.centerx - bw // 2,
                                      panel.bottom - bh - 14, bw, bh)
+        # --- talent tree door, alongside the armoury ---
+        tb = pygame.Rect(panel.right - 250, panel.bottom - bh - 14, 226, bh)
+        self.talent_btn = tb
+        pts = self.talents.points
+        hot = tb.collidepoint(mouse)
+        pygame.draw.rect(surf, (62, 50, 88) if hot else (44, 38, 66), tb,
+                         border_radius=9)
+        pygame.draw.rect(surf, C_TALENT, tb, 3, border_radius=9)
+        draw_text(surf, "TALENTS  [T]", tb.centerx, tb.y + 8, 23,
+                  C_TALENT_ON, "center", True)
+        draw_text(surf, f"{pts} point{'s' if pts != 1 else ''} to spend",
+                  tb.centerx, tb.y + 30, 16,
+                  C_GOLD if pts else C_DIM, "center")
         hov = self.start_btn.collidepoint(mouse)
         pygame.draw.rect(surf, (58, 118, 92) if hov else (42, 92, 72),
                          self.start_btn, border_radius=10)
@@ -2159,6 +3014,202 @@ def _ui_smoke(g):
         g.update(1 / 60.0)
     assert shoved_x - ram.x > ram.speed, "the shove must outrun a normal walk"
 
+    # ---------- the Necromancer betrayal ----------
+    g.reset(MODE_CLASSIC)
+    g.state = Game.PLAYING
+    g.wave, g.wave_active = 8, False
+    post = g.outpost
+    necro = Necromancer(g, 8); necro.x = 1200; necro.y = necro.ground_y
+    g.enemies.append(necro)
+    assert necro.TRAPPABLE and necro.grabbable, \
+        "a Necromancer must be light enough to lift"
+    assert post.can_trap(necro) and not post.has_prisoner
+    necro.on_grab()
+    necro.x, necro.y = post.x - 260, post.y - 140
+    necro.on_release(560, 40)
+    for _ in range(240):
+        g.update(1 / 60.0)
+        if post.has_prisoner:
+            break
+    assert post.has_prisoner, "flinging him into the Outpost must trap him"
+    assert necro not in g.enemies, "a prisoner leaves the horde"
+    assert necro.trapped
+    second = Necromancer(g, 8)
+    assert not post.can_trap(second), "only one prisoner at a time"
+    for _ in range(int(40 * 60)):
+        g.update(1 / 60.0)
+    allies_made = len(g.allies)
+    assert allies_made > 0, "the prisoner must raise friendly skeletons"
+    assert allies_made <= TRAP_SKELETON_CAP + g.talents.ally_cap_bonus
+    assert all(a not in g.enemies for a in g.allies), \
+        "allies must never sit in the enemy list"
+
+    # they march the wrong way and then hold a forward line
+    g.reset(MODE_CLASSIC); g.state = Game.PLAYING
+    g.wave, g.wave_active = 8, False
+    ally = g.make_ally(1015); ally.depth = 0; ally.y = ally.ground_y
+    g.allies.append(ally)
+    start_x = ally.x
+    for _ in range(600):
+        g.update(1 / 60.0)
+    assert ally.x > start_x, "friendly skeletons march left-to-right"
+    assert ally.x <= ALLY_HOLD_X + 1, "and hold the line rather than leaving"
+
+    # and they actually block and damage the horde
+    g.reset(MODE_CLASSIC); g.state = Game.PLAYING
+    g.wave, g.wave_active = 8, False
+    ally = g.make_ally(700); ally.depth = 0; ally.y = ally.ground_y
+    g.allies.append(ally)
+    foe = FootSoldier(g, 8); foe.depth = 0; foe.x = 760; foe.y = foe.ground_y
+    foe.max_hp *= 8; foe.hp = foe.max_hp
+    g.enemies.append(foe)
+    foe_hp, castle_hp = foe.hp, g.castle.hp
+    for _ in range(300):
+        g.update(1 / 60.0)
+    assert foe.hp < foe_hp, "an ally must damage what it meets"
+    assert foe.x > ally.x, "and hold it out in front"
+    assert g.castle.hp == castle_hp, "so nothing reaches the wall"
+
+    # ---------- talent tree ----------
+    g.reset(MODE_CLASSIC)
+    t = g.talents
+    assert len(TALENTS) >= 30 and len(TALENT_BRANCHES) == 6
+    for branch, _label in TALENT_BRANCHES:
+        nodes = [n for n in TALENTS if n.branch == branch]
+        assert len(nodes) >= 5, f"{branch} needs depth"
+        assert any(n.tier == 0 for n in nodes), f"{branch} needs an entry node"
+        assert max(n.tier for n in nodes) >= 4, f"{branch} needs deep nodes"
+    deep = TALENTS_BY_KEY["pierce"]
+    assert not t.unlocked(deep), "deep nodes start locked"
+    assert t.points == 0 and not t.can_buy(TALENTS_BY_KEY["rate"]), \
+        "nothing is affordable with no points"
+    t.award(20)
+    for _ in range(4):
+        assert t.buy(TALENTS_BY_KEY["rate"])
+    assert t.buy(TALENTS_BY_KEY["power"])
+    assert t.branch_points("offense") == 5 and t.unlocked(deep), \
+        "investing in a branch must open its deeper nodes"
+    assert t.points == 15, "each rank costs exactly one point"
+    assert t.tower_rate < 1.0 and t.tower_damage > 1.0, \
+        "offence talents must actually change the numbers"
+    while t.buy(TALENTS_BY_KEY["rate"]):
+        pass
+    assert t.rank("rate") == TALENTS_BY_KEY["rate"].max_rank, "ranks cap"
+
+    # Storm Winds only bites in a high headwind
+    assert t.buy(TALENTS_BY_KEY["stormwinds"])
+    probe = Scout(g, 5)
+    g.wind = -WIND_MAX
+    assert abs(g.enemy_slow(probe) - (1.0 - STORM_WIND_SLOW)) < 1e-6, \
+        "Storm Winds must slow enemies in a headwind"
+    g.wind = WIND_MAX
+    assert g.enemy_slow(probe) == 1.0, "and do nothing in a tailwind"
+    g.wind = 0.0
+
+    # points are earned by playing
+    g.reset(MODE_CLASSIC); g.choose_mode(MODE_CLASSIC); g.begin_play()
+    before = g.talents.points
+    g.spawn_queue.clear(); g.enemies.clear()
+    for _ in range(180):
+        g.update(1 / 60.0)
+    assert g.talents.points == before + TALENT_POINTS_PER_WAVE, \
+        "clearing a wave must pay a talent point"
+    g.reset(MODE_ENDLESS); g.choose_mode(MODE_ENDLESS); g.begin_play()
+    before = g.talents.points
+    g.talent_seconds = TALENT_SECONDS_PER_POINT - 0.01
+    g.update(1 / 30.0)
+    assert g.talents.points == before + 1, "Endless pays a point a minute"
+
+    # ---------- active skills ----------
+    g.reset(MODE_CLASSIC); g.state = Game.PLAYING
+    g.wave, g.wave_active = 15, False
+    assert not g.skills.skills, "no skills before a boss falls"
+    for cls, expect in zip((TrollKing, Dragon, LichLord),
+                           ("lightning", "meteor", "tornado")):
+        boss = cls(g, 15); g.enemies.append(boss); boss.die()
+        assert g.skills.skills[-1].key == expect, \
+            f"{cls.NAME} must unlock {expect}"
+    assert len(g.skills.skills) == 3
+    g.enemies.clear()
+
+    def _mobs(n, x0=700, step=30, tough=3):
+        out = []
+        for i in range(n):
+            mm = FootSoldier(g, 15); mm.depth = 0; mm.x = x0 + i * step
+            mm.y = mm.ground_y; mm.max_hp *= tough; mm.hp = mm.max_hp
+            g.enemies.append(mm); out.append(mm)
+        return out
+
+    # Lightning: targeted, and it vaporises a cluster
+    bolt = g.skills.skills[0]
+    victims = _mobs(6)
+    hp0 = sum(v.hp for v in victims)
+    assert g.skills.activate(bolt) and g.skills.aiming is bolt, \
+        "a targeted skill must arm rather than fire instantly"
+    g.skills.cast(bolt, 800, 500)
+    assert sum(v.hp for v in victims) < hp0 * 0.5, "lightning must devastate"
+    assert bolt.cooldown > 0 and not bolt.ready, "and go on cooldown"
+    assert not g.skills.activate(bolt), "a cooling skill cannot be recast"
+    g.enemies.clear()
+
+    # Meteor: untargeted, lights the ground
+    rain = g.skills.skills[1]
+    victims = _mobs(8, 600, 60)
+    hp0 = sum(v.hp for v in victims)
+    zones = len(g.fire_zones)
+    g.skills.cast(rain, 800, 400)
+    assert len(g.fire_zones) > zones, "meteors must set the ground alight"
+    for _ in range(180):
+        g.update(1 / 60.0)
+    assert sum(v.hp for v in victims) < hp0, "and burn what stands in it"
+    g.enemies.clear(); g.fire_zones.clear()
+
+    # Tornado: lifts, spins, hurls downfield
+    twist = g.skills.skills[2]
+    victims = _mobs(6, 700, 30, tough=200)
+    xs = [v.x for v in victims]
+    hp0 = sum(v.hp for v in victims)
+    g.skills.cast(twist, 760, 400)
+    lifted = 0
+    peak = 0.0
+    # track how far downfield each one gets: they bounce off the far
+    # boundary and walk back, so the *final* position says nothing
+    far = list(xs)
+    for _ in range(int(11 * 60)):
+        g.update(1 / 60.0)
+        lifted = max(lifted, sum(1 for v in victims if v.state == "air"))
+        peak = max(peak, max(GROUND_Y - v.y for v in victims))
+        far = [max(f, v.x) for f, v in zip(far, victims)]
+    assert lifted >= 4, "a tornado must pick mobs up"
+    assert peak > 200, "and genuinely carry them, not just slow their fall"
+    assert sum(1 for f, x in zip(far, xs) if f > x + 80) >= 4, \
+        "and hurl them back downfield"
+    assert sum(v.hp for v in victims) < hp0, "the landing must hurt"
+    g.enemies.clear(); g.tornados.clear()
+
+    # cooldowns tick, and the Arcane branch shortens them
+    base = twist.full_cooldown(g)
+    g.talents.award(10)
+    for _ in range(5):
+        g.talents.buy(TALENTS_BY_KEY["focus"])
+    assert twist.full_cooldown(g) < base, "Arcane Focus must cut cooldowns"
+
+    # ---------- talent screen opens and buys ----------
+    g.reset(MODE_CLASSIC); g.choose_mode(MODE_CLASSIC)
+    g.talents.award(5)
+    assert g.state == Game.SHOP
+    g.draw()
+    ev(type=pygame.MOUSEBUTTONDOWN, button=1, pos=g.talent_btn.center)
+    assert g.state == Game.TALENTS, "the shop must open the talent tree"
+    g.draw()
+    node = TALENTS_BY_KEY["rate"]
+    spent = g.talents.points
+    ev(type=pygame.MOUSEBUTTONDOWN, button=1, pos=node.rect.center)
+    assert g.talents.rank("rate") == 1 and g.talents.points == spent - 1, \
+        "clicking a node must invest a point"
+    ev(type=pygame.KEYDOWN, key=pygame.K_t)
+    assert g.state == Game.SHOP, "T must close the tree again"
+
     # ---------- game modes ----------
     for mode in (MODE_CLASSIC, MODE_ENDLESS):
         g.reset(MODE_CLASSIC)
@@ -2588,6 +3639,15 @@ def _ui_smoke(g):
           "Bloodied/Frostbound/Voidtouched tiers)")
     print("selftest: world OK (Dragon claws stagger, wind drifts throws, "
           "storm lightning, Challenge Horn)")
+    print(f"selftest: betrayal OK (a flung Necromancer is imprisoned, raises "
+          f"up to {TRAP_SKELETON_CAP} allies that march right, hold the line "
+          "and block the horde)")
+    print(f"selftest: talents OK ({len(TALENTS)} nodes over "
+          f"{len(TALENT_BRANCHES)} branches, tier gating, ranks cap, effects "
+          "reach the numbers; Storm Winds only in a headwind)")
+    print("selftest: skills OK (one slot per boss; lightning vaporises, "
+          "meteors burn the ground, tornado lifts and hurls; cooldowns "
+          "tick and Arcane Focus shortens them)")
     print(f"selftest: modes OK (Classic breaks for the shop; Endless spawns "
           f"continuously, tiers every {ENDLESS_TIER_SECONDS:.0f}s, bosses at "
           + ", ".join(f"{w:.0f}s {n}" for w, n in seen)

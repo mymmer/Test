@@ -166,6 +166,7 @@ class Enemy:
     FLYING = False
     GRABBABLE = True
     SPRITE = None          # assets/<name>.png; None means "draw me by hand"
+    TRAPPABLE = False      # can be imprisoned in the Outpost
     HEAVY = False          # a tank: cannons get bonus damage against it
     STRIPPABLE = False     # armour can be torn off by dragging on it
     ARMOR_LAYERS = 0       # how many plates there are to tear off
@@ -234,6 +235,8 @@ class Enemy:
         self.regalia_cd = 0.0        # seconds until its item can be taken again
         self.regalia_taken = 0       # how many times the player has robbed it
         self.shove = 0.0             # forward momentum from the player shoving
+        self.trapped = False         # imprisoned in the Outpost
+        self.tornado_hold = 0.0      # seconds of tornado lift still acting
         self.bob = random.uniform(0, math.tau)
         self.spin = 0.0
 
@@ -399,6 +402,7 @@ class Enemy:
                            C_GOLD, 20 if not self.IS_BOSS else 34)
             self.resolve_fling()
             if self.IS_BOSS:
+                g.on_boss_defeated(self)
                 g.add_shake(12.0)
                 g.effects.ring(self.x, self.y, 40, (255, 220, 140),
                                speed=620, life=0.8, size=6)
@@ -411,7 +415,8 @@ class Enemy:
         self.spin = 0.0
 
     def on_release(self, vx, vy):
-        mult = THROW_POWER / (0.55 + 0.45 * self.MASS)
+        mult = (THROW_POWER * self.game.talents.throw_power
+                / (0.55 + 0.45 * self.MASS))
         self.state = "air"
         self.vx = vx * mult
         self.vy = vy * mult
@@ -436,7 +441,8 @@ class Enemy:
         lvl = clamp(g.bounce_level, 0, BOUNCE_MAX_LEVEL)
         impact = math.hypot(self.vx * 0.5, self.vy)
         dmg = max(0.0, impact - FALL_DMG_FLOOR) * FALL_DMG_SCALE * \
-            (0.75 + 0.35 * self.MASS) * (1.0 + BOUNCE_DMG_BONUS * lvl)
+            (0.75 + 0.35 * self.MASS) * (1.0 + BOUNCE_DMG_BONUS * lvl) * \
+            g.talents.fall_damage
         self.bounce_count += 1
         if dmg > 0:
             self.take_damage(dmg, "fall")
@@ -529,8 +535,14 @@ class Enemy:
         self.think(dt)
 
     def _update_air(self, dt):
-        self.vy += GRAVITY * dt
-        self.vx += self.game.wind * dt            # weather pushes bodies too
+        if self.tornado_hold > 0:
+            # held in a vortex: the funnel carries its own weight
+            self.tornado_hold = max(0.0, self.tornado_hold - dt)
+            self.vy += GRAVITY * 0.12 * dt
+        else:
+            self.vy += GRAVITY * dt
+        self.vx += (self.game.wind * self.game.talents.wind_mult
+                    * dt)                        # weather pushes bodies too
         self.vx -= self.vx * AIR_DRAG * dt
         self.x += self.vx * dt
         self.y += self.vy * dt
@@ -554,6 +566,13 @@ class Enemy:
             self.y = 24
             self.vy = abs(self.vy) * 0.3
 
+        # flung into the Outpost?  That is the Necromancer betrayal.
+        if self.TRAPPABLE:
+            post = self.game.outpost
+            if post.can_trap(self) and post.trap_rect.colliderect(self.hit_rect):
+                post.trap(self)
+                return
+
         # mid-air collisions
         for o in self.game.enemies:
             if o is self or not o.alive or id(o) in self.slam_cooldown:
@@ -574,6 +593,9 @@ class Enemy:
 
     # -- behaviour (override me) -----------------------------------------
     def think(self, dt):
+        slow = self.game.enemy_slow(self)
+        if slow < 1.0:
+            self.speed *= slow          # restored at the end of think()
         if self.shove > 0:      # carried momentum from the player's shove
             self.x -= self.shove * dt
             self.shove *= max(0.0, 1.0 - SHOVE_DECAY * dt)
@@ -584,6 +606,19 @@ class Enemy:
             self.bob += dt * 3.0
             target_y = self.fly_y + math.sin(self.bob) * 18
             self.y += clamp(target_y - self.y, -160 * dt, 160 * dt)
+
+        # a friendly skeleton in the way has to be dealt with first
+        if not self.flying:
+            ally = self.game.ally_in_front(self)
+            if ally is not None:
+                self.state = "attack"
+                self.attack_timer -= dt
+                if self.attack_timer <= 0:
+                    self.attack_timer = self.ATTACK_RATE
+                    ally.take_damage(max(1.0, self.damage * 0.8))
+                    self.game.effects.burst(ally.x, ally.y, 4, (255, 180, 150),
+                                            speed=120, life=0.25, size=2)
+                return
 
         bar = self.game.barricade
         if (bar.alive and not self.flying and self.x >= bar.x
@@ -616,6 +651,8 @@ class Enemy:
             self.state = "walk"
             self.x -= self.speed * dt
             self.vx_estimate = -self.speed
+        if slow < 1.0:
+            self.speed /= slow
 
     def attack_castle(self):
         g = self.game
@@ -943,10 +980,137 @@ class Skeleton(Enemy):
         pygame.draw.line(surf, col, (r.centerx, r.y + 12), (r.centerx, r.y + 24), 2)
 
 
+class FriendlySkeleton:
+    """A skeleton raised by the Necromancer imprisoned in the Outpost.
+
+    His magic runs backwards in there, so these march the wrong way -- left
+    to right, out of the outpost and into the oncoming horde.  They live in
+    `game.allies`, never `game.enemies`, so the player's own towers ignore
+    them and they never threaten the castle.
+    """
+    NAME = "Bone Ally"
+    SPRITE = "friendly_skeleton"
+    W, H = 18, 28
+    BASE_HP = 46.0
+    BASE_SPEED = 78.0
+    BASE_DAMAGE = 13.0
+    ATTACK_RATE = 0.85
+
+    def __init__(self, game, wave, x, y=None):
+        self.game = game
+        hp_m, dmg_m, _spd = wave_scaling(wave)
+        boost = game.talents.ally_power if hasattr(game, "talents") else 1.0
+        self.max_hp = self.BASE_HP * hp_m * boost
+        self.hp = self.max_hp
+        self.damage = self.BASE_DAMAGE * dmg_m * boost
+        self.w, self.h = float(self.W), float(self.H)
+        self.depth = random.uniform(-14.0, 14.0)
+        self.x = float(x)
+        self.y = self.ground_y if y is None else float(y)
+        self.speed = self.BASE_SPEED
+        self.alive = True
+        self.state = "walk"
+        self.attack_timer = random.uniform(0.0, 0.3)
+        self.anim = random.uniform(0.0, 6.0)
+        self.hurt_flash = 0.0
+        self.target = None
+        self.life = 60.0            # they crumble eventually
+
+    @property
+    def ground_y(self):
+        return GROUND_Y + self.depth - self.h / 2.0
+
+    @property
+    def hit_rect(self):
+        return pygame.Rect(int(self.x - self.w / 2), int(self.y - self.h / 2),
+                           int(self.w), int(self.h))
+
+    def take_damage(self, amount, kind="melee"):
+        if not self.alive:
+            return
+        self.hp -= amount * self.game.talents.ally_tough
+        self.hurt_flash = 1.0
+        if self.hp <= 0:
+            self.alive = False
+            self.game.effects.burst(self.x, self.y, 12, C_ALLY,
+                                    speed=200, life=0.5, size=3)
+
+    def pick_target(self):
+        best, bd = None, None
+        for en in self.game.enemies:
+            if not en.alive or en.flying or en.IS_BOSS:
+                continue
+            d = abs(en.x - self.x)
+            if d < 260 and (bd is None or d < bd):
+                best, bd = en, d
+        return best
+
+    def update(self, dt):
+        if not self.alive:
+            return
+        self.hurt_flash = max(0.0, self.hurt_flash - dt * 4.0)
+        self.life -= dt
+        if self.life <= 0:
+            self.alive = False
+            self.game.effects.burst(self.x, self.y, 10, (180, 190, 200),
+                                    speed=140, life=0.5)
+            return
+        self.anim += dt * 8.0
+
+        if self.target is not None and not self.target.alive:
+            self.target = None
+        if self.target is None:
+            self.target = self.pick_target()
+
+        tgt = self.target
+        if tgt is not None and abs(tgt.x - self.x) <= ALLY_ENGAGE_RANGE:
+            self.state = "attack"
+            self.attack_timer -= dt
+            if self.attack_timer <= 0:
+                self.attack_timer = self.ATTACK_RATE
+                tgt.take_damage(self.damage, "melee")
+                self.game.effects.burst(tgt.x, tgt.y, 4, C_ALLY,
+                                        speed=120, life=0.25, size=2)
+            return
+
+        if self.x < ALLY_HOLD_X:
+            self.state = "walk"
+            self.x += self.speed * dt      # marching the wrong way, on purpose
+        else:
+            # far enough out: hold this line and meet whatever arrives
+            self.state = "hold"
+            self.x = ALLY_HOLD_X
+
+    def draw(self, surf):
+        r = self.hit_rect
+        if blit_asset(surf, self.SPRITE, r):
+            return
+        col = mix(C_ALLY, (255, 255, 255), self.hurt_flash * 0.7)
+        b = r.bottom
+        for s_ in (-1, 1):
+            off = math.sin(self.anim + (0 if s_ < 0 else math.pi)) * 3
+            pygame.draw.line(surf, shade(col, 0.8), (self.x + s_ * 4, b - 2),
+                             (self.x + s_ * 4 + off, b + 6), 3)
+        pygame.draw.circle(surf, col, (r.centerx, r.y + 6), 6)
+        pygame.draw.circle(surf, (30, 60, 48), (r.centerx - 2, r.y + 5), 2)
+        pygame.draw.circle(surf, (30, 60, 48), (r.centerx + 2, r.y + 5), 2)
+        for i in range(3):
+            yy = r.y + 13 + i * 5
+            pygame.draw.line(surf, col, (r.centerx - 5, yy), (r.centerx + 5, yy), 2)
+        # a faint halo so allies read differently from enemy skeletons
+        glow = pygame.Surface((r.w + 14, r.h + 14), pygame.SRCALPHA)
+        pygame.draw.ellipse(glow, (*C_ALLY, 46), glow.get_rect())
+        surf.blit(glow, (r.x - 7, r.y - 7))
+        if self.hp < self.max_hp:
+            draw_bar(surf, r.x - 1, r.y - 9, r.w + 2, 3,
+                     self.hp / self.max_hp, C_ALLY)
+
+
 class Necromancer(Enemy):
     SPRITE = "necromancer"
     NAME = "Necromancer"
-    DESC = "Hangs back and raises skeletons."
+    DESC = "Hangs back and raises skeletons. Fling him into the Outpost!"
+    TRAPPABLE = True
     COLOR = (146, 96, 196)
     W, H = 26, 38
     BASE_HP = 90.0

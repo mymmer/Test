@@ -41,6 +41,10 @@ class Projectile:
         # each victim individually
         self.bonus_air = float(bonus_air)
         self.bonus_heavy = float(bonus_heavy)
+        t = game.talents
+        self.crit_chance = t.crit_chance
+        if splash:
+            self.splash *= t.splash_mult
         self.life = float(life)
         self.stun = float(stun)
         self.alive = True
@@ -69,6 +73,10 @@ class Projectile:
             d *= self.bonus_air
         if e.HEAVY:
             d *= self.bonus_heavy
+        if self.crit_chance and random.random() < self.crit_chance:
+            d *= 3.0
+            self.game.effects.text(e.x, e.y - e.h * 0.9, "CRIT!",
+                                   (255, 226, 120), 22, 0.7)
         return d
 
     def explode(self):
@@ -298,7 +306,7 @@ class DefenseTower:
         if self.hp <= 0:
             self.hp = 0.0
             self.disabled = True
-            self.rebuild = self.REBUILD_TIME
+            self.rebuild = self.REBUILD_TIME * self.game.talents.rebuild_mult
             self.game.effects.burst(self.x, self.y - self.H * 0.5, 24,
                                     (120, 110, 100), speed=250, life=0.7, size=4)
             self.game.effects.text(self.x, self.y - self.H - 12,
@@ -326,7 +334,7 @@ class DefenseTower:
 
     def damage_vs(self, e):
         """This tower's damage against one specific target."""
-        m = 1.0
+        m = self.game.talents.tower_damage
         if e.flying:
             m *= self.BONUS_VS_AIR
         if e.HEAVY:
@@ -380,7 +388,7 @@ class DefenseTower:
             self.aim = lerp(self.aim,
                             math.atan2(target.y - my, target.x - mx), 0.25)
         if self.cooldown <= 0 and target is not None:
-            self.cooldown = self.reload
+            self.cooldown = self.reload * self.game.talents.tower_rate
             self.recoil = 1.0
             self.fire(target)
 
@@ -409,7 +417,7 @@ class DefenseTower:
         d = math.hypot(dx, dy)
         if d < 12:
             return False
-        self.overcharge_cd = OVERCHARGE_COOLDOWN
+        self.overcharge_cd = OVERCHARGE_COOLDOWN * self.game.talents.overcharge_cd
         self.cooldown = self.reload
         self.recoil = 1.0
         self.aim = math.atan2(dy, dx)
@@ -477,7 +485,7 @@ class Bowman(DefenseTower):
         a = math.atan2(py - my, px - mx)
         self.game.projectiles.append(Projectile(
             self.game, mx, my, math.cos(a) * speed, math.sin(a) * speed,
-            "arrow", self.damage))
+            "arrow", self.damage_vs(target)))
 
     def draw(self, surf):
         if self.blit_sprite(surf):
@@ -538,7 +546,8 @@ class Ballista(DefenseTower):
         a = math.atan2(py - my, px - mx)
         self.game.projectiles.append(Projectile(
             self.game, mx, my, math.cos(a) * speed, math.sin(a) * speed,
-            "bolt", self.damage, pierce=2,
+            "bolt", self.damage * self.game.talents.tower_damage,
+            pierce=2 + self.game.talents.extra_pierce,
             bonus_air=self.BONUS_VS_AIR, bonus_heavy=self.BONUS_VS_HEAVY))
         self.game.add_shake(1.5)
 
@@ -613,7 +622,8 @@ class Cannon(DefenseTower):
         vx = dx / t
         vy = (dy - 0.5 * GRAVITY * t * t) / t
         self.game.projectiles.append(Projectile(
-            self.game, mx, my, vx, vy, "cannon", self.damage,
+            self.game, mx, my, vx, vy, "cannon",
+            self.damage * self.game.talents.tower_damage,
             splash=self.splash, grav=GRAVITY, life=t + 1.4,
             bonus_air=self.BONUS_VS_AIR, bonus_heavy=self.BONUS_VS_HEAVY))
         self.game.effects.burst(mx, my, 10, (200, 190, 170), speed=180,
@@ -735,7 +745,7 @@ class Castle:
         free.sort(key=lambda s: -s[0])
         x, y = free[0]
         t = cls(self.game, x, y)
-        boost = 1.22 ** (self.wall_level - 1)
+        boost = 1.22 ** (self.wall_level - 1) * self.game.talents.tower_hp
         t.max_hp *= boost
         t.hp = t.max_hp
         self.towers.append(t)
@@ -751,6 +761,7 @@ class Castle:
     def take_damage(self, amount):
         if self.hp <= 0:
             return
+        amount *= self.game.talents.damage_taken
         self.hp -= amount
         # proportional to how hard the blow was, so a stream of small hits
         # never leaves the castle permanently tinted red
@@ -993,6 +1004,9 @@ class SpikeWalls:
         if dmg <= 0 or not enemy.alive:
             return
         enemy.take_damage(dmg, "spike")
+        bleed = self.game.talents.spike_dot
+        if bleed > 0:
+            enemy.take_damage(dmg * bleed, "bleed")
         self.game.effects.burst(self.game.castle.front_x + 8, enemy.y, 5,
                                 (226, 120, 110), speed=150, life=0.3, size=2)
 
@@ -1023,6 +1037,10 @@ class Outpost:
         self.level = 0
         self.cooldowns = []
         self.flash = 0.0
+        # --- the Necromancer betrayal ---
+        self.prisoner = None        # a Necromancer flung in here
+        self.skeleton_timer = 0.0
+        self.trap_glow = 0.0
 
     @property
     def guns(self):
@@ -1039,6 +1057,95 @@ class Outpost:
     @property
     def gun_reload(self):
         return 0.62 if self.is_turret else 0.92
+
+    # ------------------------------------------------------------------
+    #  The Necromancer betrayal
+    # ------------------------------------------------------------------
+    @property
+    def body_rect(self):
+        return pygame.Rect(int(self.x) - 42, int(self.y) - 62, 84, 70)
+
+    @property
+    def trap_rect(self):
+        """Slightly generous catch area -- landing a throw in here is the
+        whole trick, so it should not be pixel-perfect."""
+        return self.body_rect.inflate(26, 26)
+
+    @property
+    def has_prisoner(self):
+        return self.prisoner is not None
+
+    def can_trap(self, enemy):
+        """Only a Necromancer, only one at a time, and only if the player's
+        Grab Strength was enough to have lifted him in the first place."""
+        return (self.prisoner is None and enemy is not None and enemy.alive
+                and getattr(enemy, "TRAPPABLE", False)
+                and enemy.MASS <= self.game.grab_capacity)
+
+    def trap(self, enemy):
+        """Imprison him. His magic runs backwards from in here: instead of
+        raising skeletons for the horde, he raises them for the castle."""
+        if not self.can_trap(enemy):
+            return False
+        self.prisoner = enemy
+        enemy.trapped = True
+        enemy.state = "trapped"
+        enemy.vx = enemy.vy = 0.0
+        enemy.x, enemy.y = self.x, self.y - 26
+        self.skeleton_timer = 1.0
+        self.trap_glow = 1.0
+        g = self.game
+        if enemy in g.enemies:
+            g.enemies.remove(enemy)       # no longer part of the horde
+        g.add_shake(8.0)
+        g.effects.ring(self.x, self.y - 30, 26, (168, 214, 232),
+                       speed=380, life=0.7, size=5)
+        g.effects.text(self.x, self.y - 80, "IMPRISONED!", C_ALLY, 26)
+        g.announce("The Necromancer is trapped -- his magic turns on them!",
+                   C_ALLY, 3.4)
+        g.stats_trapped += 1
+        return True
+
+    def update_prisoner(self, dt):
+        if self.prisoner is None:
+            return
+        self.trap_glow = max(0.0, self.trap_glow - dt * 0.9)
+        g = self.game
+        cap = TRAP_SKELETON_CAP + g.talents.ally_cap_bonus
+        self.skeleton_timer -= dt
+        if self.skeleton_timer > 0 or len(g.allies) >= cap:
+            return
+        self.skeleton_timer = TRAP_SKELETON_RATE * g.talents.ally_rate
+        ally = g.make_ally(self.x - 30)
+        g.allies.append(ally)
+        self.trap_glow = 1.0
+        g.effects.ring(ally.x, ally.y, 12, C_ALLY, speed=170, life=0.45, size=3)
+
+    def draw_prisoner(self, surf):
+        if self.prisoner is None:
+            return
+        b = self.body_rect
+        cage = pygame.Rect(b.centerx - 22, b.y + 8, 44, 46)
+        glow = pygame.Surface((cage.w + 30, cage.h + 30), pygame.SRCALPHA)
+        pygame.draw.ellipse(glow, (*C_ALLY, int(50 + 70 * self.trap_glow)),
+                            glow.get_rect())
+        surf.blit(glow, (cage.x - 15, cage.y - 15))
+        # the prisoner, hunched inside
+        p = self.prisoner
+        pygame.draw.polygon(surf, shade(p.COLOR, 0.8), [
+            (cage.centerx, cage.y + 8), (cage.right - 6, cage.bottom - 4),
+            (cage.left + 6, cage.bottom - 4)])
+        pygame.draw.circle(surf, (44, 32, 56), (cage.centerx, cage.y + 14), 6)
+        pygame.draw.circle(surf, C_ALLY, (cage.centerx - 2, cage.y + 13), 2)
+        pygame.draw.circle(surf, C_ALLY, (cage.centerx + 3, cage.y + 13), 2)
+        # bars
+        pygame.draw.rect(surf, (66, 72, 88), cage, 3, border_radius=3)
+        for i in range(4):
+            bx = cage.left + 8 + i * 10
+            pygame.draw.line(surf, (150, 158, 176),
+                             (bx, cage.top + 2), (bx, cage.bottom - 2), 2)
+        draw_text(surf, "TRAPPED", self.x, cage.bottom + 2, 15, C_ALLY,
+                  "center", True)
 
     def upgrade(self):
         if self.level >= OUTPOST_MAX_LEVEL:
@@ -1064,6 +1171,7 @@ class Outpost:
 
     def update(self, dt):
         self.flash = max(0.0, self.flash - dt * 2.0)
+        self.update_prisoner(dt)
         if self.level <= 0:
             return
         for i in range(len(self.cooldowns)):
@@ -1105,7 +1213,8 @@ class Outpost:
         self.draw_garrison(surf)
 
     def draw_garrison(self, surf):
-        body = pygame.Rect(int(self.x) - 42, int(self.y) - 62, 84, 70)
+        body = self.body_rect
+        self.draw_prisoner(surf)
         if self.level <= 0:
             draw_text(surf, "OUTPOST (empty)", self.x, body.y - 30, 16,
                       (150, 156, 174), "center")

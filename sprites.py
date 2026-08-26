@@ -109,6 +109,36 @@ BARRICADE_HP = (0, 340, 620, 980, 1450, 2050)
 SPIKE_MAX_LEVEL = 4
 SPIKE_DAMAGE = 15.0          # reflected onto anything striking the wall
 
+# --- the Necromancer betrayal (outpost trap) ------------------------------
+TRAP_SKELETON_RATE = 3.6      # seconds between friendly skeletons
+TRAP_SKELETON_CAP = 6         # friendly skeletons alive from one prisoner
+ALLY_ENGAGE_RANGE = 40.0      # px at which a friendly skeleton picks a fight
+ALLY_HOLD_X = WIDTH - 90      # they advance to here, then hold the line
+
+# --- talent tree -----------------------------------------------------------
+TALENT_POINTS_PER_WAVE = 1     # Classic: per wave cleared
+TALENT_SECONDS_PER_POINT = 60  # Endless: one point a minute
+STORM_WIND_SLOW = 0.30         # Aero-Mastery: headwind slow, as a fraction
+HEADWIND_THRESHOLD = 0.45      # |wind| / WIND_MAX that counts as "high"
+
+# --- active skills ---------------------------------------------------------
+SKILL_KEYS = ("lightning", "meteor", "tornado")
+LIGHTNING_RADIUS = 155.0
+LIGHTNING_DAMAGE = 0.85        # fraction of a mob's max health
+LIGHTNING_COOLDOWN = 14.0
+METEOR_COUNT = 16
+METEOR_RADIUS = 96.0
+METEOR_DAMAGE = 130.0
+METEOR_COOLDOWN = 26.0
+FIRE_ZONE_TIME = 6.0           # seconds the scorched ground burns for
+FIRE_ZONE_DPS = 48.0
+TORNADO_COOLDOWN = 30.0
+TORNADO_LIFE = 6.0
+TORNADO_SPEED = 120.0          # px/s, travels away from the castle
+TORNADO_RADIUS = 130.0
+TORNADO_LIFT = 620.0           # upward pull on a caught mob
+TORNADO_SWIRL = 6.5            # how hard it whips them round the core
+
 # --- risk / reward -------------------------------------------------------
 POP_GOLD_FREE = 4              # mobs on screen before the bonus kicks in
 POP_GOLD_STEP = 0.055          # extra gold multiplier per additional mob
@@ -142,6 +172,26 @@ C_GREEN = (110, 210, 120)
 C_PANEL = (26, 28, 42)
 C_PANEL_EDGE = (86, 94, 128)
 C_HILITE = (96, 190, 236)
+
+# new-system palette
+C_ALLY = (150, 235, 190)          # friendly skeletons and their UI
+C_TALENT = (186, 150, 255)        # talent tree chrome
+C_TALENT_ON = (222, 196, 255)
+C_SKILL_READY = (255, 214, 120)
+C_SKILL_COOL = (86, 92, 116)
+SKILL_COLORS = {
+    "lightning": (170, 220, 255),
+    "meteor": (255, 150, 70),
+    "tornado": (168, 214, 232),
+}
+BRANCH_COLORS = {
+    "offense": (238, 120, 96),
+    "defense": (120, 190, 240),
+    "utility": (240, 206, 110),
+    "aero": (150, 230, 226),
+    "necromancy": (186, 150, 255),
+    "arcane": (250, 170, 220),
+}
 
 _FONT_CACHE = {}
 
@@ -259,7 +309,47 @@ ASSET_SPECS = {
     "troll_king":      (84, 112, (108, 156, 92)),
     "dragon":          (118, 62, (198, 62, 58)),
     "lich_lord":       (70, 100, (120, 92, 190)),
+    "friendly_skeleton": (18, 28, (150, 235, 190)),
+    "skill_lightning": (48, 48, (170, 220, 255)),
+    "skill_meteor":    (48, 48, (255, 150, 70)),
+    "skill_tornado":   (48, 48, (168, 214, 232)),
+    "talent_node":     (46, 46, (186, 150, 255)),
 }
+
+
+def draw_skill_glyph(surf, key, cx, cy, size, colour=None):
+    """Placeholder icon for an active skill, drawn from primitives.  If the
+    player supplies assets/skill_<key>.png it is used instead."""
+    rect = pygame.Rect(int(cx - size / 2), int(cy - size / 2), int(size), int(size))
+    if blit_asset(surf, "skill_" + key, rect):
+        return
+    col = colour or SKILL_COLORS.get(key, C_WHITE)
+    if key == "lightning":
+        pts = [(cx + 3, cy - size * 0.42), (cx - size * 0.18, cy + size * 0.05),
+               (cx + size * 0.04, cy + size * 0.05),
+               (cx - size * 0.10, cy + size * 0.44),
+               (cx + size * 0.22, cy - size * 0.06),
+               (cx + size * 0.02, cy - size * 0.06)]
+        pygame.draw.polygon(surf, col, pts)
+        pygame.draw.polygon(surf, shade(col, 0.6), pts, 2)
+    elif key == "meteor":
+        pygame.draw.circle(surf, col, (int(cx + size * 0.12), int(cy)),
+                           int(size * 0.26))
+        pygame.draw.circle(surf, shade(col, 1.3),
+                           (int(cx + size * 0.06), int(cy - size * 0.06)),
+                           int(size * 0.12))
+        for k in range(3):
+            y = cy - size * 0.22 + k * size * 0.22
+            pygame.draw.line(surf, shade(col, 0.8),
+                             (cx - size * 0.46, y - size * 0.12),
+                             (cx - size * 0.06, y), 3)
+    else:   # tornado
+        for k in range(5):
+            t = k / 4.0
+            w = size * (0.44 - 0.32 * t)
+            y = cy - size * 0.40 + t * size * 0.80
+            pygame.draw.ellipse(surf, shade(col, 0.8 + 0.3 * t),
+                                (cx - w, y, w * 2, size * 0.14), 3)
 
 
 class AssetStore:
