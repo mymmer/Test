@@ -1179,12 +1179,30 @@ class Necromancer(Enemy):
         self.minions = []
         self.glow = 0.0
 
+    def hunting_prisoner(self):
+        """True while there is a turncoat in the Outpost for him to punish."""
+        post = self.game.outpost
+        return post.has_prisoner and post.prisoner is not self
+
+    def current_standoff(self):
+        """Where he halts.
+
+        A traitor in the Outpost outranks the castle.  He used to march all
+        the way to the barricade before noticing the cage behind him, which
+        put the prisoner out of the fight for the whole approach; now the
+        moment he draws level with the tower he stops there and opens fire.
+        """
+        if self.hunting_prisoner():
+            return max(self.standoff_x, self.game.outpost.x)
+        return self.standoff_x
+
     def think(self, dt):
         self.anim += dt * 3.0
         self.glow = max(0.0, self.glow - dt * 2.0)
         self.minions = [m for m in self.minions if m.alive]
 
-        if self.x > self.standoff_x:
+        standoff = self.current_standoff()
+        if self.x > standoff:
             self.x -= self.speed * dt
             self.vx_estimate = -self.speed
             self.state = "walk"
@@ -1198,9 +1216,10 @@ class Necromancer(Enemy):
 
         self.cast_timer -= dt
         if self.cast_timer <= 0:
-            post = self.game.outpost
-            if post.has_prisoner and random.random() < 0.65:
-                # a traitor in the tower is the bigger insult
+            # halted at the Outpost rather than the wall: he is here for the
+            # prisoner and nothing else, so every bolt goes into the cage
+            at_post = self.x > self.standoff_x
+            if self.hunting_prisoner() and (at_post or random.random() < 0.65):
                 self.cast_timer = RIVAL_BOLT_RATE
                 self.cast_at_prisoner()
             else:

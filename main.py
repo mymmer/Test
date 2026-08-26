@@ -110,6 +110,9 @@ MODE_INFO = {
 #  Every knob a difficulty can turn lives in one record, so tuning Hard is a
 #  matter of editing numbers here rather than hunting through the codebase.
 #
+#  Each rank of the Light Fingers talent cuts the grab delay below by 20%;
+#  four ranks leave a fifth of it, so Hard's half second becomes a tenth.
+#
 #    scale      -- multiplies enemy health and damage scaling
 #    gold       -- payout multiplier
 #    headstart  -- extra effective waves a boss spawns with
@@ -117,6 +120,12 @@ MODE_INFO = {
 #    hp_curve   -- multiplies the per-tier health growth (1.60 = +60% a tier)
 #    boss_fire  -- boss projectile interval multiplier (0.50 = twice as fast)
 #    elite_horn -- Challenge Horn calls in elites/heavies instead of a mixed mob
+#    grab_cd    -- seconds the cursor must wait between grabs.  Easy is 0:
+#                  fling as fast as you can click.  Higher difficulties make
+#                  every grab a decision.  The Light Fingers talent cuts it.
+
+GRAB_CD_PER_RANK = 0.20
+
 
 class Difficulty(NamedTuple):
     key: str
@@ -128,18 +137,24 @@ class Difficulty(NamedTuple):
     hp_curve: float
     boss_fire: float
     elite_horn: bool
+    grab_cd: float
     blurb: str
 
 
 DIFFICULTIES = (
     Difficulty("easy", "EASY", 0.80, 1.15, 0.00, 0.90, 0.80, 1.00, False,
-               "Enemies scale 20% slower, walk 10% slower, and you earn 15% "
-               "more gold."),
+               0.00,
+               "Enemies scale 20% slower, walk 10% slower, you earn 15% more "
+               "gold, and the cursor never has to wait between grabs."),
     Difficulty("normal", "NORMAL", 1.00, 1.00, 0.00, 1.00, 1.00, 1.00, False,
-               "The game as designed. Standard scaling, standard pay."),
+               GRAB_COOLDOWN,
+               "The game as designed. Standard scaling, standard pay, a "
+               "quarter-second between grabs."),
     Difficulty("hard", "HARD", 1.30, 1.00, 0.25, 1.40, 1.60, 0.50, True,
+               0.50,
                "Enemies move 40% faster, health scales 60% harder per tier, "
-               "bosses fire twice as fast and the horn calls in elites."),
+               "bosses fire twice as fast, the horn calls in elites, and "
+               "every grab costs you half a second."),
 )
 DIFFICULTY_BY_KEY = {d.key: d for d in DIFFICULTIES}
 DEFAULT_DIFFICULTY = "normal"
@@ -333,6 +348,10 @@ TALENTS = [
            "Everything in the armoury costs {v:.0%} less."),
     Talent("purse", "utility", 3, "Fat Purse", 4, 40.0,
            "Start each wave with {v:.0f} extra gold."),
+    #  Tier 3: two entry nodes deep before the game will sell you this one.
+    Talent("lightfingers", "utility", 3, "Light Fingers", 4, GRAB_CD_PER_RANK,
+           "The wait between grabs is {v:.0%} shorter. On Easy there is no "
+           "wait to shorten."),
     Talent("showman", "utility", 5, "Showman", 4, 0.15,
            "Fling scores are worth +{v:.0%}."),
     Talent("scavenge", "utility", 7, "Scavenger", 3, 0.10,
@@ -465,6 +484,10 @@ class TalentTree:
     def gold_pop(self):          return 1.0 + self.value("greed")
     @property
     def grab_bonus(self):        return 1.0 + self.value("lighthands")
+    @property
+    def grab_cd_scale(self):
+        """What is left of the difficulty's grab delay after Light Fingers."""
+        return max(0.0, 1.0 - self.value("lightfingers"))
     @property
     def shop_discount(self):     return 1.0 - min(0.4, self.value("haggle"))
     @property
@@ -1296,6 +1319,12 @@ class Game:
         return self.difficulty.elite_horn
 
     @property
+    def grab_cooldown(self):
+        """Seconds before the cursor may grab again -- the difficulty's delay,
+        less whatever Light Fingers has shaved off it."""
+        return self.difficulty.grab_cd * self.talents.grab_cd_scale
+
+    @property
     def grab_capacity(self):
         """Heaviest MASS the cursor can currently lift."""
         return (GRAB_CAPACITY[int(clamp(self.grab_level, 0, GRAB_MAX_LEVEL))]
@@ -1926,30 +1955,30 @@ class Game:
     def release_grab(self):
         if self.smacking is not None:
             self.smacking = None
-            self.grab_cd = GRAB_COOLDOWN
+            self.grab_cd = self.grab_cooldown
             return
         if self.charging is not None:
             # power must be read *before* clearing the charge, or it is 0
             power = self.overcharge_power()
             t, self.charging = self.charging, None
-            self.grab_cd = GRAB_COOLDOWN
+            self.grab_cd = self.grab_cooldown
             if power > 0.12 and t.can_overcharge:
                 t.overcharge_fire(self.mouse_pos[0], self.mouse_pos[1], power)
             return
         if self.held_item is not None:
             it = self.held_item
             self.held_item = None
-            self.grab_cd = GRAB_COOLDOWN
+            self.grab_cd = self.grab_cooldown
             vx, vy = self.mouse_velocity()
             it.throw(vx, vy)
             return
         if self.stripping is not None:
             self.stripping = None
-            self.grab_cd = GRAB_COOLDOWN
+            self.grab_cd = self.grab_cooldown
             return
         e = self.grabbed
         self.grabbed = None
-        self.grab_cd = GRAB_COOLDOWN
+        self.grab_cd = self.grab_cooldown
         if e is None or not e.alive:
             return
         vx, vy = self.mouse_velocity()
@@ -2531,12 +2560,22 @@ class Game:
                                  (target.x, target.y), 1)
                 draw_text(s, "FLING!", target.x, r.top - 20, 18,
                           (255, 220, 120), "center", True)
-        # crosshair
-        pygame.draw.circle(s, (230, 235, 250), (mx, my), 9, 1)
-        pygame.draw.line(s, (230, 235, 250), (mx - 13, my), (mx - 4, my), 1)
-        pygame.draw.line(s, (230, 235, 250), (mx + 4, my), (mx + 13, my), 1)
-        pygame.draw.line(s, (230, 235, 250), (mx, my - 13), (mx, my - 4), 1)
-        pygame.draw.line(s, (230, 235, 250), (mx, my + 4), (mx, my + 13), 1)
+        # crosshair -- greyed out and wrapped in a draining arc while the
+        # grab cooldown runs, so a dead click reads as "not yet" rather than
+        # as a bug
+        cd_total = self.grab_cooldown
+        cooling = self.grab_cd > 0 and cd_total > 0
+        cross = (150, 156, 176) if cooling else (230, 235, 250)
+        if cooling:
+            left = clamp(self.grab_cd / cd_total, 0.0, 1.0)
+            arc = pygame.Rect(mx - 15, my - 15, 30, 30)
+            pygame.draw.arc(s, (255, 190, 120), arc, math.pi / 2,
+                            math.pi / 2 + 2 * math.pi * left, 2)
+        pygame.draw.circle(s, cross, (mx, my), 9, 1)
+        pygame.draw.line(s, cross, (mx - 13, my), (mx - 4, my), 1)
+        pygame.draw.line(s, cross, (mx + 4, my), (mx + 13, my), 1)
+        pygame.draw.line(s, cross, (mx, my - 13), (mx, my - 4), 1)
+        pygame.draw.line(s, cross, (mx, my + 4), (mx, my + 13), 1)
 
     # ------------------------------------------------------------------
     #  HUD panel layout
@@ -2943,6 +2982,18 @@ class Game:
         top = panel.top + 54
         mouse = self.mouse_pos
         hover = None
+        #  Node height is measured, not assumed: the deepest branch decides it,
+        #  so adding a talent squeezes the column instead of pushing its last
+        #  nodes out through the tooltip and the BACK button.
+        deepest = max(sum(1 for t in TALENTS if t.branch == b)
+                      for b, _l in TALENT_BRANCHES)
+        node_top = top + 44
+        #  floor: leave room for the tallest tooltip plus the button strip
+        floor = panel.bottom - (26 + 3 * 20) - 46 - 10
+        gap = 8 if deepest <= 7 else 5
+        nh = int(clamp((floor - node_top - gap * (deepest - 1)) / deepest,
+                       44, 62))
+        tight = nh < 56              # compressed: smaller type, tighter rows
         for ci, (branch, label) in enumerate(TALENT_BRANCHES):
             bx = panel.left + 20 + ci * cw
             colour = BRANCH_COLORS[branch]
@@ -2951,10 +3002,9 @@ class Game:
             draw_text(surf, f"{invested} invested", bx + cw // 2, top + 22, 15,
                       C_DIM, "center")
             nodes = [t for t in TALENTS if t.branch == branch]
-            ny = top + 44
+            ny = node_top
             prev_centre = None
             for t in nodes:
-                nh = 62
                 r = pygame.Rect(bx + 8, ny, cw - 20, nh)
                 t.rect = r
                 rank = self.talents.rank(t.key)
@@ -2979,29 +3029,34 @@ class Game:
                 pygame.draw.rect(surf, edge, r, 2, border_radius=7)
 
                 name_col = C_WHITE if unlocked else (110, 114, 128)
-                draw_text(surf, t.name, r.centerx, r.top + 5, 18, name_col,
-                          "center", True)
-                # rank pips
+                #  three stacked bands inside the node: name, pips, status
+                name_size = 16 if tight else 18
+                foot_size = 13 if tight else 15
+                foot_y = r.bottom - foot_size - 4
+                draw_text(surf, t.name, r.centerx, r.top + 3, name_size,
+                          name_col, "center", True)
+                # rank pips, centred in the gap the other two rows leave
                 pip_w = 12
                 total_w = t.max_rank * pip_w
                 px = r.centerx - total_w // 2
+                pip_y = (r.top + name_size + 5 + foot_y - 7) // 2
                 for k in range(t.max_rank):
-                    pr = pygame.Rect(px + k * pip_w, r.top + 26, pip_w - 3, 7)
+                    pr = pygame.Rect(px + k * pip_w, pip_y, pip_w - 3, 7)
                     pygame.draw.rect(surf, colour if k < rank else (56, 58, 72),
                                      pr, border_radius=2)
                 if not unlocked:
                     draw_text(surf, f"needs {t.tier} in branch", r.centerx,
-                              r.bottom - 22, 15, (128, 132, 148), "center")
+                              foot_y, foot_size, (128, 132, 148), "center")
                 elif maxed:
-                    draw_text(surf, "MAXED", r.centerx, r.bottom - 22, 16,
+                    draw_text(surf, "MAXED", r.centerx, foot_y, foot_size + 1,
                               C_GREEN, "center", True)
                 else:
                     draw_text(surf, f"rank {rank}/{t.max_rank}   1 pt",
-                              r.centerx, r.bottom - 22, 15,
+                              r.centerx, foot_y, foot_size,
                               C_GOLD if buyable else C_DIM, "center")
                 if r.collidepoint(mouse):
                     hover = t
-                ny += nh + 8
+                ny += nh + gap
 
         # tooltip for whatever the cursor is over
         if hover is not None:
@@ -3791,6 +3846,121 @@ def _ui_smoke(g):
     assert post.can_trap(Necromancer(g, 8)), \
         "and the cage is free for the next one"
 
+    # ---------- rivals stop level with the Outpost, not at the wall ------
+    g.reset(MODE_CLASSIC); g.state = Game.PLAYING
+    g.wave, g.wave_active = 8, False
+    post = g.outpost
+    captive = Necromancer(g, 8); captive.x = post.x; captive.y = post.y - 30
+    g.enemies.append(captive)
+    assert post.trap(captive)
+    rival = Necromancer(g, 8); rival.depth = 0
+    rival.x = SPAWN_X; rival.y = rival.ground_y      # in from the far right
+    g.enemies.append(rival)
+    assert rival.current_standoff() == post.x > g.barricade.x, \
+        "with a prisoner in the cage he must halt level with the Outpost"
+    engaged = None
+    for f in range(45 * 60):
+        g.update(1 / 60.0)
+        if engaged is None and post.prisoner_hp < PRISONER_HP:
+            engaged = f / 60.0
+        if not rival.alive:
+            break
+    assert engaged is not None, "and open fire on it from there"
+    assert abs(rival.x - post.x) < 2 and rival.state == "attack", \
+        f"he must stop at the Outpost, not walk on to the wall (x={rival.x:.0f})"
+    walk = (SPAWN_X - post.x) / rival.speed
+    assert engaged < walk + 6.0, \
+        f"the first bolt must land soon after he arrives, not {engaged:.1f}s in"
+    # with the cage empty he goes back to marching on the castle as before
+    post.hurt_prisoner(PRISONER_HP)
+    assert not post.has_prisoner
+    assert rival.current_standoff() == rival.standoff_x < post.x, \
+        "no prisoner, no detour -- he resumes his march on the wall"
+    g.enemies.clear(); g.allies.clear()
+
+    # ---------- grab cooldown by difficulty, and Light Fingers ----------
+    g.reset(MODE_CLASSIC); g.state = Game.PLAYING
+    g.wave, g.wave_active = 6, True
+    cds = {}
+    for key in ("easy", "normal", "hard"):
+        g.settings.difficulty = key
+        cds[key] = g.grab_cooldown
+    assert cds["easy"] == 0.0, "Easy must never make the cursor wait"
+    assert abs(cds["normal"] - 0.25) < 1e-9, "Normal waits a quarter second"
+    assert abs(cds["hard"] - 0.50) < 1e-9, "Hard waits half a second"
+    # and the wait is real: a second grab inside the window is refused
+    g.settings.difficulty = "hard"
+    mob = Scout(g, 6); mob.x = CASTLE_FRONT + 260; mob.y = mob.ground_y
+    mob.depth = 0
+    g.enemies.append(mob)
+    g.mouse_pos = (int(mob.x), int(mob.y))
+    g.try_grab(g.mouse_pos)
+    assert g.grabbed is mob, "the first grab must land"
+    g.release_grab()
+    assert abs(g.grab_cd - 0.50) < 1e-9, "releasing starts the cooldown"
+    g.try_grab(g.mouse_pos)
+    assert g.grabbed is None, "a grab inside the cooldown must be refused"
+    for _ in range(31):                       # ~0.52s: it lands, the cd runs out
+        g.update(1 / 60.0)
+        g.mouse_pos = (int(mob.x), int(mob.y))
+    assert g.grab_cd == 0.0 and mob.grabbable
+    g.try_grab(g.mouse_pos)
+    assert g.grabbed is mob, "and allowed once the cooldown has run out"
+    g.release_grab()
+    # Easy has no cooldown at all: fling one mob and take the next in the
+    # very same frame
+    g.settings.difficulty = "easy"
+    g.grab_cd = 0.0
+    a = Scout(g, 6); a.x = CASTLE_FRONT + 300; a.y = a.ground_y; a.depth = 0
+    b = Scout(g, 6); b.x = CASTLE_FRONT + 350; b.y = b.ground_y; b.depth = 0
+    g.enemies.extend([a, b])
+    g.mouse_pos = (int(a.x), int(a.y))
+    g.try_grab(g.mouse_pos)
+    assert g.grabbed is a
+    g.release_grab()
+    assert g.grab_cd == 0.0, "Easy must not start a cooldown at all"
+    g.mouse_pos = (int(b.x), int(b.y))
+    g.try_grab(g.mouse_pos)
+    assert g.grabbed is b, "so the next mob can be taken in the same frame"
+    g.release_grab()
+    # on Hard that same second grab is refused
+    g.settings.difficulty = "hard"
+    c = Scout(g, 6); c.x = CASTLE_FRONT + 400; c.y = c.ground_y; c.depth = 0
+    d = Scout(g, 6); d.x = CASTLE_FRONT + 450; d.y = d.ground_y; d.depth = 0
+    g.enemies.extend([c, d])
+    g.grab_cd = 0.0
+    g.mouse_pos = (int(c.x), int(c.y)); g.try_grab(g.mouse_pos)
+    assert g.grabbed is c
+    g.release_grab()
+    g.mouse_pos = (int(d.x), int(d.y)); g.try_grab(g.mouse_pos)
+    assert g.grabbed is None, \
+        "Hard must not let the cursor move straight on to the next mob"
+    # Light Fingers: tier-3 gated, and four ranks leave a fifth of the wait
+    lf = TALENTS_BY_KEY["lightfingers"]
+    assert lf.branch == "utility" and lf.tier == 3, \
+        "Light Fingers is a tier-3 Utility node"
+    fresh = TalentTree(g)
+    assert not fresh.unlocked(lf), \
+        "it must not be buyable before the branch has been invested in"
+    fresh.ranks["greed"] = 2                  # two entry nodes first
+    fresh.ranks["lighthands"] = 1
+    assert fresh.unlocked(lf), "three points into Utility opens it"
+    g.talents = fresh
+    g.settings.difficulty = "hard"
+    before = g.grab_cooldown
+    for want in (0.8, 0.6, 0.4, 0.2):
+        fresh.ranks["lightfingers"] += 1
+        assert abs(g.grab_cooldown - 0.50 * want) < 1e-9, \
+            f"each rank must cut the delay by {GRAB_CD_PER_RANK:.0%}"
+    assert fresh.ranks["lightfingers"] == lf.max_rank
+    assert g.grab_cooldown < before and g.grab_cooldown > 0, \
+        "it minimises the delay without removing it entirely"
+    g.settings.difficulty = "easy"
+    assert g.grab_cooldown == 0.0, "and there is nothing to cut on Easy"
+    g.settings.difficulty = DEFAULT_DIFFICULTY
+    g.enemies.clear()
+    g.reset(MODE_CLASSIC)
+
     # ---------- Undead Sentinels ----------
     def _chase(sentinels):
         gg = Game(g.screen); gg.state = Game.PLAYING
@@ -3829,6 +3999,23 @@ def _ui_smoke(g):
         assert len(nodes) >= 5, f"{branch} needs depth"
         assert any(n.tier == 0 for n in nodes), f"{branch} needs an entry node"
         assert max(n.tier for n in nodes) >= 4, f"{branch} needs deep nodes"
+    #  the tree must still fit its panel as it grows -- every node inside,
+    #  none overlapping, all of them clear of the tooltip and the button
+    prev_state = g.state
+    g.state = Game.TALENTS
+    g.mouse_pos = (0, 0)
+    g.draw()
+    panel = pygame.Rect(16, 26, WIDTH - 32, HEIGHT - 52)
+    rects = [(n.name, n.rect) for n in TALENTS]
+    for name, r in rects:
+        assert panel.contains(r), f"talent {name} is drawn outside the panel"
+        assert r.bottom < g.talent_back_btn.top - 40, \
+            f"talent {name} runs into the tooltip band and the BACK button"
+    for i, (n1, r1) in enumerate(rects):
+        for n2, r2 in rects[i + 1:]:
+            assert not r1.colliderect(r2), f"talents {n1} and {n2} overlap"
+    g.state = prev_state
+
     deep = TALENTS_BY_KEY["pierce"]
     assert not t.unlocked(deep), "deep nodes start locked"
     assert t.points == 0 and not t.can_buy(TALENTS_BY_KEY["rate"]), \
@@ -4754,6 +4941,18 @@ def _ui_smoke(g):
           "at 6 and multiplies their damage instead)")
     print("selftest: difficulty OK (Easy/Normal/Hard scale health, speed, gold "
           "and boss strength; settings persist, mute and clear-score work)")
+    print(f"selftest: grab cooldown OK (Easy {DIFFICULTY_BY_KEY['easy'].grab_cd * 1000:.0f}ms "
+          f"-- back-to-back flinging; Normal "
+          f"{DIFFICULTY_BY_KEY['normal'].grab_cd * 1000:.0f}ms; Hard "
+          f"{DIFFICULTY_BY_KEY['hard'].grab_cd * 1000:.0f}ms; Light Fingers is "
+          f"tier-3 Utility and cuts {GRAB_CD_PER_RANK:.0%} a rank down to "
+          f"{DIFFICULTY_BY_KEY['hard'].grab_cd * (1 - GRAB_CD_PER_RANK * 4) * 1000:.0f}ms)")
+    print(f"selftest: talent layout OK ({len(TALENTS)} nodes; the deepest "
+          "branch sizes every column, so the tree stays inside its panel "
+          "with nothing overlapping)")
+    print("selftest: rival range OK (a Necromancer halts the moment he draws "
+          "level with the Outpost and opens fire on the prisoner from there, "
+          "instead of marching on to the barricade first)")
     hard = DIFFICULTY_BY_KEY["hard"]
     print(f"selftest: Hard overhaul OK (+{(hard.speed - 1) * 100:.0f}% move "
           f"speed, health scaling x{hard.hp_curve:.1f} per tier, bosses fire "

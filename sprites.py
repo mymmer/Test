@@ -33,7 +33,7 @@ FALL_DMG_FLOOR = 250.0  # impact speed below which a landing is harmless
 FALL_DMG_SCALE = 0.26   # damage per px/s of impact speed above the floor
 SLAM_DMG_FLOOR = 170.0  # relative speed below which mid-air collisions are safe
 SLAM_DMG_SCALE = 0.10
-GRAB_COOLDOWN = 0.22
+GRAB_COOLDOWN = 0.25    # Normal-mode delay between grabs; see DIFFICULTIES
 
 # --- boss regalia (crown / staff) ---------------------------------------
 REGALIA_MAX_THROW = {"crown": 2300.0, "staff": 780.0}
