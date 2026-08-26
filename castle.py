@@ -27,7 +27,7 @@ class Projectile:
     def __init__(self, game, x, y, vx, vy, kind, damage,
                  splash=0.0, pierce=0, grav=0.0, hostile=False,
                  color=None, life=5.0, stun=0.0,
-                 bonus_air=1.0, bonus_heavy=1.0):
+                 bonus_air=1.0, bonus_heavy=1.0, at_prisoner=False):
         self.game = game
         self.x, self.y = float(x), float(y)
         self.vx, self.vy = float(vx), float(vy)
@@ -37,6 +37,7 @@ class Projectile:
         self.pierce = int(pierce)
         self.grav = float(grav)
         self.hostile = bool(hostile)
+        self.at_prisoner = bool(at_prisoner)   # a rival's shot at the cage
         # counter multipliers travel with the shot and are resolved against
         # each victim individually
         self.bonus_air = float(bonus_air)
@@ -155,6 +156,19 @@ class Projectile:
                 return
 
     def _update_hostile(self):
+        # a rival Necromancer's bolt ignores the walls -- it wants the cage
+        if self.at_prisoner:
+            post = self.game.outpost
+            if not post.has_prisoner:
+                self.kill()
+                return
+            if post.body_rect.collidepoint(self.x, self.y):
+                post.hurt_prisoner(self.damage)
+                self.game.effects.burst(self.x, self.y, 8, self.color,
+                                        speed=170, life=0.35, size=3)
+                self.kill()
+            return
+
         castle = self.game.castle
         # the outer barricade is the first thing in the way
         bar = self.game.barricade
@@ -698,9 +712,27 @@ class Castle:
         self._cache_surf = None
 
     # -- stats -----------------------------------------------------------
+    # Past the last visual tier the walls keep getting stronger; only the
+    # look stops changing.  Each extra level adds this much max health.
+    ENDLESS_WALL_STEP = 520.0
+    ENDLESS_WALL_GROWTH = 1.16
+
     @property
     def tier_index(self):
         return clamp(self.wall_level - 1, 0, len(self.TIERS) - 1)
+
+    @property
+    def visual_capped(self):
+        return self.wall_level > len(self.TIERS)
+
+    @property
+    def tier_label(self):
+        """What the HUD shows -- the tier name, plus the reinforcement count
+        once the appearance has topped out."""
+        if self.visual_capped:
+            extra = self.wall_level - len(self.TIERS)
+            return f"{self.TIERS[-1][0]} +{extra}"
+        return self.TIERS[self.tier_index][0]
 
     @property
     def tier_name(self):
@@ -711,16 +743,22 @@ class Castle:
         return len(self.TIERS)
 
     def upgrade_wall(self):
-        if self.wall_level >= self.max_level:
-            return False
+        """Never refuses.  Up to the last tier the castle also changes its
+        look; beyond that it just keeps getting tougher."""
         self.wall_level += 1
-        gained = float(self.TIERS[self.tier_index][4]) - self.max_hp
+        if self.wall_level <= len(self.TIERS):
+            gained = float(self.TIERS[self.tier_index][4]) - self.max_hp
+        else:
+            over = self.wall_level - len(self.TIERS)
+            gained = (self.ENDLESS_WALL_STEP
+                      * self.ENDLESS_WALL_GROWTH ** (over - 1))
         self.max_hp += gained
         self.hp = min(self.max_hp, self.hp + gained)
         for t in self.towers:                 # the platforms get tougher too
             t.max_hp *= 1.22
             t.hp = min(t.max_hp, t.hp * 1.22)
-        self._cache_key = None
+        if self.wall_level <= len(self.TIERS):
+            self._cache_key = None            # the look actually changed
         return True
 
     def repair(self, frac=0.35):
@@ -808,7 +846,10 @@ class Castle:
 
     def _build_surface(self):
         """Render the castle body once per wall level into a cached surface."""
-        key = self.wall_level
+        # The look saturates at the last tier, so key the cache on the
+        # visual level only -- otherwise every extra reinforcement rebuilt
+        # an identical surface, redrawing all the brickwork for nothing.
+        key = min(self.wall_level, len(self.TIERS))
         if self._cache_key == key and self._cache_surf is not None:
             return self._cache_surf
         art = ASSETS.get("castle")
@@ -1039,12 +1080,25 @@ class Outpost:
         self.flash = 0.0
         # --- the Necromancer betrayal ---
         self.prisoner = None        # a Necromancer flung in here
+        self.prisoner_hp = 0.0      # his own pool; rivals shoot at it
+        self.prisoner_max = PRISONER_HP
+        self.prisoner_hit = 0.0     # recently-damaged flash / regen lock
         self.skeleton_timer = 0.0
         self.trap_glow = 0.0
 
+    #  Past OUTPOST_MAX_LEVEL no more crew appear; every further level
+    #  multiplies the damage of everything already stationed there.
+    OVERDRIVE_PER_LEVEL = 0.35
+
     @property
     def guns(self):
-        return self.level
+        return min(self.level, OUTPOST_MAX_LEVEL)
+
+    @property
+    def overdrive(self):
+        """Damage multiplier from levels bought past the visual cap."""
+        return 1.0 + self.OVERDRIVE_PER_LEVEL * max(
+            0, self.level - OUTPOST_MAX_LEVEL)
 
     @property
     def is_turret(self):
@@ -1052,7 +1106,8 @@ class Outpost:
 
     @property
     def gun_damage(self):
-        return 15.0 if self.is_turret else 7.5
+        base = 15.0 if self.is_turret else 7.5
+        return base * self.overdrive * self.game.talents.tower_damage
 
     @property
     def gun_reload(self):
@@ -1088,6 +1143,9 @@ class Outpost:
         if not self.can_trap(enemy):
             return False
         self.prisoner = enemy
+        self.prisoner_max = PRISONER_HP
+        self.prisoner_hp = PRISONER_HP
+        self.prisoner_hit = 0.0
         enemy.trapped = True
         enemy.state = "trapped"
         enemy.vx = enemy.vy = 0.0
@@ -1106,9 +1164,30 @@ class Outpost:
         g.stats_trapped += 1
         return True
 
+    def hurt_prisoner(self, amount):
+        """A free Necromancer is shooting the turncoat."""
+        if self.prisoner is None:
+            return
+        self.prisoner_hp -= amount
+        self.prisoner_hit = 1.0
+        g = self.game
+        if self.prisoner_hp <= 0:
+            self.prisoner_hp = 0.0
+            g.effects.burst(self.x, self.y - 30, 26, (196, 140, 240),
+                            speed=280, life=0.7, size=4)
+            g.effects.text(self.x, self.y - 80, "PRISONER SLAIN", C_RED, 24)
+            g.announce("Your imprisoned Necromancer is dead -- find another!",
+                       (255, 150, 130), 3.4)
+            self.prisoner = None
+            self.skeleton_timer = 0.0
+
     def update_prisoner(self, dt):
         if self.prisoner is None:
             return
+        self.prisoner_hit = max(0.0, self.prisoner_hit - dt)
+        if self.prisoner_hit <= 0 and self.prisoner_hp < self.prisoner_max:
+            self.prisoner_hp = min(self.prisoner_max,
+                                   self.prisoner_hp + PRISONER_REGEN * dt)
         self.trap_glow = max(0.0, self.trap_glow - dt * 0.9)
         g = self.game
         cap = TRAP_SKELETON_CAP + g.talents.ally_cap_bonus
@@ -1144,14 +1223,21 @@ class Outpost:
             bx = cage.left + 8 + i * 10
             pygame.draw.line(surf, (150, 158, 176),
                              (bx, cage.top + 2), (bx, cage.bottom - 2), 2)
+        frac = self.prisoner_hp / max(1.0, self.prisoner_max)
+        col = C_ALLY if frac > 0.35 else C_RED
+        draw_bar(surf, cage.left - 4, cage.top - 10, cage.w + 8, 5, frac, col)
+        if self.prisoner_hit > 0:
+            draw_text(surf, "UNDER FIRE", self.x, cage.top - 26, 15, C_RED,
+                      "center", True)
         draw_text(surf, "TRAPPED", self.x, cage.bottom + 2, 15, C_ALLY,
                   "center", True)
 
     def upgrade(self):
-        if self.level >= OUTPOST_MAX_LEVEL:
-            return False
+        """Always succeeds.  New crew arrive up to the visual cap; after
+        that the levels pour into raw firepower instead."""
         self.level += 1
-        self.cooldowns.append(random.uniform(0.0, 0.5))
+        if len(self.cooldowns) < self.guns:
+            self.cooldowns.append(random.uniform(0.0, 0.5))
         self.flash = 1.0
         return True
 
@@ -1235,7 +1321,10 @@ class Outpost:
                                 pygame.Rect(int(gx) + 3, int(gy) - 10, 12, 20),
                                 -1.1, 1.1, 2)
         tag = "TURRETS" if self.is_turret else "BOWMEN"
-        draw_text(surf, f"OUTPOST {tag} x{self.guns}", self.x, body.y - 30, 15,
+        label = f"OUTPOST {tag} x{self.guns}"
+        if self.overdrive > 1.0:
+            label += f"  x{self.overdrive:.2f} PWR"
+        draw_text(surf, label, self.x, body.y - 30, 15,
                   (176, 200, 226), "center", True)
 
 

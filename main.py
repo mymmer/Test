@@ -11,6 +11,8 @@ Self-test: python main.py --selftest
 
 import math
 import random
+import json
+import os
 import sys
 from collections import deque
 import pygame
@@ -44,6 +46,87 @@ MODE_INFO = {
         (120, 214, 240),
     ),
 }
+
+# ==============================================================================
+#  DIFFICULTY
+# ==============================================================================
+#  (key, label, enemy scaling mult, gold mult, boss head-start, blurb)
+DIFFICULTIES = (
+    ("easy",   "EASY",   0.80, 1.15, 0.00,
+     "Enemies scale 20% slower and you earn 15% more gold."),
+    ("normal", "NORMAL", 1.00, 1.00, 0.00,
+     "The game as designed. Standard scaling, standard pay."),
+    ("hard",   "HARD",   1.30, 1.00, 0.25,
+     "Enemies scale 30% faster and bosses arrive already reinforced."),
+)
+DIFFICULTY_BY_KEY = {d[0]: d for d in DIFFICULTIES}
+DEFAULT_DIFFICULTY = "normal"
+
+SETTINGS_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                             "settings.json")
+
+
+class Settings:
+    """Audio toggle, difficulty and the high score, persisted beside the game.
+
+    Saving is best-effort: a read-only folder must never stop the game
+    starting, so every failure falls back to in-memory defaults.
+    """
+
+    def __init__(self, path=SETTINGS_PATH):
+        self.path = path
+        self.muted = False
+        self.difficulty = DEFAULT_DIFFICULTY
+        self.high_score = 0
+        self.load()
+
+    def load(self):
+        try:
+            with open(self.path) as fh:
+                data = json.load(fh)
+            self.muted = bool(data.get("muted", False))
+            self.high_score = int(data.get("high_score", 0))
+            diff = str(data.get("difficulty", DEFAULT_DIFFICULTY))
+            self.difficulty = diff if diff in DIFFICULTY_BY_KEY \
+                else DEFAULT_DIFFICULTY
+        except (OSError, ValueError, TypeError):
+            pass          # no settings yet, or unreadable: keep the defaults
+
+    def save(self):
+        try:
+            with open(self.path, "w") as fh:
+                json.dump({"muted": self.muted,
+                           "difficulty": self.difficulty,
+                           "high_score": self.high_score}, fh)
+        except OSError:
+            pass          # never let a failed write break the game
+
+    def record_score(self, score):
+        if score > self.high_score:
+            self.high_score = int(score)
+            self.save()
+            return True
+        return False
+
+    def clear_high_score(self):
+        self.high_score = 0
+        self.save()
+
+    def toggle_mute(self):
+        self.muted = not self.muted
+        self.apply_audio()
+        self.save()
+        return self.muted
+
+    def apply_audio(self):
+        """Placeholder: the game ships with no sound, so this only holds the
+        flag that a future mixer would read."""
+        try:
+            if pygame.mixer.get_init():
+                pygame.mixer.music.set_volume(0.0 if self.muted else 1.0)
+        except pygame.error:
+            pass
+
 
 # ------------------------------------------------------------------------------
 #  ENDLESS ATTACKERS -- SPAWN AND BOSS TIMETABLE
@@ -154,6 +237,10 @@ TALENTS = [
            "Fling scores are worth +{v:.0%}."),
     Talent("scavenge", "utility", 7, "Scavenger", 3, 0.10,
            "Every kill pays {v:.0%} more gold."),
+    Talent("sentinels", "utility", 5, "Undead Sentinels", 1, 1.0,
+           "Friendly skeletons stop marching blindly and hunt the nearest "
+           "mob instead -- they will turn around to chase anything that "
+           "slips past your line."),
 
     # --- AERO-MASTERY ----------------------------------------------------
     Talent("stormwinds", "aero", 0, "Storm Winds", 1, STORM_WIND_SLOW,
@@ -729,12 +816,15 @@ MENU_PARAGRAPHS = (
 class Game:
     MENU, PLAYING, SHOP, PAUSED, GAMEOVER = "menu", "playing", "shop", "paused", "over"
     TALENTS = "talents"
+    SETTINGS = "settings"
 
     def __init__(self, screen=None, headless=False):
         self.headless = headless
         self.screen = screen
         self.scene = pygame.Surface((WIDTH, HEIGHT))
         self.clock = pygame.time.Clock()
+        self.settings = Settings()
+        self.settings.apply_audio()
         self.running = True
         self.bg = self._build_background()
         self.reset()
@@ -754,6 +844,9 @@ class Game:
         self.talent_btn = pygame.Rect(0, 0, 0, 0)
         self.talent_back_btn = pygame.Rect(0, 0, 0, 0)
         self.talent_return = self.SHOP
+        self.difficulty_buttons = {}
+        self.settings_btn = pygame.Rect(0, 0, 0, 0)
+        self.settings_widgets = {}
         self.wave = 0
         self.gold = STARTING_GOLD
         self.castle = Castle(self)
@@ -802,6 +895,7 @@ class Game:
         self.stats_plates_torn = 0
         self.stats_trapped = 0
         self.stats_casts = 0
+        self.new_best = False
         self.talent_seconds = 0.0     # Endless: drip-feeds talent points
         self.score = 0
         self.best_fling = 0
@@ -846,12 +940,15 @@ class Game:
             return 180 * (1.62 ** (self.castle.wall_level - 1))
 
         def buy_wall():
-            before = self.castle.tier_name
-            if not self.castle.upgrade_wall():
-                return False, "Walls are already at maximum."
+            before = self.castle.tier_label
+            capped = self.castle.visual_capped
+            self.castle.upgrade_wall()      # never refuses -- see Castle
             self.effects.ring(CASTLE_FRONT * 0.5, WALL_TOP, 30, C_HILITE,
                               speed=520, life=0.7, size=5)
-            return True, f"{before} -> {self.castle.tier_name}!"
+            if capped:
+                return True, (f"Walls reinforced again -- "
+                              f"{int(self.castle.max_hp)} max health.")
+            return True, f"{before} -> {self.castle.tier_label}!"
 
         def bounce_cost():
             return 200 * (1.55 ** self.bounce_level)
@@ -889,10 +986,13 @@ class Game:
 
         def buy_outpost():
             was_bow = not self.outpost.is_turret
-            if not self.outpost.upgrade():
-                return False, "The outpost is fully garrisoned."
+            capped = self.outpost.level >= OUTPOST_MAX_LEVEL
+            self.outpost.upgrade()          # never refuses -- see Outpost
             if was_bow and self.outpost.is_turret:
                 return True, "Outpost upgraded to automated TURRETS!"
+            if capped:
+                return True, (f"Outpost firepower x{self.outpost.overdrive:.2f} "
+                              "-- no room for more crew.")
             return True, f"Outpost garrison: {self.outpost.guns}."
 
         def barricade_cost():
@@ -951,9 +1051,11 @@ class Game:
                      "More max health, another tower slot, and a visibly "
                      "tougher keep.",
                      wall_cost, buy_wall,
-                     lambda: f"Lv.{self.castle.wall_level}/{self.castle.max_level}"
-                             f"   {len(self.castle.towers)}/"
-                             f"{self.castle.slot_capacity} slots"),
+                     lambda: (f"Lv.{self.castle.wall_level}"
+                              + ("" if self.castle.visual_capped
+                                 else f"/{self.castle.max_level}")
+                              + f"   {len(self.castle.towers)}/"
+                              f"{self.castle.slot_capacity} slots")),
             ShopItem("bounce", "Bounce", (120, 214, 240),
                      "Thrown mobs bounce again and again. Every bounce adds "
                      "impact damage and a longer stun.",
@@ -982,8 +1084,10 @@ class Game:
                      outpost_cost, buy_outpost,
                      lambda: (f"{self.outpost.guns}/{OUTPOST_MAX_LEVEL} "
                               + ("turrets" if self.outpost.is_turret
-                                 else "bowmen")),
-                     lambda: self.outpost.level < OUTPOST_MAX_LEVEL),
+                                 else "bowmen")
+                              + (f"  x{self.outpost.overdrive:.2f}"
+                                 if self.outpost.overdrive > 1.0 else "")),
+                     lambda: True),
             ShopItem("barricade", "Barricade", (206, 182, 140),
                      "A wall out in the field. Ground troops must break it "
                      "before they reach you.",
@@ -1050,6 +1154,25 @@ class Game:
 
     # -- helpers ---------------------------------------------------------
     @property
+    def difficulty(self):
+        return DIFFICULTY_BY_KEY.get(self.settings.difficulty,
+                                     DIFFICULTY_BY_KEY[DEFAULT_DIFFICULTY])
+
+    @property
+    def enemy_scale(self):
+        """How much harder the horde scales on this difficulty."""
+        return self.difficulty[2]
+
+    @property
+    def gold_scale(self):
+        return self.difficulty[3]
+
+    @property
+    def boss_headstart(self):
+        """Extra effective waves a boss spawns with on Hard."""
+        return self.difficulty[4]
+
+    @property
     def grab_capacity(self):
         """Heaviest MASS the cursor can currently lift."""
         return (GRAB_CAPACITY[int(clamp(self.grab_level, 0, GRAB_MAX_LEVEL))]
@@ -1063,7 +1186,8 @@ class Game:
         step = POP_GOLD_STEP * self.talents.gold_pop
         base = min(POP_GOLD_CAP * self.talents.gold_pop,
                    1.0 + step * max(0, n - POP_GOLD_FREE))
-        return base * (1.0 + self.horn_bonus) * self.talents.kill_gold
+        return (base * (1.0 + self.horn_bonus) * self.talents.kill_gold
+                * self.gold_scale)
 
     def blow_horn(self):
         """Taunt the horde: the rest of the wave charges in at once, and
@@ -1251,7 +1375,8 @@ class Game:
         self.announce("They do not stop coming. Good luck.", C_DIM, 3.0)
 
     def summon_boss(self, cls, scripted=True):
-        boss = cls(self, self.wave)
+        wave = self.wave + int(round(self.wave * self.boss_headstart))
+        boss = cls(self, max(1, wave))
         self.spawn_enemy(boss)
         self.add_shake(9.0)
         self.announce(f"!! {boss.NAME} arrives !!", (255, 120, 100), 4.0)
@@ -1399,6 +1524,7 @@ class Game:
         self.state = self.SHOP
 
     def on_castle_destroyed(self):
+        self.new_best = self.settings.record_score(self.score)
         self.state = self.GAMEOVER
         self.grabbed = None
         self.grabbed_extra = []
@@ -1709,7 +1835,7 @@ class Game:
         if self.shop_msg_t > 0:
             self.shop_msg_t -= dt
 
-        if self.state == self.TALENTS:
+        if self.state in (self.TALENTS, self.SETTINGS):
             self.effects.update(dt)
             return
         if self.state != self.PLAYING:
@@ -1842,6 +1968,12 @@ class Game:
                 if ev.key == pygame.K_ESCAPE:
                     self.close_talents()
                 return
+            if self.state == self.SETTINGS:
+                if ev.key in (pygame.K_ESCAPE, pygame.K_p):
+                    self.state = self.MENU
+                elif ev.key == pygame.K_m:
+                    self.settings.toggle_mute()
+                return
             if (self.state == self.PLAYING
                     and self.skills.handle_key(ev.key)):
                 return
@@ -1891,7 +2023,31 @@ class Game:
                     self.blow_horn()
                     return
                 self.try_grab(ev.pos)
+            elif self.state == self.SETTINGS:
+                w = self.settings_widgets
+                if w.get("mute", pygame.Rect(0, 0, 0, 0)).collidepoint(ev.pos):
+                    self.settings.toggle_mute()
+                    return
+                if w.get("clear", pygame.Rect(0, 0, 0, 0)).collidepoint(ev.pos):
+                    self.settings.clear_high_score()
+                    return
+                for key, _l, _h, _g, _hs, _b in DIFFICULTIES:
+                    if w.get("diff_" + key, pygame.Rect(0, 0, 0, 0)).collidepoint(ev.pos):
+                        self.settings.difficulty = key
+                        self.settings.save()
+                        return
+                if w.get("back", pygame.Rect(0, 0, 0, 0)).collidepoint(ev.pos):
+                    self.state = self.MENU
+                return
             elif self.state == self.MENU:
+                if self.settings_btn.collidepoint(ev.pos):
+                    self.state = self.SETTINGS
+                    return
+                for key, box in self.difficulty_buttons.items():
+                    if box.collidepoint(ev.pos):
+                        self.settings.difficulty = key
+                        self.settings.save()
+                        return
                 for mode, box in self.mode_buttons.items():
                     if box.collidepoint(ev.pos):
                         self.choose_mode(mode)
@@ -1965,6 +2121,8 @@ class Game:
         self.draw_hud(self.screen)
         if self.state == self.MENU:
             self.draw_menu(self.screen)
+        elif self.state == self.SETTINGS:
+            self.draw_settings(self.screen)
         elif self.state == self.SHOP:
             self.draw_shop(self.screen)
         elif self.state == self.TALENTS:
@@ -2150,10 +2308,10 @@ class Game:
         tier = endgame_tier(max(1, self.wave))
         if tier >= 0:
             tname, _f, ttint, _s, _h, _d, _sp = ENDGAME_TIERS[tier]
-            draw_text(surf, f"{self.castle.tier_name}  -  {tname} horde",
+            draw_text(surf, f"{self.castle.tier_label}  -  {tname} horde",
                       28, 52, 18, mix(ttint, C_WHITE, 0.35))
         else:
-            draw_text(surf, self.castle.tier_name, 28, 52, 18, C_DIM)
+            draw_text(surf, self.castle.tier_label, 28, 52, 18, C_DIM)
 
         # crowd bonus: the risk/reward readout
         mult = self.gold_multiplier
@@ -2180,6 +2338,10 @@ class Game:
         pts = self.talents.points
         draw_text(surf, f"{pts} TALENT POINT{'S' if pts != 1 else ''}  [T]",
                   28, ty, 19, C_TALENT_ON if pts else C_DIM, bold=bool(pts))
+        if self.settings.difficulty != DEFAULT_DIFFICULTY:
+            draw_text(surf, self.difficulty[1], 346, 26, 17,
+                      C_GREEN if self.settings.difficulty == "easy" else C_RED,
+                      "right", True)
         if self.skills.skills:
             ready = sum(1 for s in self.skills.skills if s.ready)
             draw_text(surf, f"skills {ready}/{len(self.skills.skills)} ready",
@@ -2304,7 +2466,7 @@ class Game:
         cw, gap, ch = 372, 22, 112
         r = self.draw_center_panel(surf, "CASTLE DEFENSE",
                                    list(MENU_PARAGRAPHS), w=820,
-                                   reserve_bottom=ch + 30)
+                                   reserve_bottom=ch + 96)
 
         # --- mode picker, in the strip reserved beneath the panel ---
         total = cw * 2 + gap
@@ -2328,9 +2490,50 @@ class Game:
                 draw_text(surf, ln, box.centerx, ty, 16, C_DIM, "center")
                 ty += 18
 
+        # --- difficulty toggle + settings, on the row beneath ---
+        row_y = top + ch + 10
+        dw, dgap = 150, 10
+        total_d = len(DIFFICULTIES) * dw + (len(DIFFICULTIES) - 1) * dgap
+        dx = r.centerx - total_d // 2 - 90
+        self.difficulty_buttons = {}
+        draw_text(surf, "DIFFICULTY", dx - 14, row_y + 10, 18, C_DIM, "right")
+        for i, (key, label, _hp, _gold, _hs, blurb) in enumerate(DIFFICULTIES):
+            b = pygame.Rect(dx + i * (dw + dgap), row_y, dw, 40)
+            self.difficulty_buttons[key] = b
+            on = self.settings.difficulty == key
+            hot = b.collidepoint(self.mouse_pos)
+            col = (C_GREEN, C_GOLD, C_RED)[i]
+            pygame.draw.rect(surf, (44, 52, 46) if on else
+                             ((44, 46, 62) if hot else (28, 30, 44)), b,
+                             border_radius=8)
+            pygame.draw.rect(surf, col if on else shade(col, 0.55), b,
+                             3 if on else 2, border_radius=8)
+            draw_text(surf, label, b.centerx, b.y + 9, 22,
+                      C_WHITE if on else C_DIM, "center", True)
+            if hot:
+                tip = wrap_text(blurb, 17, 520)
+                for k, ln in enumerate(tip[:2]):
+                    draw_text(surf, ln, r.centerx, row_y + 46 + k * 19, 17,
+                              col, "center")
+
+        sb = pygame.Rect(dx + total_d + 22, row_y, 150, 40)
+        self.settings_btn = sb
+        hot = sb.collidepoint(self.mouse_pos)
+        pygame.draw.rect(surf, (48, 44, 66) if hot else (32, 30, 48), sb,
+                         border_radius=8)
+        pygame.draw.rect(surf, C_TALENT, sb, 2, border_radius=8)
+        draw_text(surf, "SETTINGS", sb.centerx, sb.y + 10, 21, C_TALENT_ON,
+                  "center", True)
+        if self.settings.high_score:
+            draw_text(surf, f"BEST  {self.settings.high_score:,}",
+                      WIDTH - 28, row_y + 10, 20, C_GOLD, "right", True)
+
     def draw_gameover(self, surf):
         self.draw_center_panel(surf, "THE CASTLE HAS FALLEN", [
-            f"FINAL SCORE   {self.score:,}",
+            (f"FINAL SCORE   {self.score:,}"
+             + ("   -- NEW BEST!" if self.new_best
+                else f"   (best {self.settings.high_score:,})"),
+             24, C_GOLD, True),
             f"You survived {max(0, self.wave - 1)} full waves"
             f" (fell on wave {self.wave}).",
             f"Enemies slain: {self.stats_kills}",
@@ -2338,7 +2541,7 @@ class Game:
             f"   Best combo: x{self.best_combo:.2f}",
             f"Damage dealt by throwing: {int(self.stats_thrown_damage)}",
             f"Armour plates torn off: {self.stats_plates_torn}",
-            f"Final walls: {self.castle.tier_name}",
+            f"Final walls: {self.castle.tier_label}",
             "",
             ("Press R or click to play again.", 24, C_GOLD, True),
         ], w=760)
@@ -2463,6 +2666,77 @@ class Game:
         pygame.draw.rect(surf, C_GREEN, self.talent_back_btn, 3, border_radius=9)
         draw_text(surf, "BACK   [T / ESC]", self.talent_back_btn.centerx,
                   self.talent_back_btn.y + 11, 24, C_WHITE, "center", True)
+
+    def draw_settings(self, surf):
+        veil = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
+        veil.fill((6, 8, 16, 200))
+        surf.blit(veil, (0, 0))
+        panel = pygame.Rect(WIDTH // 2 - 320, HEIGHT // 2 - 190, 640, 380)
+        pygame.draw.rect(surf, C_PANEL, panel, border_radius=12)
+        pygame.draw.rect(surf, C_TALENT, panel, 3, border_radius=12)
+        draw_text(surf, "SETTINGS", panel.centerx, panel.top + 18, 38,
+                  C_TALENT_ON, "center", True)
+
+        self.settings_widgets = {}
+        y = panel.top + 84
+
+        # --- audio ---
+        b = pygame.Rect(panel.left + 40, y, panel.w - 80, 54)
+        self.settings_widgets["mute"] = b
+        hot = b.collidepoint(self.mouse_pos)
+        muted = self.settings.muted
+        pygame.draw.rect(surf, (56, 44, 44) if muted else (40, 56, 46), b,
+                         border_radius=9)
+        pygame.draw.rect(surf, C_RED if muted else C_GREEN, b, 2,
+                         border_radius=9)
+        draw_text(surf, "AUDIO", b.left + 16, b.y + 16, 22, C_WHITE, bold=True)
+        draw_text(surf, "MUTED" if muted else "ON", b.right - 16, b.y + 15,
+                  24, C_RED if muted else C_GREEN, "right", True)
+        if hot:
+            draw_text(surf, "click to toggle", b.centerx, b.y + 32, 15,
+                      C_DIM, "center")
+        y += 68
+
+        # --- high score ---
+        b = pygame.Rect(panel.left + 40, y, panel.w - 80, 54)
+        self.settings_widgets["clear"] = b
+        hot = b.collidepoint(self.mouse_pos)
+        pygame.draw.rect(surf, (56, 46, 40) if hot else (36, 34, 48), b,
+                         border_radius=9)
+        pygame.draw.rect(surf, C_GOLD, b, 2, border_radius=9)
+        draw_text(surf, "HIGH SCORE", b.left + 16, b.y + 16, 22, C_WHITE,
+                  bold=True)
+        draw_text(surf, f"{self.settings.high_score:,}", b.right - 16,
+                  b.y + 15, 24, C_GOLD, "right", True)
+        draw_text(surf, "click to clear", b.centerx, b.y + 32, 15,
+                  C_DIM if not hot else C_RED, "center")
+        y += 68
+
+        # --- difficulty, mirrored here for convenience ---
+        draw_text(surf, "DIFFICULTY", panel.centerx, y + 4, 20, C_DIM,
+                  "center")
+        y += 26
+        dw = (panel.w - 100) // 3
+        for i, (key, label, _h, _g, _hs, _b) in enumerate(DIFFICULTIES):
+            b = pygame.Rect(panel.left + 40 + i * (dw + 10), y, dw, 44)
+            self.settings_widgets["diff_" + key] = b
+            on = self.settings.difficulty == key
+            col = (C_GREEN, C_GOLD, C_RED)[i]
+            pygame.draw.rect(surf, (44, 52, 46) if on else (30, 32, 46), b,
+                             border_radius=8)
+            pygame.draw.rect(surf, col if on else shade(col, 0.5), b,
+                             3 if on else 2, border_radius=8)
+            draw_text(surf, label, b.centerx, b.y + 11, 21,
+                      C_WHITE if on else C_DIM, "center", True)
+
+        b = pygame.Rect(panel.centerx - 140, panel.bottom - 58, 280, 44)
+        self.settings_widgets["back"] = b
+        hot = b.collidepoint(self.mouse_pos)
+        pygame.draw.rect(surf, (58, 118, 92) if hot else (42, 92, 72), b,
+                         border_radius=9)
+        pygame.draw.rect(surf, C_GREEN, b, 3, border_radius=9)
+        draw_text(surf, "BACK   [ESC]", b.centerx, b.y + 11, 23, C_WHITE,
+                  "center", True)
 
     def draw_shop(self, surf):
         veil = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
@@ -3055,20 +3329,94 @@ def _ui_smoke(g):
     assert ally.x > start_x, "friendly skeletons march left-to-right"
     assert ally.x <= ALLY_HOLD_X + 1, "and hold the line rather than leaving"
 
-    # and they actually block and damage the horde
+    # they fight, but a bare skeleton is meant to lose to a real mob
+    def _duel(bonecraft=0):
+        gg = Game(g.screen); gg.state = Game.PLAYING
+        gg.wave, gg.wave_active = 8, False
+        if bonecraft:
+            gg.talents.award(bonecraft)
+            for _ in range(bonecraft):
+                gg.talents.buy(TALENTS_BY_KEY["bonecraft"])
+        al = gg.make_ally(700); al.depth = 0; al.y = al.ground_y
+        gg.allies.append(al)
+        fo = FootSoldier(gg, 8); fo.depth = 0; fo.x = 760; fo.y = fo.ground_y
+        fo.max_hp *= 8; fo.hp = fo.max_hp
+        gg.enemies.append(fo)
+        start = fo.hp
+        survived = 0
+        for _ in range(600):
+            gg.update(1 / 60.0)
+            if al.alive:
+                survived += 1
+        return al, fo, start - fo.hp, survived / 60.0
+
+    ally, foe, dealt, held = _duel()
+    assert dealt > 0, "an ally must damage what it meets"
+    assert not ally.alive, \
+        "a bare skeleton must lose to a wave-8 mob after the nerf"
+    tough_ally, _foe2, _d2, held_long = _duel(bonecraft=5)
+    assert tough_ally.max_hp > ally.max_hp and held_long > held, \
+        "Bonecraft is what makes allies stick around"
+
+    # spawn rate: the prisoner works at half the old pace
+    assert TRAP_SKELETON_RATE >= 7.0, "friendly skeleton cooldown was doubled"
+    assert FriendlySkeleton.BASE_HP < 20.0, "and their health cut by 60%"
+
+    # ---------- rival Necromancers hunt the prisoner ----------
     g.reset(MODE_CLASSIC); g.state = Game.PLAYING
     g.wave, g.wave_active = 8, False
-    ally = g.make_ally(700); ally.depth = 0; ally.y = ally.ground_y
-    g.allies.append(ally)
-    foe = FootSoldier(g, 8); foe.depth = 0; foe.x = 760; foe.y = foe.ground_y
-    foe.max_hp *= 8; foe.hp = foe.max_hp
-    g.enemies.append(foe)
-    foe_hp, castle_hp = foe.hp, g.castle.hp
-    for _ in range(300):
+    post = g.outpost
+    captive = Necromancer(g, 8); captive.x = post.x; captive.y = post.y - 30
+    g.enemies.append(captive)
+    assert post.trap(captive) and post.prisoner_hp == PRISONER_HP
+    rival = Necromancer(g, 8); rival.depth = 0
+    rival.x = post.x + 260; rival.y = rival.ground_y
+    g.enemies.append(rival)
+    for _ in range(int(30 * 60)):
         g.update(1 / 60.0)
-    assert foe.hp < foe_hp, "an ally must damage what it meets"
-    assert foe.x > ally.x, "and hold it out in front"
-    assert g.castle.hp == castle_hp, "so nothing reaches the wall"
+    assert post.prisoner_hp < PRISONER_HP, \
+        "a free Necromancer must shoot at your prisoner"
+    assert rival.cast_at_prisoner is not None
+    # finish him off deterministically -- in play his own skeletons often
+    # kill the rival first, which is why he has a health pool at all
+    post.hurt_prisoner(PRISONER_HP)
+    assert not post.has_prisoner, \
+        "his pool reaching zero must kill the prisoner"
+    g.allies.clear()
+    for _ in range(int(30 * 60)):
+        g.update(1 / 60.0)
+    assert not g.allies, "a dead prisoner raises nothing more"
+    assert post.can_trap(Necromancer(g, 8)), \
+        "and the cage is free for the next one"
+
+    # ---------- Undead Sentinels ----------
+    def _chase(sentinels):
+        gg = Game(g.screen); gg.state = Game.PLAYING
+        gg.wave, gg.wave_active = 8, False
+        if sentinels:
+            gg.talents.award(6)
+            for _ in range(5):
+                gg.talents.buy(TALENTS_BY_KEY["greed"])   # open the tier
+            gg.talents.buy(TALENTS_BY_KEY["sentinels"])
+        al = gg.make_ally(900); al.depth = 0; al.y = al.ground_y
+        gg.allies.append(al)
+        leaked = FootSoldier(gg, 8); leaked.depth = 0
+        leaked.x = 520          # already behind the ally, heading for the wall
+        leaked.y = leaked.ground_y
+        leaked.speed = 0.0      # pinned, so this tests targeting not footspeed
+        leaked.max_hp *= 40; leaked.hp = leaked.max_hp
+        gg.enemies.append(leaked)
+        start = al.x
+        for _ in range(600):
+            gg.update(1 / 60.0)
+        return al.x - start, leaked.hp < leaked.max_hp
+
+    drift_off, hit_off = _chase(False)
+    drift_on, hit_on = _chase(True)
+    assert drift_off > 0 and not hit_off, \
+        "without the talent they march on and ignore a leaker"
+    assert drift_on < 0 and hit_on, \
+        "Undead Sentinels must turn them around to chase it down"
 
     # ---------- talent tree ----------
     g.reset(MODE_CLASSIC)
@@ -3209,6 +3557,116 @@ def _ui_smoke(g):
         "clicking a node must invest a point"
     ev(type=pygame.KEYDOWN, key=pygame.K_t)
     assert g.state == Game.SHOP, "T must close the tree again"
+
+    # ---------- infinite progression ----------
+    g.reset(MODE_CLASSIC)
+    g.gold = 10 ** 9
+    wall = next(i for i in g.shop_items if i.key == "wall")
+    post = next(i for i in g.shop_items if i.key == "outpost")
+    tiers = len(Castle.TIERS)
+    for _ in range(tiers - 1):
+        wall.buy_fn()
+    assert g.castle.wall_level == tiers and not g.castle.visual_capped
+    look = g.castle._build_surface()
+    hp_at_cap = g.castle.max_hp
+    for n in range(6):
+        ok, _msg = wall.buy_fn()
+        assert ok, "Reinforce Walls must never refuse"
+    assert g.castle.wall_level == tiers + 6
+    assert g.castle.max_hp > hp_at_cap, "extra levels must keep adding health"
+    assert g.castle.visual_capped and "+6" in g.castle.tier_label
+    assert g.castle.tier_index == tiers - 1, \
+        "the look must stay on the last tier"
+    assert g.castle._build_surface() is look, \
+        "and its cached artwork must not change"
+    assert wall.avail_fn(), "the card stays buyable for ever"
+
+    for _ in range(OUTPOST_MAX_LEVEL):
+        post.buy_fn()
+    assert g.outpost.guns == OUTPOST_MAX_LEVEL
+    assert abs(g.outpost.overdrive - 1.0) < 1e-9
+    dmg_at_cap = g.outpost.gun_damage
+    crew_at_cap = len(g.outpost.cooldowns)
+    for _ in range(5):
+        ok, _msg = post.buy_fn()
+        assert ok, "the Outpost must never refuse either"
+    assert g.outpost.guns == OUTPOST_MAX_LEVEL, "no extra crew appear"
+    assert len(g.outpost.cooldowns) == crew_at_cap, "and no extra gun slots"
+    assert g.outpost.overdrive > 1.0
+    assert g.outpost.gun_damage > dmg_at_cap, \
+        "extra levels must multiply the damage instead"
+    assert post.avail_fn()
+
+    # ---------- difficulty ----------
+    g.reset(MODE_CLASSIC)
+    stats = {}
+    for key, _label, _hp, _gold, _hs, _blurb in DIFFICULTIES:
+        g.settings.difficulty = key
+        probe = Scout(g, 12)
+        g.enemies = [Scout(g, 1) for _ in range(20)]
+        stats[key] = (probe.max_hp, probe.speed, g.gold_multiplier,
+                      g.boss_headstart)
+    g.enemies = []
+    assert stats["easy"][0] < stats["normal"][0] < stats["hard"][0], \
+        "difficulty must scale enemy health"
+    assert stats["easy"][1] < stats["normal"][1] < stats["hard"][1], \
+        "and enemy speed"
+    assert stats["easy"][2] > stats["normal"][2], "Easy must pay more gold"
+    assert abs(stats["easy"][2] / stats["normal"][2] - 1.15) < 0.02
+    assert stats["hard"][3] > 0 and stats["normal"][3] == 0, \
+        "Hard must give bosses a head start"
+    g.settings.difficulty = "hard"
+    g.wave = 20
+    g.summon_boss(TrollKing)
+    hard_boss = next(e for e in g.enemies if e.IS_BOSS)
+    g.enemies.clear()
+    g.settings.difficulty = "normal"
+    g.summon_boss(TrollKing)
+    normal_boss = next(e for e in g.enemies if e.IS_BOSS)
+    assert hard_boss.max_hp > normal_boss.max_hp, \
+        "a Hard boss must arrive stronger"
+    g.enemies.clear()
+    g.settings.difficulty = DEFAULT_DIFFICULTY
+
+    # ---------- settings ----------
+    st = Settings(path=os.path.join(
+        os.path.dirname(os.path.abspath(__file__)), "_selftest_settings.json"))
+    try:
+        assert st.high_score == 0 and not st.muted
+        assert st.toggle_mute() is True and st.muted
+        assert st.record_score(500) and not st.record_score(100)
+        assert Settings(path=st.path).high_score == 500, "settings must persist"
+        st.clear_high_score()
+        assert Settings(path=st.path).high_score == 0, "and clear on request"
+        assert st.toggle_mute() is False
+    finally:
+        try:
+            os.remove(st.path)
+        except OSError:
+            pass
+
+    g.reset(MODE_CLASSIC)
+    g.draw()
+    assert set(g.difficulty_buttons) == {d[0] for d in DIFFICULTIES}, \
+        "the menu must offer all three difficulties"
+    ev(type=pygame.MOUSEBUTTONDOWN, button=1,
+       pos=g.difficulty_buttons["hard"].center)
+    assert g.settings.difficulty == "hard", "clicking must select it"
+    ev(type=pygame.MOUSEBUTTONDOWN, button=1, pos=g.settings_btn.center)
+    assert g.state == Game.SETTINGS, "the menu must open Settings"
+    g.draw()
+    was = g.settings.muted
+    ev(type=pygame.MOUSEBUTTONDOWN, button=1,
+       pos=g.settings_widgets["mute"].center)
+    assert g.settings.muted != was, "the audio row must toggle"
+    g.settings.high_score = 999
+    ev(type=pygame.MOUSEBUTTONDOWN, button=1,
+       pos=g.settings_widgets["clear"].center)
+    assert g.settings.high_score == 0, "and the high score must clear"
+    ev(type=pygame.KEYDOWN, key=pygame.K_ESCAPE)
+    assert g.state == Game.MENU
+    g.settings.difficulty = DEFAULT_DIFFICULTY
+    g.settings.muted = False
 
     # ---------- game modes ----------
     for mode in (MODE_CLASSIC, MODE_ENDLESS):
@@ -3639,9 +4097,15 @@ def _ui_smoke(g):
           "Bloodied/Frostbound/Voidtouched tiers)")
     print("selftest: world OK (Dragon claws stagger, wind drifts throws, "
           "storm lightning, Challenge Horn)")
+    print(f"selftest: progression OK (walls keep gaining health past the "
+          f"{len(Castle.TIERS)}-tier visual cap; the Outpost stops adding crew "
+          "at 6 and multiplies their damage instead)")
+    print("selftest: difficulty OK (Easy/Normal/Hard scale health, speed, gold "
+          "and boss strength; settings persist, mute and clear-score work)")
     print(f"selftest: betrayal OK (a flung Necromancer is imprisoned, raises "
-          f"up to {TRAP_SKELETON_CAP} allies that march right, hold the line "
-          "and block the horde)")
+          f"up to {TRAP_SKELETON_CAP} allies every {TRAP_SKELETON_RATE:.0f}s; "
+          "rivals shoot the prisoner, Undead Sentinels make allies chase "
+          "leakers)")
     print(f"selftest: talents OK ({len(TALENTS)} nodes over "
           f"{len(TALENT_BRANCHES)} branches, tier gating, ranks cap, effects "
           "reach the numbers; Storm Winds only in a headwind)")

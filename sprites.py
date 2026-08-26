@@ -110,8 +110,14 @@ SPIKE_MAX_LEVEL = 4
 SPIKE_DAMAGE = 15.0          # reflected onto anything striking the wall
 
 # --- the Necromancer betrayal (outpost trap) ------------------------------
-TRAP_SKELETON_RATE = 3.6      # seconds between friendly skeletons
+TRAP_SKELETON_RATE = 7.2      # seconds between friendly skeletons
 TRAP_SKELETON_CAP = 6         # friendly skeletons alive from one prisoner
+# The prisoner is not safe in there: free Necromancers on the field shoot at
+# him, and if they break his ward he dies and the skeletons stop.
+PRISONER_HP = 260.0           # his own pool, separate from the outpost
+PRISONER_REGEN = 3.0          # per second, while nobody is shooting him
+RIVAL_BOLT_RATE = 2.6         # how often a free Necromancer takes a shot
+RIVAL_BOLT_DAMAGE = 34.0
 ALLY_ENGAGE_RANGE = 40.0      # px at which a friendly skeleton picks a fight
 ALLY_HOLD_X = WIDTH - 90      # they advance to here, then hold the line
 

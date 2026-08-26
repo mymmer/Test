@@ -178,6 +178,12 @@ class Enemy:
         self.game = game
         self.wave = wave
         hp_m, dmg_m, spd_m = wave_scaling(wave)
+        # difficulty stretches or compresses the whole scaling curve
+        diff = getattr(game, "enemy_scale", 1.0)
+        if diff != 1.0:
+            hp_m *= diff
+            dmg_m *= diff
+            spd_m = 1.0 + (spd_m - 1.0) * diff
         # endgame tiers stack on top of the normal per-wave scaling and
         # repaint the mob so the danger is readable at a glance
         self.tier = endgame_tier(wave)
@@ -991,7 +997,9 @@ class FriendlySkeleton:
     NAME = "Bone Ally"
     SPRITE = "friendly_skeleton"
     W, H = 18, 28
-    BASE_HP = 46.0
+    # Deliberately fragile: early allies are a speed bump, not a wall.
+    # Bonecraft in the Necromancy branch is what makes them stick.
+    BASE_HP = 18.4          # 60% below the original 46
     BASE_SPEED = 78.0
     BASE_DAMAGE = 13.0
     ATTACK_RATE = 0.85
@@ -1036,12 +1044,19 @@ class FriendlySkeleton:
                                     speed=200, life=0.5, size=3)
 
     def pick_target(self):
+        """Nearest ground mob.  Without Undead Sentinels they only notice
+        what is in front of them; with it they will turn and chase anything
+        that slipped past."""
+        sentinel = self.game.talents.rank("sentinels") > 0
+        reach = 2000.0 if sentinel else 260.0
         best, bd = None, None
         for en in self.game.enemies:
             if not en.alive or en.flying or en.IS_BOSS:
                 continue
             d = abs(en.x - self.x)
-            if d < 260 and (bd is None or d < bd):
+            if not sentinel and en.x < self.x:
+                continue          # blind to anything already behind them
+            if d < reach and (bd is None or d < bd):
                 best, bd = en, d
         return best
 
@@ -1073,7 +1088,11 @@ class FriendlySkeleton:
                                         speed=120, life=0.25, size=2)
             return
 
-        if self.x < ALLY_HOLD_X:
+        if tgt is not None and self.game.talents.rank("sentinels") > 0:
+            # Undead Sentinels: run it down, whichever way it is
+            self.state = "walk"
+            self.x += math.copysign(self.speed * dt, tgt.x - self.x)
+        elif self.x < ALLY_HOLD_X:
             self.state = "walk"
             self.x += self.speed * dt      # marching the wrong way, on purpose
         else:
@@ -1149,8 +1168,14 @@ class Necromancer(Enemy):
 
         self.cast_timer -= dt
         if self.cast_timer <= 0:
-            self.cast_timer = random.uniform(2.6, 4.0)
-            self.cast_bolt()
+            post = self.game.outpost
+            if post.has_prisoner and random.random() < 0.65:
+                # a traitor in the tower is the bigger insult
+                self.cast_timer = RIVAL_BOLT_RATE
+                self.cast_at_prisoner()
+            else:
+                self.cast_timer = random.uniform(2.6, 4.0)
+                self.cast_bolt()
 
     def summon(self):
         sk = Skeleton(self.game, self.wave,
@@ -1171,6 +1196,18 @@ class Necromancer(Enemy):
         self.game.projectiles.append(Projectile(
             self.game, self.x, self.y - 8, math.cos(a) * speed,
             math.sin(a) * speed, "magic", self.damage, hostile=True))
+        self.glow = 1.0
+
+    def cast_at_prisoner(self):
+        """Punish the turncoat: a bolt aimed at the Outpost cage."""
+        post = self.game.outpost
+        tx, ty = post.x, post.y - 30
+        a = math.atan2(ty - self.y, tx - self.x)
+        speed = 470.0
+        self.game.projectiles.append(Projectile(
+            self.game, self.x, self.y - 8, math.cos(a) * speed,
+            math.sin(a) * speed, "magic", RIVAL_BOLT_DAMAGE,
+            hostile=True, color=(214, 130, 255), at_prisoner=True))
         self.glow = 1.0
 
     def draw_body(self, surf):
