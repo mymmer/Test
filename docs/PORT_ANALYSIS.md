@@ -207,7 +207,18 @@ stream is unaffected (allowed by the brief's §37).
 ## 5. Proposed Java architecture
 
 Package root `com.mymmer.castledefense`. Guiding rule: **gameplay classes carry no
-rendering code and no platform types.** The Python classes mix `think()` and `draw_body()`;
+rendering code and no platform types.**
+
+> **Java API policy** (corrected during the Phase 2 hardening pass). Four things
+> are distinct and must not be conflated: the JDK that runs Gradle/AGP (17), the
+> Java source/target level (17), the Android platform API floor (minSdk 21), and
+> the JDK library APIs supplied by *core-library desugaring* (enabled). Because
+> desugaring is configured, `java.time`, `java.util.stream`, `Optional` and
+> `java.util.function` are available down to API 21 and are **not** banned.
+> What is restricted is narrower and is about performance, not compatibility:
+> inside per-frame paths (simulation step, collision, particles, projectiles)
+> prefer allocation-free Java — indexed loops, primitives, no streams, no
+> capturing lambdas. Outside them, use whatever reads best. The Python classes mix `think()` and `draw_body()`;
 the port splits them — behaviour stays in `enemy/`, appearance moves to `render/painter/`
 keyed by an `EnemyType` enum. That is the single biggest architectural improvement and it
 changes no gameplay.

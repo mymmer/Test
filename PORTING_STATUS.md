@@ -10,9 +10,10 @@ Legend: `[ ]` not started · `[~]` in progress · `[x]` ported (compiles, believ
 Nothing is complete merely because it compiles. A row may only reach `[T]` when a named
 test exercises it.
 
-**Phase status: Phase 1 (Analysis) complete. Phase 2 (Foundation) complete except
-for the Android assembly, which could not be executed in the build environment —
-see the note under Phase 2.**
+**Phase status: Phase 1 (Analysis) complete. Phase 2 (Foundation) implemented and
+hardened, but NOT fully tested: the Android assembly gate is still open because
+Google's Maven is unreachable from the build environment. Phase 2 stays
+incomplete until `./gradlew verifyAndroid` succeeds on a machine with the SDK.**
 
 The Java port lives in [`java-port/`](java-port/) and is isolated from the Python
 game, which remains the authoritative executable reference and is unmodified.
@@ -44,13 +45,21 @@ game, which remains the authoritative executable reference and is unmodified.
 
 ## Phase 2 — Project foundation
 
-- [T] Gradle multi-project (`core`, `lwjgl3`, `android`) — `:android` is included
-      only when an Android SDK is configured, so a missing SDK never blocks the
-      desktop loop. Proven by `gradle whatBuilds`.
-- [x] LibGDX 1.14.2 + Gradle 8.14.3 + Java 17 + JUnit 5.14.4 pinned in
-      `java-port/gradle/libs.versions.toml`, rationale in `java-port/README.md`.
-      LibGDX/JUnit/Gradle verified by resolving and building; **AGP 8.7.3 is an
-      unverified pin** (see the Android note below).
+- [T] Gradle multi-project (`core`, `lwjgl3`, `android`). `:android` inclusion has
+      three outcomes and only the first is silent: no SDK configured → omitted
+      with a notice; SDK configured → **always included, failures are loud**;
+      configured but the path is missing → **the build fails immediately**. All
+      three verified by running them (`whatBuilds`, and with a bogus
+      `ANDROID_HOME`).
+- [x] Toolchain pinned as one coherent, officially documented set:
+      **AGP 8.7.3 → Gradle 8.9 → JDK 17 → compileSdk/targetSdk 35 → minSdk 21**,
+      plus libGDX 1.14.2, JUnit 5.14.4, desugar_jdk_libs 2.1.5. All in
+      `java-port/gradle/libs.versions.toml`; rationale in `java-port/README.md`.
+      Gradle/libGDX/JUnit verified by building; **AGP and desugar pins are
+      unverified** (Google Maven unreachable here).
+- [x] Core-library desugaring enabled in `:android`, so minSdk 21 does not
+      restrict which JDK APIs `core` may use. The remaining restriction is a
+      *performance* rule about per-frame allocation, not an API-level one.
 - [T] `CastleDefenseGame` application skeleton — `CastleDefenseGameHeadlessTest`
 - [T] World viewport `FitViewport(1280, 720)` — `ViewportSetTest`: world stays
       1280x720 on 7 screen shapes; 20:9 gets 240px pillarboxes; 4:3 gets 96px
@@ -64,13 +73,18 @@ game, which remains the authoritative executable reference and is unmodified.
       double `dispose()`
 - [T] Desktop launcher runs — ran at 1280x720, 2400x1080 and 1024x768 under a
       virtual display, 60-120 frames each, clean `created -> paused -> disposed`
-- [ ] **Android assemble succeeds — NOT DONE.** The Android Gradle Plugin and SDK
-      live on `dl.google.com`/`maven.google.com`, which this build environment
-      blocks by policy (403 on CONNECT); Maven Central mirrors AGP only to 2.3.0.
-      The module is written but has never been compiled. Run
-      `./gradlew :android:assembleDebug` on a machine with the SDK to close this.
+- [ ] **Android assemble succeeds — OPEN GATE, blocks Phase 2 completion.** The
+      Android Gradle Plugin and SDK live on `dl.google.com`/`maven.google.com`,
+      which this build environment blocks by policy (403 on CONNECT); Maven
+      Central mirrors AGP only to 2.3.0. The module is written and its XML
+      validated, but it has **never been compiled**.
+      **To close:** `cd java-port && ./gradlew verifyAndroid` on a machine with
+      the SDK. That task assembles the debug APK and prints its path; record the
+      result here and only then may Phase 2 be called complete.
 - [T] CI-runnable headless test source set — `gradle :core:test`, 9 tests, no
       window and no GPU (a `GL20` stub makes viewport layout assertable)
+- [T] `verifyAndroid` task — fails with an actionable message when no SDK is
+      configured (verified), assembles and reports the APK when one is
 
 ## Phase 3 — Core infrastructure
 

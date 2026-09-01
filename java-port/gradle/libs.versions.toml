@@ -6,18 +6,27 @@
 #  is a one-file change.  The rationale for each pin is in java-port/README.md
 #  ("Pinned versions and why").  Do not hard-code versions in build files.
 #
+#  The toolchain is pinned as one coherent, officially documented set rather
+#  than as "newest of everything":
+#
+#      AGP 8.7.3  ->  Gradle 8.9  ->  JDK 17  ->  compileSdk/targetSdk 35
+#
+#  Gradle 8.9 is the version Android Studio ships with the AGP 8.7 generation
+#  and the minimum that AGP 8.7 accepts.  Chasing a newer Gradle only risks
+#  drifting away from the combination Google actually tests.
+#
 #  Verified against Maven Central on 2026-09-01:
 #    com.badlogicgames.gdx:gdx           latest release 1.14.2
 #    org.junit.jupiter:junit-jupiter     latest 5.x release 5.14.4
 #
-#  The Android Gradle Plugin lives on Google's Maven only and could not be
-#  resolved from this build environment (see README "Android build status");
-#  8.7.3 is a conservative, widely used pin compatible with Gradle 8.14.x.
+#  AGP and the desugaring library live on Google's Maven only, which this build
+#  environment blocks -- both pins are conservative but unverified here.  See
+#  README "Android build status".
 
 [versions]
 # --- toolchain ---
-java = "17"                 # language level for every module (Android-safe)
-gradle = "8.14.3"           # wrapper distribution
+java = "17"                 # source/target language level for every module
+gradle = "8.9"              # wrapper distribution -- the AGP 8.7 pairing
 
 # --- libraries ---
 gdx = "1.14.2"
@@ -25,6 +34,7 @@ junit = "5.14.4"
 
 # --- Android ---
 agp = "8.7.3"
+desugarJdkLibs = "2.1.5"    # core-library desugaring: Java 8+ APIs on API 21+
 androidCompileSdk = "35"
 androidTargetSdk = "35"
 androidMinSdk = "21"
@@ -35,6 +45,8 @@ gdx-backend-lwjgl3 = { module = "com.badlogicgames.gdx:gdx-backend-lwjgl3", vers
 gdx-backend-android = { module = "com.badlogicgames.gdx:gdx-backend-android", version.ref = "gdx" }
 gdx-backend-headless = { module = "com.badlogicgames.gdx:gdx-backend-headless", version.ref = "gdx" }
 gdx-platform = { module = "com.badlogicgames.gdx:gdx-platform", version.ref = "gdx" }
+
+android-desugar-jdk-libs = { module = "com.android.tools:desugar_jdk_libs", version.ref = "desugarJdkLibs" }
 
 junit-jupiter = { module = "org.junit.jupiter:junit-jupiter", version.ref = "junit" }
 junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher" }

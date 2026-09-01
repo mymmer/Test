@@ -7,11 +7,29 @@
 //    :lwjgl3   desktop launcher -- the primary development loop
 //    :android  Android launcher -- the primary production target
 //
-//  :android is included only when an Android SDK is actually configured, so a
-//  developer (or CI) without the SDK still gets a fully working desktop build
-//  instead of a configuration failure.  Point at the SDK either with
-//  local.properties (sdk.dir=...) or the ANDROID_HOME / ANDROID_SDK_ROOT
-//  environment variable, then re-run Gradle and :android appears.
+//  ---------------------------------------------------------------------------
+//  How :android inclusion is decided
+//  ---------------------------------------------------------------------------
+//  The rule has exactly three outcomes, and only the first one is silent:
+//
+//   1. No SDK configured anywhere (no local.properties sdk.dir, no ANDROID_HOME,
+//      no ANDROID_SDK_ROOT)  ->  :android is omitted, with a printed notice.
+//      This is the desktop-only / CI / sandbox case: a developer without the
+//      Android SDK still gets a working desktop build instead of a
+//      configuration failure they cannot fix.
+//
+//   2. An SDK location IS configured  ->  :android is ALWAYS included.  Nothing
+//      about the Android build is skipped, softened or caught: if the plugin
+//      cannot resolve, the SDK is the wrong version, or the manifest is invalid,
+//      the build fails loudly with the real error.  A machine set up for Android
+//      development must never silently build "most of" the project.
+//
+//   3. An SDK location is configured but does not exist on disk  ->  the build
+//      FAILS here with a clear message.  A stale sdk.dir or a typo in
+//      ANDROID_HOME is a misconfiguration, not an absence, and silently
+//      dropping the module would hide it.
+//
+//  Print the decision at any time with:  ./gradlew whatBuilds
 
 pluginManagement {
     repositories {
@@ -33,20 +51,44 @@ rootProject.name = 'castle-defense-java'
 include ':core'
 include ':lwjgl3'
 
+// --- locate the Android SDK -------------------------------------------------
 def localProps = new Properties()
 def localFile = file('local.properties')
 if (localFile.exists()) {
     localFile.withInputStream { localProps.load(it) }
 }
-def sdkDir = localProps.getProperty('sdk.dir') ?:
-        System.getenv('ANDROID_HOME') ?: System.getenv('ANDROID_SDK_ROOT')
 
-if (sdkDir != null && !sdkDir.trim().isEmpty() && file(sdkDir).exists()) {
-    include ':android'
-    gradle.rootProject { ext.androidSdkPresent = true }
+def sdkSource = null
+def sdkDir = null
+if (localProps.getProperty('sdk.dir')?.trim()) {
+    sdkSource = 'local.properties (sdk.dir)'
+    sdkDir = localProps.getProperty('sdk.dir').trim()
+} else if (System.getenv('ANDROID_HOME')?.trim()) {
+    sdkSource = 'ANDROID_HOME'
+    sdkDir = System.getenv('ANDROID_HOME').trim()
+} else if (System.getenv('ANDROID_SDK_ROOT')?.trim()) {
+    sdkSource = 'ANDROID_SDK_ROOT'
+    sdkDir = System.getenv('ANDROID_SDK_ROOT').trim()
+}
+
+def androidPresent = false
+if (sdkDir == null) {
+    println '[castle-defense] No Android SDK configured -- the :android module ' +
+            'is not part of this build. Set sdk.dir in local.properties, or ' +
+            'ANDROID_HOME / ANDROID_SDK_ROOT, to enable it.'
+} else if (!file(sdkDir).isDirectory()) {
+    // outcome 3: configured but wrong -- never hide this
+    throw new GradleException(
+            "Android SDK path from ${sdkSource} does not exist: ${sdkDir}\n" +
+            'Fix the path, or unset it entirely to build desktop-only.')
 } else {
-    gradle.rootProject { ext.androidSdkPresent = false }
-    println '[castle-defense] Android SDK not found -- the :android module is ' +
-            'not part of this build. Set sdk.dir in local.properties or ' +
-            'ANDROID_HOME to enable it.'
+    // outcome 2: from here on, any Android failure is a real build failure
+    include ':android'
+    androidPresent = true
+}
+
+gradle.rootProject {
+    ext.androidSdkPresent = androidPresent
+    ext.androidSdkDir = sdkDir
+    ext.androidSdkSource = sdkSource
 }

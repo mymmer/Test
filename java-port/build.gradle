@@ -19,15 +19,54 @@ subprojects {
     }
 }
 
-// Convenience: `gradle whatBuilds` prints which modules are active, which is
-// the quickest way to see whether the Android SDK was picked up.
+// `gradle whatBuilds` prints which modules are active and why, which is the
+// quickest way to see whether the Android SDK was picked up.
 tasks.register('whatBuilds') {
     group = 'help'
-    description = 'Lists the modules included in this build.'
+    description = 'Lists the modules included in this build and the Android SDK decision.'
     def names = subprojects.collect { it.path }
     def hasAndroid = project.hasProperty('androidSdkPresent') ? androidSdkPresent : false
+    def sdkDir = project.hasProperty('androidSdkDir') ? androidSdkDir : null
+    def sdkSource = project.hasProperty('androidSdkSource') ? androidSdkSource : null
     doLast {
         println "modules: ${names.join(', ')}"
-        println "android SDK present: ${hasAndroid}"
+        if (hasAndroid) {
+            println "android SDK: ${sdkDir}  (from ${sdkSource})"
+        } else {
+            println 'android SDK: not configured -- :android omitted'
+        }
+    }
+}
+
+// The Phase 2 gate that this sandbox cannot close: assembling the Android app.
+//
+// This is more than an alias for `:android:assembleDebug`.  Without the module
+// that command fails with Gradle's generic "project not found", which reads
+// like a broken build script rather than a missing SDK.  This task explains the
+// real reason, and on a configured machine it reports where the APK landed so
+// the gate can be closed with evidence.
+tasks.register('verifyAndroid') {
+    group = 'verification'
+    description = 'Assembles the Android debug APK -- the Phase 2 Android gate.'
+    def hasAndroid = project.hasProperty('androidSdkPresent') ? androidSdkPresent : false
+    if (hasAndroid) {
+        dependsOn ':android:assembleDebug'
+    }
+    doLast {
+        if (!hasAndroid) {
+            throw new GradleException(
+                    'Cannot verify Android: no SDK is configured, so the :android ' +
+                    'module is not in this build.\n' +
+                    'Set sdk.dir in java-port/local.properties (or ANDROID_HOME) ' +
+                    'and run ./gradlew verifyAndroid again.')
+        }
+        def apks = fileTree("${project(':android').layout.buildDirectory.get()}/outputs/apk/debug") {
+            include '**/*.apk'
+        }.files
+        if (apks.isEmpty()) {
+            throw new GradleException('assembleDebug produced no APK.')
+        }
+        apks.each { println "android APK: ${it} (${(it.length() / 1024 / 1024).round(2)} MB)" }
+        println 'Android gate: PASSED -- record it in PORTING_STATUS.md.'
     }
 }

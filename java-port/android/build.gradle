@@ -24,6 +24,13 @@ android {
     compileOptions {
         sourceCompatibility JavaVersion.toVersion(libs.versions.java.get())
         targetCompatibility JavaVersion.toVersion(libs.versions.java.get())
+        //  Core-library desugaring backports the Java 8+ library APIs
+        //  (java.time, java.util.stream, Optional, java.util.function, ...) to
+        //  every API level this app supports, so minSdk 21 does not restrict
+        //  which JDK APIs `core` may use.  Whether a given API belongs in a
+        //  per-frame gameplay loop is a performance question, decided
+        //  separately -- see java-port/README.md "Java APIs and Android".
+        coreLibraryDesugaringEnabled true
     }
 
     sourceSets {
@@ -53,6 +60,7 @@ android {
 dependencies {
     implementation project(':core')
     implementation libs.gdx.backend.android
+    coreLibraryDesugaring libs.android.desugar.jdk.libs
 
     // libGDX ships its Android natives as per-ABI artifacts.
     natives "com.badlogicgames.gdx:gdx-platform:${libs.versions.gdx.get()}:natives-armeabi-v7a"

@@ -23,13 +23,24 @@ viewports, the lifecycle, both launchers and the headless test foundation.
 | `:lwjgl3` | Desktop launcher — the development loop. | `:core`, `gdx-backend-lwjgl3` |
 | `:android` | Android launcher — the production target. | `:core`, `gdx-backend-android` |
 
-`:android` is included in the build **only when an Android SDK is configured**
-(`local.properties` with `sdk.dir=…`, or `ANDROID_HOME` / `ANDROID_SDK_ROOT`).
-Without it Gradle prints a one-line notice and builds `:core` + `:lwjgl3`
-normally, so a missing SDK never blocks desktop development. Check with:
+### How `:android` inclusion is decided
+
+`settings.gradle` looks for an SDK in this order: `sdk.dir` in
+`local.properties`, then `ANDROID_HOME`, then `ANDROID_SDK_ROOT`. There are
+exactly three outcomes, and **only the first is silent**:
+
+| Situation | Outcome |
+|---|---|
+| No SDK configured anywhere | `:android` is omitted, with a printed notice. The desktop-only / CI / sandbox case: a developer without the SDK still gets a working build instead of a failure they cannot fix. |
+| An SDK **is** configured | `:android` is **always** included. Nothing about the Android build is skipped, softened or caught — if the plugin cannot resolve, the SDK is the wrong version, or the manifest is invalid, **the build fails loudly with the real error**. |
+| Configured but the path does not exist | The build **fails immediately** with a clear message. A stale `sdk.dir` is a misconfiguration, not an absence, and dropping the module would hide it. |
+
+There is no `try`/`catch` anywhere in that decision. Print it any time with:
 
 ```bash
 ./gradlew whatBuilds
+# modules: :core, :lwjgl3, :android
+# android SDK: /opt/android-sdk  (from ANDROID_HOME)
 ```
 
 ## Running
@@ -49,7 +60,8 @@ java -jar lwjgl3/build/libs/castle-defense.jar --size 2400x1080 --frames 90 \
 ./gradlew :core:test
 
 # android (needs the SDK configured)
-./gradlew :android:assembleDebug
+./gradlew verifyAndroid           # assembles + reports the APK path
+./gradlew :android:assembleDebug  # the same thing, plainly
 ```
 
 Launcher flags: `--size WxH`, `--frames N`, `--screenshot FILE`, `--no-vsync`.
@@ -59,34 +71,89 @@ Launcher flags: `--size WxH`, `--frames N`, `--screenshot FILE`, `--no-vsync`.
 All versions live in [`gradle/libs.versions.toml`](gradle/libs.versions.toml) —
 never in a build file — so an upgrade is a one-file change.
 
+The toolchain is pinned as **one coherent, officially documented set**, not as
+"newest of everything":
+
+```
+AGP 8.7.3  →  Gradle 8.9  →  JDK 17  →  compileSdk / targetSdk 35  →  minSdk 21
+```
+
 | Pin | Version | Why this one |
 |---|---|---|
-| Java language level | **17** | The highest level Android tooling handles without core-library desugaring, and the level AGP 8.x expects. Applied with `options.release`, so `javac` also rejects JDK APIs that Android lacks. |
-| Gradle | **8.14.3** | Current stable; required by (and compatible with) AGP 8.7.x. The wrapper pins it so every machine builds identically. |
-| libGDX | **1.14.2** | Latest release on Maven Central at the time of writing (verified 2026-09-01). |
-| JUnit Jupiter | **5.14.4** | Latest 5.x. JUnit 6 is available but 5.x is the version every Android/Gradle toolchain integrates with today; there is nothing in 6 this project needs. |
-| Android Gradle Plugin | **8.7.3** | Conservative, widely deployed, compatible with Gradle 8.9+. See the caveat below. |
-| compileSdk / targetSdk | **35** | Android 15, matching AGP 8.7. |
-| minSdk | **21** | Android 5.0. Covers effectively the whole active device base and needs no desugaring. **Consequence:** `core` must avoid `java.util.function`, `java.util.stream`, `Optional` and `java.time`, which are API 24+. This is why the renderer seam uses a hand-written `GameRendererFactory` instead of `Supplier`. |
+| Android Gradle Plugin | **8.7.3** | A stable, widely deployed AGP generation. Chosen first; everything else is chosen to match it. |
+| Gradle | **8.9** | The version that ships with the AGP 8.7 generation and the minimum AGP 8.7 accepts. Deliberately *not* the newest Gradle: staying on the pairing Google tests is worth more here than a version number. |
+| JDK (to run Gradle/AGP) | **17** | AGP 8.7's required minimum. Newer JDKs work, but 17 is the documented baseline. |
+| Java source/target level | **17** | See the decision below. |
+| compileSdk / targetSdk | **35** | Android 15, the level AGP 8.7 is built against. |
+| minSdk | **21** | Android 5.0 — effectively the whole active device base. |
+| libGDX | **1.14.2** | Latest release on Maven Central (verified 2026-09-01). Independent of the Android toolchain. |
+| JUnit Jupiter | **5.14.4** | Latest 5.x. JUnit 6 exists but 5.x is what the Gradle/Android tooling integrates with today, and nothing here needs 6. |
+| desugar_jdk_libs | **2.1.5** | Core-library desugaring, see below. |
 
-### Android build status in this environment
+To upgrade later: change the version in `libs.versions.toml`, change the
+`distributionUrl` in `gradle/wrapper/gradle-wrapper.properties` to match, and
+re-run the build. Nothing else references a version.
+
+## Java APIs and Android — four separate things
+
+These get conflated constantly, so the project states them separately:
+
+| Concern | This project | Notes |
+|---|---|---|
+| **1. JDK that runs Gradle/AGP** | 17 (21 also works) | A build-machine property. Nothing to do with what the app may call. |
+| **2. Java source/target language level** | **17**, in every module | Sets the *language* features available: records, sealed types, switch expressions, `var`, text blocks. Enforced with `options.release = 17`, so `javac` also validates the API surface rather than only accepting the syntax. |
+| **3. Android platform API availability** | minSdk 21 | Which `android.*` APIs and which *bundled* JDK APIs exist on the device. Without desugaring this would cap the JDK library at roughly Java 7 + parts of 8. |
+| **4. APIs supplied by desugaring** | enabled (`desugar_jdk_libs`) | AGP rewrites calls to modern JDK library APIs so they run on old devices. With it enabled, `java.time`, `java.util.stream`, `Optional`, `java.util.function` and friends are available **down to API 21**. |
+
+**The rule for `core`, stated correctly:** modern Java is allowed. `Supplier`,
+`Optional`, `java.time` and streams are *not* banned by minSdk — desugaring
+covers them, and the Android module is configured for it.
+
+What *is* restricted is narrower and is a **performance** rule, not a
+compatibility one:
+
+> Inside per-frame gameplay paths — the simulation step, collision loops,
+> particle updates, projectile resolution — prefer plain allocation-free Java:
+> indexed loops over arrays, primitives over boxed types, no streams, no
+> `Optional` wrappers, no capturing lambdas. Everything the Python profile
+> flagged (see `docs/PORT_ANALYSIS.md` §3) lives in those paths, and on a
+> low-end phone the GC pressure is what shows up as stutter.
+>
+> Outside those paths — loading, configuration, skin validation, UI assembly,
+> save migration, tests — use whatever reads best.
+
+`GameRendererFactory` is a named interface for readability, not because
+`Supplier` was unavailable.
+
+## Android build status in this environment
 
 The Android Gradle Plugin and the Android SDK are published on Google's Maven
 (`dl.google.com` / `maven.google.com`), which the sandbox this port was created
 in **blocks by policy** (`HTTP 403` on CONNECT). Maven Central mirrors AGP only
 up to 2.3.0 (2017), which is unusable.
 
-Therefore, at the end of Phase 2:
+So, as of the Phase 2 hardening pass:
 
 * `:core` and `:lwjgl3` — compiled, tested and **run**.
-* `:android` — written and XML-validated, but **not compiled or assembled**.
-  The AGP pin (8.7.3) and `compileSdk 35` are conservative choices, not verified
-  ones. On a machine with the SDK, `./gradlew :android:assembleDebug` is the
-  command that proves it; if AGP 8.7.3 turns out to be unavailable or too old
-  for the installed SDK, changing `agp` in `libs.versions.toml` is the whole fix.
+* `:android` — written and XML-validated, but **never compiled or assembled**.
+  The AGP (8.7.3) and desugaring (2.1.5) pins are conservative choices, not
+  verified ones.
 
-This is recorded as an open item in `PORTING_STATUS.md` rather than being
-claimed as done.
+**Closing the gate** (on any machine with the SDK):
+
+```bash
+cd java-port
+./gradlew verifyAndroid
+```
+
+`verifyAndroid` earns its place rather than aliasing one command: without the
+module, `:android:assembleDebug` fails with Gradle's generic "project not
+found", which reads like a broken build script instead of a missing SDK. The
+task explains the actual reason, and on success prints the APK it produced so
+the gate can be closed with evidence.
+
+Until that run succeeds, `PORTING_STATUS.md` keeps `[ ] Android assemble
+succeeds` open and **Phase 2 is not fully tested**.
 
 ## Layout
 
