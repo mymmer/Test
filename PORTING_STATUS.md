@@ -10,10 +10,12 @@ Legend: `[ ]` not started · `[~]` in progress · `[x]` ported (compiles, believ
 Nothing is complete merely because it compiles. A row may only reach `[T]` when a named
 test exercises it.
 
-**Phase status: Phase 1 (Analysis) complete. Phase 2 (Foundation) implemented and
-hardened, but NOT fully tested: the Android assembly gate is still open because
-Google's Maven is unreachable from the build environment. Phase 2 stays
-incomplete until `./gradlew verifyAndroid` succeeds on a machine with the SDK.**
+**Phase status: Phases 1 and 3 complete. Phase 2 implemented and hardened but NOT
+fully tested — the Android assembly gate is still open because Google's Maven is
+unreachable from the build environment, and stays open until
+`./gradlew verifyAndroid` succeeds on a machine with the SDK.**
+
+Phase 3 adds no gameplay: no enemies, towers, physics or progression exist yet.
 
 The Java port lives in [`java-port/`](java-port/) and is isolated from the Python
 game, which remains the authoritative executable reference and is unmodified.
@@ -88,25 +90,53 @@ game, which remains the authoritative executable reference and is unmodified.
 
 ## Phase 3 — Core infrastructure
 
-- [ ] `GameConfig` (world geometry, physics, scoring constants)
-- [ ] `Tuning` (endless timetable, horn, talent income)
-- [ ] `DifficultyConfig` + `difficulties.json`
-- [ ] `QualityConfig` (LOW/MEDIUM/HIGH, cosmetic only)
-- [ ] JSON data loader + validation
-- [ ] `GameAssets` / `AssetManager` ownership + disposal
-- [ ] `SkinManager` (load / unload / switch)
-- [ ] `SkinDefinition`, `UnitVisual`, `AnimationSet`
-- [ ] `SkinValidator` (missing units/regions, bad attachments, dup ids, malformed JSON)
-- [ ] `gradlew packAssets` TexturePacker task
-- [ ] `ProceduralRenderer` fallback wiring (missing art ⇒ warn + draw, never crash)
-- [ ] `SaveManager` / `SaveData` / `SaveMigration` (saveVersion 1). Save v1
-      preserves the Python semantics exactly: **one shared `highScore`**, not
-      per-mode scores. The format leaves room for a future migration to add
-      per-mode scores; that is not part of this port.
-- [ ] `PlatformServices` interface + desktop no-op + Android impl
-- [ ] `CrashLogger` (file log in `Gdx.files.local`, global handler)
-- [ ] `Strings` localisation table
-- [ ] `Rng` + `WeightedPicker`
+- [x] `GameConfig` — the `sprites.py` constant block transcribed verbatim (world
+      geometry, physics, regalia, bounce, weather, cursor strength, structures,
+      betrayal, scoring, limits), plus `worldY()` as the single pygame→libGDX
+      y-axis conversion
+- [x] `Tuning` — endless timetable, horn, talent income, skill constants
+- [T] `DifficultyConfig` + `DifficultyTable` + `assets/data/difficulties.json` —
+      `DifficultyTableTest` asserts all 30 values against the Python table,
+      menu order, unknown-id fallback and loud failure on malformed content
+- [T] `QualityConfig` (LOW/MEDIUM/HIGH, cosmetic only) — `ServicesStartupTest`
+- [T] JSON data loader + strict validation (`JsonSource`, `Json5`,
+      `DataException`) — missing/mistyped fields name the file and the field
+      rather than defaulting silently
+- [x] `GameAssets` — sole owner of the `AssetManager`; nothing else may build a
+      texture. Disposal verified through `Services`
+- [T] `SkinManager` (load / validate / activate / unload) — `SkinSystemTest`:
+      switching releases the previous atlas before the new one goes live, and a
+      broken, malformed, missing or unloadable skin leaves the previous one
+      running
+- [T] `SkinDefinition`, `UnitVisual`, `AnimationSet`, `AttachmentPoint`,
+      `VisualId`, `AnimationState` — attachments normalised to the **gameplay**
+      box, so artwork can never move a hitbox or an anchor
+- [T] `SkinValidator` — duplicate ids, unknown keys, missing regions, partial
+      animations, out-of-range attachments, non-positive scale
+- [T] `gradlew packAssets` TexturePacker task — verified end to end on generated
+      PNGs. Writes the packer settings itself, with `useIndexes:false` so
+      `scout_walk_0.png` stays region `scout_walk_0` instead of being collapsed
+      into an indexed `scout_walk`
+- [T] Procedural fallback wiring — `visualFor()` never returns null, marks
+      uncovered ids procedural and logs each once; the shipped `procedural` skin
+      declares no atlas at all, so the game runs with zero artwork exactly like
+      the Python original
+- [T] `SaveManager` / `SaveData` / `SaveMigration` (saveVersion 1) —
+      `SaveManagerTest`: round-trip, corrupt file, partial file, future version,
+      migration chain, missing migration. Save v1 keeps **one shared
+      `highScore`**, asserted by a test that fails if per-mode scores appear
+- [x] `PlatformServices` + `HapticEvent` + `SafeAreaInsets`, desktop no-op and
+      Android implementation (vibrator, share, open URL, display cutout).
+      The Android side compiles only where the SDK exists — **untested here**
+- [T] `CrashLogger` — full stack traces plus a state snapshot to
+      `Gdx.files.local`, global uncaught handler, rotation, and a context
+      provider that may itself fail without breaking the log
+- [T] `Strings` localisation foundation + `assets/i18n/strings.properties` —
+      missing keys render as `!key!`, unknown locales fall back
+- [T] `Rng` (split gameplay/decoration streams) + `WeightedPicker` (Python
+      `random.choices` semantics) — distributions asserted statistically
+- [T] `Services` startup wiring — order, what is fatal (broken balance data) and
+      what degrades (missing save, unknown difficulty, unavailable skin)
 
 ## Phase 4 — Simulation foundation
 

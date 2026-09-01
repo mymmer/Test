@@ -2,6 +2,9 @@ package com.mymmer.castledefense;
 
 import com.badlogic.gdx.ApplicationAdapter;
 import com.badlogic.gdx.Gdx;
+import com.mymmer.castledefense.data.DataException;
+import com.mymmer.castledefense.platform.NoOpPlatformServices;
+import com.mymmer.castledefense.platform.PlatformServices;
 import com.mymmer.castledefense.render.FoundationRenderer;
 import com.mymmer.castledefense.render.GameRenderer;
 import com.mymmer.castledefense.render.GameRendererFactory;
@@ -23,6 +26,7 @@ public class CastleDefenseGame extends ApplicationAdapter {
 
     private final GameRendererFactory rendererFactory;
     private final ViewportSet viewports = new ViewportSet();
+    private final Services services;
 
     private volatile GameRenderer renderer;
 
@@ -35,15 +39,21 @@ public class CastleDefenseGame extends ApplicationAdapter {
     private volatile int resumeCount;
     private volatile int disposeCount;
     private volatile boolean paused;
+    private volatile Throwable startupFailure;
 
     /** Production constructor: the real (Phase 2 scaffolding) renderer. */
     public CastleDefenseGame() {
+        this(new NoOpPlatformServices());
+    }
+
+    /** The constructor a launcher uses, supplying its platform implementation. */
+    public CastleDefenseGame(PlatformServices platform) {
         this(new GameRendererFactory() {
             @Override
             public GameRenderer create() {
                 return new FoundationRenderer();
             }
-        });
+        }, new Services(platform));
     }
 
     /**
@@ -53,15 +63,36 @@ public class CastleDefenseGame extends ApplicationAdapter {
      *                        pass one that draws nothing
      */
     public CastleDefenseGame(GameRendererFactory rendererFactory) {
+        this(rendererFactory, new Services(new NoOpPlatformServices()));
+    }
+
+    /** Full injection, for tests that supply their own infrastructure. */
+    public CastleDefenseGame(GameRendererFactory rendererFactory, Services services) {
         if (rendererFactory == null) {
             throw new IllegalArgumentException("rendererFactory must not be null");
         }
+        if (services == null) {
+            throw new IllegalArgumentException("services must not be null");
+        }
         this.rendererFactory = rendererFactory;
+        this.services = services;
     }
 
     @Override
     public void create() {
         createCount++;
+        // Infrastructure first: crash logging is installed before anything that
+        // could fail, and the state snapshot is registered so a later crash
+        // reports what the game was doing.
+        try {
+            services.start();
+            services.crashLogger().setContextProvider(new CrashContext());
+        } catch (DataException e) {
+            // Content is broken. Log it loudly; the game continues far enough
+            // to show a failure rather than dying with no explanation.
+            services.crashLogger().logCrash(e, "startup data loading");
+            startupFailure = e;
+        }
         renderer = rendererFactory.create();
         renderer.create(viewports);
         // A backend may never call resize() before the first frame (the headless
@@ -105,6 +136,9 @@ public class CastleDefenseGame extends ApplicationAdapter {
     public void pause() {
         pauseCount++;
         paused = true;
+        // Android may never call dispose(); backgrounding is the last reliable
+        // chance to write settings, so it is taken here.
+        services.persist();
         log("paused");
     }
 
@@ -122,6 +156,8 @@ public class CastleDefenseGame extends ApplicationAdapter {
             renderer.dispose();
             renderer = null;
         }
+        services.persist();
+        services.dispose();
         log("disposed");
     }
 
@@ -129,6 +165,27 @@ public class CastleDefenseGame extends ApplicationAdapter {
         if (Gdx.app != null) {
             Gdx.app.log("CastleDefense", what);
         }
+    }
+
+    /** Describes what the game was doing, for the crash log. */
+    private final class CrashContext implements com.mymmer.castledefense.util.CrashLogger.ContextProvider {
+        @Override
+        public String describe() {
+            return "phase=foundation frames=" + renderCount
+                    + " paused=" + paused
+                    + " screen=" + viewports.getScreenWidth() + "x" + viewports.getScreenHeight()
+                    + " skin=" + services.skins().activeSkinId()
+                    + " difficulty=" + (services.save() != null ? services.save().difficulty : "?");
+        }
+    }
+
+    public Services getServices() {
+        return services;
+    }
+
+    /** Non-null when startup data could not be loaded. */
+    public Throwable getStartupFailure() {
+        return startupFailure;
     }
 
     public ViewportSet getViewports() {

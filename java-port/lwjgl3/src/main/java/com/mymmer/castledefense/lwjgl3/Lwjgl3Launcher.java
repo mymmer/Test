@@ -49,9 +49,10 @@ public final class Lwjgl3Launcher {
         // asking for an audio device spews ALSA errors on headless machines.
         config.disableAudio(true);
 
+        DesktopPlatformServices platform = new DesktopPlatformServices();
         CastleDefenseGame game = options.frameLimit > 0
-                ? new FrameLimitedGame(options.frameLimit, options.screenshot)
-                : new CastleDefenseGame();
+                ? new FrameLimitedGame(options.frameLimit, options.screenshot, platform)
+                : new CastleDefenseGame(platform);
 
         new Lwjgl3Application(game, config);
     }
@@ -61,7 +62,9 @@ public final class Lwjgl3Launcher {
         private final int limit;
         private final String screenshotPath;
 
-        FrameLimitedGame(int limit, String screenshotPath) {
+        FrameLimitedGame(int limit, String screenshotPath,
+                         DesktopPlatformServices platform) {
+            super(platform);
             this.limit = limit;
             this.screenshotPath = screenshotPath;
         }

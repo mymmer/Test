@@ -30,6 +30,6 @@ public class AndroidLauncher extends AndroidApplication {
         config.numSamples = 0;              // MSAA off: fill rate matters more on mobile
         config.useWakelock = true;
 
-        initialize(new CastleDefenseGame(), config);
+        initialize(new CastleDefenseGame(new AndroidPlatformServices(this)), config);
     }
 }

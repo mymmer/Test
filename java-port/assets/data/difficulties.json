@@ -1,0 +1,57 @@
+{
+  "_comment": [
+    "Difficulty presets, transcribed from DIFFICULTIES in main.py.",
+    "Every knob a difficulty can turn lives in one record, so tuning Hard is",
+    "editing numbers here rather than hunting through the codebase.",
+    "  scale      multiplies enemy health and damage scaling",
+    "  gold       payout multiplier",
+    "  headstart  extra effective waves a boss spawns with",
+    "  speed      FLAT multiplier on every enemy's base movement speed",
+    "  hpCurve    multiplies the per-tier health growth (1.60 = +60% a tier)",
+    "  bossFire   boss projectile interval multiplier (0.50 = twice as fast)",
+    "  eliteHorn  Challenge Horn calls in elites instead of a mixed mob",
+    "  grabCd     seconds the cursor must wait between grabs"
+  ],
+  "defaultDifficulty": "normal",
+  "difficulties": [
+    {
+      "id": "easy",
+      "label": "EASY",
+      "scale": 0.80,
+      "gold": 1.15,
+      "headstart": 0.00,
+      "speed": 0.90,
+      "hpCurve": 0.80,
+      "bossFire": 1.00,
+      "eliteHorn": false,
+      "grabCd": 0.00,
+      "blurb": "Enemies scale 20% slower, walk 10% slower, you earn 15% more gold, and the cursor never has to wait between grabs."
+    },
+    {
+      "id": "normal",
+      "label": "NORMAL",
+      "scale": 1.00,
+      "gold": 1.00,
+      "headstart": 0.00,
+      "speed": 1.00,
+      "hpCurve": 1.00,
+      "bossFire": 1.00,
+      "eliteHorn": false,
+      "grabCd": 0.25,
+      "blurb": "The game as designed. Standard scaling, standard pay, a quarter-second between grabs."
+    },
+    {
+      "id": "hard",
+      "label": "HARD",
+      "scale": 1.30,
+      "gold": 1.00,
+      "headstart": 0.25,
+      "speed": 1.40,
+      "hpCurve": 1.60,
+      "bossFire": 0.50,
+      "eliteHorn": true,
+      "grabCd": 0.50,
+      "blurb": "Enemies move 40% faster, health scales 60% harder per tier, bosses fire twice as fast, the horn calls in elites, and every grab costs you half a second."
+    }
+  ]
+}

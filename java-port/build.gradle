@@ -70,3 +70,87 @@ tasks.register('verifyAndroid') {
         println 'Android gate: PASSED -- record it in PORTING_STATUS.md.'
     }
 }
+
+
+// ============================================================================
+//  Asset pipeline:  raw-assets/skins/<skin>/*.png  ->  assets/skins/<skin>/units.atlas
+// ============================================================================
+//  Run it with:  ./gradlew packAssets
+//
+//  The rule from the brief: artwork is maintained as individual PNGs, and
+//  nobody ever hand-maintains sprite-sheet coordinates.  Code asks the atlas
+//  for a region by name; this task is what makes that name exist.
+//
+//  gdx-tools is resolved into its own configuration so the packer never lands
+//  on any module's runtime classpath.
+
+configurations {
+    texturePacker
+}
+
+dependencies {
+    texturePacker "com.badlogicgames.gdx:gdx-tools:${libs.versions.gdx.get()}"
+}
+
+tasks.register('packAssets') {
+    group = 'build'
+    description = 'Packs raw-assets/skins/<skin>/*.png into assets/skins/<skin>/units.atlas'
+
+    def rawRoot = file('raw-assets/skins')
+    def outRoot = file('assets/skins')
+    inputs.dir(rawRoot).optional()
+    outputs.dir(outRoot)
+
+    doLast {
+        if (!rawRoot.exists()) {
+            println "packAssets: no ${rawRoot} -- nothing to pack " +
+                    '(the game runs procedurally without artwork)'
+            return
+        }
+        def skins = rawRoot.listFiles()?.findAll { it.isDirectory() } ?: []
+        def withPngs = skins.findAll { dir ->
+            dir.listFiles()?.any { it.name.toLowerCase().endsWith('.png') }
+        }
+        if (withPngs.isEmpty()) {
+            println 'packAssets: no skin folders contain PNGs -- nothing to pack'
+            return
+        }
+        withPngs.each { dir ->
+            def outDir = new File(outRoot, dir.name)
+            outDir.mkdirs()
+
+            //  TexturePacker reads pack.json from the input folder.  It is
+            //  written here rather than committed so the packing rules live in
+            //  one place and an artist never has to maintain one.
+            //
+            //  useIndexes:false is the important one.  By default the packer
+            //  treats a trailing _0 / _1 as libGDX's animation *index* and
+            //  collapses scout_walk_0.png and scout_walk_1.png into one region
+            //  called "scout_walk" -- which would silently break the documented
+            //  rule that a region is named after its file, and with it the
+            //  frame lookups in AnimationSet.
+            new File(dir, 'pack.json').text = '''{
+  "useIndexes": false,
+  "filterMin": "Nearest",
+  "filterMag": "Nearest",
+  "maxWidth": 2048,
+  "maxHeight": 2048,
+  "paddingX": 2,
+  "paddingY": 2,
+  "duplicatePadding": true,
+  "bleed": true,
+  "stripWhitespaceX": false,
+  "stripWhitespaceY": false,
+  "combineSubdirectories": true
+}
+'''
+            println "packAssets: ${dir.name} -> ${outDir}/units.atlas"
+            javaexec {
+                classpath = configurations.texturePacker
+                mainClass = 'com.badlogic.gdx.tools.texturepacker.TexturePacker'
+                args = [dir.absolutePath, outDir.absolutePath, 'units']
+            }
+        }
+        println "packAssets: packed ${withPngs.size()} skin(s)"
+    }
+}

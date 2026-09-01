@@ -1,0 +1,31 @@
+{
+  "id": "procedural",
+  "version": 1,
+  "procedural": true,
+  "_comment": [
+    "The skin that always exists. It supplies no artwork at all: every unit is",
+    "drawn from primitives by the procedural renderer, which is exactly how the",
+    "Python game looks when assets/ is empty.",
+    "",
+    "It is also the attachment reference. The coordinates below are the Python",
+    "regalia_anchor() positions, normalised to each unit's gameplay box, so a",
+    "new skin that omits an attachment still puts the crown on the right spot."
+  ],
+  "units": {
+    "troll_king": {
+      "attachments": {
+        "crown": { "x": 0.5, "y": 0.98 }
+      }
+    },
+    "lich_lord": {
+      "attachments": {
+        "staff": { "x": 1.09, "y": 1.16 }
+      }
+    },
+    "dragon": {
+      "attachments": {
+        "claws": { "x": 0.45, "y": 0.03 }
+      }
+    }
+  }
+}

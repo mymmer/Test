@@ -32,6 +32,10 @@ dependencies {
 
 test {
     useJUnitPlatform()
+    //  Gdx.files.internal resolves against the working directory, so point the
+    //  tests at the same assets root the launchers use.  This is what lets the
+    //  shipped data files be asserted against the Python values.
+    workingDir = rootProject.file('assets')
     testLogging {
         events 'passed', 'skipped', 'failed'
         exceptionFormat 'full'
