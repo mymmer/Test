@@ -10,7 +10,12 @@ Legend: `[ ]` not started · `[~]` in progress · `[x]` ported (compiles, believ
 Nothing is complete merely because it compiles. A row may only reach `[T]` when a named
 test exercises it.
 
-**Phase status: Phase 1 (Analysis) complete. Phase 2 not started — no Java exists yet.**
+**Phase status: Phase 1 (Analysis) complete. Phase 2 (Foundation) complete except
+for the Android assembly, which could not be executed in the build environment —
+see the note under Phase 2.**
+
+The Java port lives in [`java-port/`](java-port/) and is isolated from the Python
+game, which remains the authoritative executable reference and is unmodified.
 
 ---
 
@@ -39,16 +44,33 @@ test exercises it.
 
 ## Phase 2 — Project foundation
 
-- [ ] Gradle multi-project (`core`, `lwjgl3`, `android`)
-- [ ] LibGDX + AGP + Java toolchain pinned
-- [ ] `CastleDefenseGame` application skeleton
-- [ ] World viewport `FitViewport(1280, 720)`
-- [ ] Separate UI viewport
-- [ ] Android manifest, icons, permissions (none beyond default)
-- [ ] Lifecycle hooks (`pause`/`resume`/`dispose`)
-- [ ] Desktop launcher runs
-- [ ] Android assemble succeeds
-- [ ] CI-runnable headless test source set
+- [T] Gradle multi-project (`core`, `lwjgl3`, `android`) — `:android` is included
+      only when an Android SDK is configured, so a missing SDK never blocks the
+      desktop loop. Proven by `gradle whatBuilds`.
+- [x] LibGDX 1.14.2 + Gradle 8.14.3 + Java 17 + JUnit 5.14.4 pinned in
+      `java-port/gradle/libs.versions.toml`, rationale in `java-port/README.md`.
+      LibGDX/JUnit/Gradle verified by resolving and building; **AGP 8.7.3 is an
+      unverified pin** (see the Android note below).
+- [T] `CastleDefenseGame` application skeleton — `CastleDefenseGameHeadlessTest`
+- [T] World viewport `FitViewport(1280, 720)` — `ViewportSetTest`: world stays
+      1280x720 on 7 screen shapes; 20:9 gets 240px pillarboxes; 4:3 gets 96px
+      letterboxes. Confirmed visually by a real 2400x1080 desktop frame.
+- [T] Separate UI viewport — `ViewportSetTest`: 720 units of height kept, width
+      extends to 1600 on 20:9, world unaffected
+- [x] Android manifest (landscape, cutout mode `shortEdges`, immersive, no
+      permissions), theme and launcher written and XML-validated
+- [T] Lifecycle hooks (`create`/`resize`/`render`/`pause`/`resume`/`dispose`) —
+      `CastleDefenseGameHeadlessTest`, including 0x0 resize rejection and a
+      double `dispose()`
+- [T] Desktop launcher runs — ran at 1280x720, 2400x1080 and 1024x768 under a
+      virtual display, 60-120 frames each, clean `created -> paused -> disposed`
+- [ ] **Android assemble succeeds — NOT DONE.** The Android Gradle Plugin and SDK
+      live on `dl.google.com`/`maven.google.com`, which this build environment
+      blocks by policy (403 on CONNECT); Maven Central mirrors AGP only to 2.3.0.
+      The module is written but has never been compiled. Run
+      `./gradlew :android:assembleDebug` on a machine with the SDK to close this.
+- [T] CI-runnable headless test source set — `gradle :core:test`, 9 tests, no
+      window and no GPU (a `GL20` stub makes viewport layout assertable)
 
 ## Phase 3 — Core infrastructure
 
@@ -63,7 +85,10 @@ test exercises it.
 - [ ] `SkinValidator` (missing units/regions, bad attachments, dup ids, malformed JSON)
 - [ ] `gradlew packAssets` TexturePacker task
 - [ ] `ProceduralRenderer` fallback wiring (missing art ⇒ warn + draw, never crash)
-- [ ] `SaveManager` / `SaveData` / `SaveMigration` (saveVersion 1)
+- [ ] `SaveManager` / `SaveData` / `SaveMigration` (saveVersion 1). Save v1
+      preserves the Python semantics exactly: **one shared `highScore`**, not
+      per-mode scores. The format leaves room for a future migration to add
+      per-mode scores; that is not part of this port.
 - [ ] `PlatformServices` interface + desktop no-op + Android impl
 - [ ] `CrashLogger` (file log in `Gdx.files.local`, global handler)
 - [ ] `Strings` localisation table
@@ -182,11 +207,20 @@ test exercises it.
 
 ## Phase 12 — Mobile optimisation
 
+> **Rule for this phase:** correctness and parity come first. Every optimisation
+> below touches an order-dependent algorithm, so none of them may be applied
+> until the parity tests exist, and each must be shown behaviourally equivalent
+> to the reference implementation before it lands. The initial port implements
+> the Python algorithm verbatim — same insertion order, same nested pair
+> traversal, same mutation timing.
+
 - [ ] Allocation audit of the step loop (target: zero steady-state allocation)
-- [ ] Projectile × enemy broadphase
-- [ ] Crowd separation bucketing
-- [ ] Shared per-frame target candidate list for towers
-- [ ] Cannon cluster grid
+- [ ] Projectile × enemy broadphase — *only if provably equivalent*
+- [ ] Crowd separation bucketing — *only if provably equivalent; `separate_enemies`
+      mutates x mid-traversal, so ordering is observable*
+- [ ] Shared per-frame target candidate list for towers — *only if provably
+      equivalent*
+- [ ] Cannon cluster grid — *only if provably equivalent*
 - [ ] Particle pooling + caps per quality preset
 - [ ] Glow/shadow pre-baked textures
 - [ ] Text draw batching

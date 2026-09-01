@@ -1,0 +1,33 @@
+// ============================================================================
+//  Root build: settings shared by every module.
+// ============================================================================
+//  Versions are never written here -- they live in gradle/libs.versions.toml.
+
+subprojects {
+    repositories {
+        mavenCentral()
+        google()
+    }
+
+    // Every module compiles to the same Android-safe language level.  Using
+    // `release` (rather than source/target compatibility alone) makes javac
+    // check the API surface too, so `core` cannot accidentally use a JDK API
+    // that is missing on Android.
+    tasks.withType(JavaCompile).configureEach {
+        options.encoding = 'UTF-8'
+        options.compilerArgs += ['-Xlint:all', '-Xlint:-processing']
+    }
+}
+
+// Convenience: `gradle whatBuilds` prints which modules are active, which is
+// the quickest way to see whether the Android SDK was picked up.
+tasks.register('whatBuilds') {
+    group = 'help'
+    description = 'Lists the modules included in this build.'
+    def names = subprojects.collect { it.path }
+    def hasAndroid = project.hasProperty('androidSdkPresent') ? androidSdkPresent : false
+    doLast {
+        println "modules: ${names.join(', ')}"
+        println "android SDK present: ${hasAndroid}"
+    }
+}

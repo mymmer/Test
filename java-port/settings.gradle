@@ -1,0 +1,52 @@
+// ============================================================================
+//  Castle Defense -- Java/LibGDX port, Gradle multi-project
+// ============================================================================
+//
+//  Modules:
+//    :core     platform-independent game code (no Android, no LWJGL types)
+//    :lwjgl3   desktop launcher -- the primary development loop
+//    :android  Android launcher -- the primary production target
+//
+//  :android is included only when an Android SDK is actually configured, so a
+//  developer (or CI) without the SDK still gets a fully working desktop build
+//  instead of a configuration failure.  Point at the SDK either with
+//  local.properties (sdk.dir=...) or the ANDROID_HOME / ANDROID_SDK_ROOT
+//  environment variable, then re-run Gradle and :android appears.
+
+pluginManagement {
+    repositories {
+        gradlePluginPortal()
+        google()
+        mavenCentral()
+    }
+}
+
+dependencyResolutionManagement {
+    repositories {
+        mavenCentral()
+        google()
+    }
+}
+
+rootProject.name = 'castle-defense-java'
+
+include ':core'
+include ':lwjgl3'
+
+def localProps = new Properties()
+def localFile = file('local.properties')
+if (localFile.exists()) {
+    localFile.withInputStream { localProps.load(it) }
+}
+def sdkDir = localProps.getProperty('sdk.dir') ?:
+        System.getenv('ANDROID_HOME') ?: System.getenv('ANDROID_SDK_ROOT')
+
+if (sdkDir != null && !sdkDir.trim().isEmpty() && file(sdkDir).exists()) {
+    include ':android'
+    gradle.rootProject { ext.androidSdkPresent = true }
+} else {
+    gradle.rootProject { ext.androidSdkPresent = false }
+    println '[castle-defense] Android SDK not found -- the :android module is ' +
+            'not part of this build. Set sdk.dir in local.properties or ' +
+            'ANDROID_HOME to enable it.'
+}

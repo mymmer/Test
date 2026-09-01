@@ -1,0 +1,39 @@
+// ============================================================================
+//  :core -- the platform-independent game.
+// ============================================================================
+//  MUST NOT depend on: android.*, LWJGL, or any backend.  Only gdx-core.
+//  Anything platform-specific is reached through an interface implemented by
+//  the launchers (see platform/ from Phase 3 onward).
+
+plugins {
+    id 'java-library'
+}
+
+java {
+    sourceCompatibility = JavaVersion.toVersion(libs.versions.java.get())
+    targetCompatibility = JavaVersion.toVersion(libs.versions.java.get())
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.release = libs.versions.java.get() as Integer
+}
+
+dependencies {
+    api libs.gdx.core
+
+    // Headless backend + desktop natives are TEST-ONLY: they let the JUnit
+    // suite build a real Gdx application without a window or a GPU, which is
+    // what makes the simulation testable in CI.
+    testImplementation libs.gdx.backend.headless
+    testImplementation variantOf(libs.gdx.platform) { classifier('natives-desktop') }
+    testImplementation libs.junit.jupiter
+    testRuntimeOnly libs.junit.platform.launcher
+}
+
+test {
+    useJUnitPlatform()
+    testLogging {
+        events 'passed', 'skipped', 'failed'
+        exceptionFormat 'full'
+    }
+}

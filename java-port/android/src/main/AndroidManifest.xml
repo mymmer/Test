@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- The game needs no permissions: no network, no storage, no location. -->
+
+    <application
+        android:allowBackup="true"
+        android:label="@string/app_name"
+        android:hardwareAccelerated="true"
+        android:isGame="true"
+        android:theme="@style/GdxTheme"
+        android:appCategory="game">
+
+        <activity
+            android:name=".android.AndroidLauncher"
+            android:label="@string/app_name"
+            android:exported="true"
+            android:screenOrientation="sensorLandscape"
+            android:launchMode="singleTask"
+            android:resizeableActivity="true"
+            android:configChanges="keyboard|keyboardHidden|navigation|orientation|screenSize|screenLayout|smallestScreenSize|density|uiMode">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>

@@ -1,0 +1,43 @@
+# ==============================================================================
+#  Pinned dependency + toolchain versions for the Castle Defense Java/LibGDX port
+# ==============================================================================
+#
+#  Every version this project depends on is pinned here so that a later upgrade
+#  is a one-file change.  The rationale for each pin is in java-port/README.md
+#  ("Pinned versions and why").  Do not hard-code versions in build files.
+#
+#  Verified against Maven Central on 2026-09-01:
+#    com.badlogicgames.gdx:gdx           latest release 1.14.2
+#    org.junit.jupiter:junit-jupiter     latest 5.x release 5.14.4
+#
+#  The Android Gradle Plugin lives on Google's Maven only and could not be
+#  resolved from this build environment (see README "Android build status");
+#  8.7.3 is a conservative, widely used pin compatible with Gradle 8.14.x.
+
+[versions]
+# --- toolchain ---
+java = "17"                 # language level for every module (Android-safe)
+gradle = "8.14.3"           # wrapper distribution
+
+# --- libraries ---
+gdx = "1.14.2"
+junit = "5.14.4"
+
+# --- Android ---
+agp = "8.7.3"
+androidCompileSdk = "35"
+androidTargetSdk = "35"
+androidMinSdk = "21"
+
+[libraries]
+gdx-core = { module = "com.badlogicgames.gdx:gdx", version.ref = "gdx" }
+gdx-backend-lwjgl3 = { module = "com.badlogicgames.gdx:gdx-backend-lwjgl3", version.ref = "gdx" }
+gdx-backend-android = { module = "com.badlogicgames.gdx:gdx-backend-android", version.ref = "gdx" }
+gdx-backend-headless = { module = "com.badlogicgames.gdx:gdx-backend-headless", version.ref = "gdx" }
+gdx-platform = { module = "com.badlogicgames.gdx:gdx-platform", version.ref = "gdx" }
+
+junit-jupiter = { module = "org.junit.jupiter:junit-jupiter", version.ref = "junit" }
+junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher" }
+
+[plugins]
+android-application = { id = "com.android.application", version.ref = "agp" }

@@ -160,14 +160,21 @@ cooldown, settings + high score persistence, crash logging.
 |---|---|---|---|
 | 1 | `Projectile._update_friendly` (castle.py:144) | O(P×E)/frame. Comment records that allocating a `pygame.Rect` here "was the single biggest cost in the profile at high waves" | Keep the primitive AABB test; iterate an array-backed list; no allocation |
 | 2 | `Enemy._update_air` slam loop (enemies.py:613) | O(E) per airborne mob **plus a `list()` copy per mob per frame** | Snapshot once per frame into a reusable array; uid-keyed cooldowns in an `IntFloatMap` |
-| 3 | `Game.separate_enemies` (main.py:2198) | O(n²) over ground mobs, n≤60 → ~1.8 k pair tests/frame | Same algorithm (order-sensitive), but bucket by `depth` band to skip early; no allocation |
-| 4 | `Cannon.score_target` (castle.py:630) | O(E) inside `pick_target`'s O(E) → O(E²) per cannon | Precompute a per-frame cluster count grid once, shared by all cannons |
-| 5 | `DefenseTower.pick_target` | O(E) per tower per frame (up to 9 towers) | Shared per-frame candidate list, filtered per tower |
+| 3 | `Game.separate_enemies` (main.py:2198) | O(n²) over ground mobs, n≤60 → ~1.8 k pair tests/frame | **Port verbatim.** It mutates `x` mid-traversal, so insertion order, pair order and mutation timing are all observable. Bucketing by `depth` is a *candidate* for Phase 12 and only if proven equivalent under parity tests |
+| 4 | `Cannon.score_target` (castle.py:630) | O(E) inside `pick_target`'s O(E) → O(E²) per cannon | **Port verbatim.** A shared per-frame cluster grid is a Phase 12 candidate, gated on proving it picks the same target in the same order |
+| 5 | `DefenseTower.pick_target` | O(E) per tower per frame (up to 9 towers) | **Port verbatim.** A shared candidate list is a Phase 12 candidate, gated on equivalence |
 | 6 | Per-draw `pygame.Surface` allocations for glows (Volatile, Dragon aura, Lich ward, magic/fire projectiles, ally halo, shadows) | A new surface + fill every frame per entity | Pre-baked radial-gradient texture drawn additively; zero per-frame allocation |
 | 7 | `font.render` per text draw | New surface per call, every frame | `BitmapFont` + `GlyphLayout` cache; measured layout cached per string |
 | 8 | `sorted(self.enemies)` per frame in `draw` | allocation + comparator | Sort a reusable array with a primitive comparator |
 | 9 | `Effects` particle list rebuild per frame (≤900) | list churn | Pooled particles in an array with swap-remove |
 | 10 | `hit_rect` property | allocates a Rect on every access | Primitive `x/y/w/h` accessors; a scratch `Rectangle` only where APIs demand it |
+
+> **Sequencing rule (set in Phase 2 review).** Rows 1–2, 6–10 are representation
+> changes that cannot alter behaviour and are safe during the initial port. Rows
+> 3–5 change *traversal or ordering* of algorithms whose results depend on it, so
+> the initial port implements the Python algorithm literally and they are
+> deferred to Phase 12, each behind a parity test that proves equivalence.
+> Correctness before optimisation, without exception.
 
 Non-obvious but important: `Castle.draw` calls `random.seed(1337)` … `random.seed()` every
 frame while hp < 66 %, and `_build_background` seeds 7 — i.e. **rendering perturbs the
@@ -366,14 +373,18 @@ raw-assets/skins/<skin>/*.png   →  gradlew packAssets  →  assets/skins/<skin
 ```json
 { "saveVersion": 1, "settings": { "muted": false, "difficulty": "normal",
   "quality": "HIGH", "haptics": true, "skin": "default" },
-  "highScores": { "classic": 0, "endless": 0 }, "unlocks": {} }
+  "highScore": 0, "unlocks": {} }
 ```
 
 `Preferences` for the small settings; a versioned JSON blob in `Gdx.files.local` for
 anything structured. `SaveMigration` is a chain `v(n) → v(n+1)`; unknown/corrupt data falls
 back to defaults and the game still starts (mirrors the Python "never let a failed write
-break the game" rule). Python currently stores one shared `high_score`; the Java save keeps
-per-mode scores and migrates the old single value into both on first load.
+break the game" rule).
+
+Save v1 keeps the Python semantics exactly: **one shared `highScore`** across both
+modes, because that is what the game currently does and the port changes no
+gameplay. Splitting it per mode is a gameplay change, so it waits for an explicit
+request and would arrive as a v1 → v2 migration.
 
 ---
 
@@ -429,6 +440,10 @@ Layout invariants (HUD non-overlap, panel fitting, talent grid) become tests ove
 ---
 
 ## 14. Known behavioural differences (unavoidable, documented)
+
+Both deviations below were reviewed and approved at the end of Phase 1. Neither
+is claimed as bit-for-bit parity; gameplay probability distributions and observable
+behaviour are preserved.
 
 | Area | Difference | Why |
 |---|---|---|

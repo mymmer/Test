@@ -1,0 +1,52 @@
+// ============================================================================
+//  :lwjgl3 -- desktop launcher.  The primary development loop.
+// ============================================================================
+//  Android is the production target, but nothing here should ever require an
+//  Android deployment: `gradle :lwjgl3:run` is the fast path.
+
+plugins {
+    id 'application'
+}
+
+java {
+    sourceCompatibility = JavaVersion.toVersion(libs.versions.java.get())
+    targetCompatibility = JavaVersion.toVersion(libs.versions.java.get())
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.release = libs.versions.java.get() as Integer
+}
+
+dependencies {
+    implementation project(':core')
+    implementation libs.gdx.backend.lwjgl3
+    implementation variantOf(libs.gdx.platform) { classifier('natives-desktop') }
+}
+
+application {
+    mainClass = 'com.mymmer.castledefense.lwjgl3.Lwjgl3Launcher'
+}
+
+// Assets live once, at java-port/assets, and are shared with :android.
+def assetsDir = rootProject.file('assets')
+
+run {
+    workingDir = assetsDir
+    // so `gradle :lwjgl3:run --args="--frames 120"` reaches the launcher
+    setIgnoreExitValue(true)
+}
+
+sourceSets.main.resources.srcDirs += [assetsDir]
+
+jar {
+    archiveBaseName = 'castle-defense'
+    // a runnable fat jar: the runtime classpath must be built first
+    dependsOn configurations.runtimeClasspath
+    manifest {
+        attributes 'Main-Class': application.mainClass
+    }
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    from { configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) } }
+    from assetsDir
+    exclude 'META-INF/INDEX.LIST', 'META-INF/*.SF', 'META-INF/*.DSA', 'META-INF/*.RSA'
+}

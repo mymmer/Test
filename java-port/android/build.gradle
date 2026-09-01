@@ -1,0 +1,90 @@
+// ============================================================================
+//  :android -- the production target.
+// ============================================================================
+//  This module is only part of the build when an Android SDK is configured
+//  (see settings.gradle).  It contains the launcher and the platform
+//  implementations; no gameplay code lives here, and :core never depends on it.
+
+plugins {
+    alias(libs.plugins.android.application)
+}
+
+android {
+    namespace 'com.mymmer.castledefense'
+    compileSdk libs.versions.androidCompileSdk.get() as Integer
+
+    defaultConfig {
+        applicationId 'com.mymmer.castledefense'
+        minSdk libs.versions.androidMinSdk.get() as Integer
+        targetSdk libs.versions.androidTargetSdk.get() as Integer
+        versionCode 1
+        versionName '0.1.0-phase2'
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.toVersion(libs.versions.java.get())
+        targetCompatibility JavaVersion.toVersion(libs.versions.java.get())
+    }
+
+    sourceSets {
+        main {
+            // one shared assets folder with the desktop build
+            assets.srcDirs = [rootProject.file('assets')]
+            jniLibs.srcDirs = ['libs']
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'),
+                    'proguard-rules.pro'
+        }
+    }
+
+    packagingOptions {
+        resources {
+            excludes += ['META-INF/robovm/ios/robovm.xml', 'META-INF/DEPENDENCIES',
+                         'META-INF/LICENSE', 'META-INF/NOTICE']
+        }
+    }
+}
+
+dependencies {
+    implementation project(':core')
+    implementation libs.gdx.backend.android
+
+    // libGDX ships its Android natives as per-ABI artifacts.
+    natives "com.badlogicgames.gdx:gdx-platform:${libs.versions.gdx.get()}:natives-armeabi-v7a"
+    natives "com.badlogicgames.gdx:gdx-platform:${libs.versions.gdx.get()}:natives-arm64-v8a"
+    natives "com.badlogicgames.gdx:gdx-platform:${libs.versions.gdx.get()}:natives-x86"
+    natives "com.badlogicgames.gdx:gdx-platform:${libs.versions.gdx.get()}:natives-x86_64"
+}
+
+configurations { natives }
+
+// Unpacks the per-ABI .so files libGDX needs into libs/<abi>/.
+tasks.register('copyAndroidNatives') {
+    group = 'build'
+    description = 'Copies the libGDX native libraries into android/libs/<abi>.'
+    def outputDir = file('libs')
+    outputs.dir(outputDir)
+    doFirst {
+        configurations.natives.files.each { jar ->
+            def abi = jar.name.tokenize('-').last().replace('.jar', '')
+            def dest = new File(outputDir, abi)
+            dest.mkdirs()
+            copy {
+                from zipTree(jar)
+                into dest
+                include '*.so'
+            }
+        }
+    }
+}
+
+tasks.configureEach { task ->
+    if (task.name.contains('merge') && task.name.contains('JniLibFolders')) {
+        task.dependsOn 'copyAndroidNatives'
+    }
+}
