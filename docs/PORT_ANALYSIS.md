@@ -209,10 +209,15 @@ stream is unaffected (allowed by the brief's §37).
 Package root `com.mymmer.castledefense`. Guiding rule: **gameplay classes carry no
 rendering code and no platform types.**
 
-> **Java API policy** (corrected during the Phase 2 hardening pass). Four things
-> are distinct and must not be conflated: the JDK that runs Gradle/AGP (17), the
-> Java source/target level (17), the Android platform API floor (minSdk 21), and
-> the JDK library APIs supplied by *core-library desugaring* (enabled). Because
+> **Java API policy** (corrected during the Phase 2 hardening pass, refined in
+> Phase 4). Four things are distinct and must not be conflated: the JDK that runs
+> Gradle/AGP (17), the Java source/target level (17), the Android platform API
+> floor (minSdk 21), and the JDK library APIs supplied by *core-library
+> desugaring* (enabled). A fifth practical point: JVM modules set that level with
+> `options.release`, while `:android` sets it through
+> `android.compileOptions` — AGP owns Android compilation, and forcing
+> `--release` onto its tasks bypasses the `android.jar` bootclasspath and the
+> desugaring contract. Because
 > desugaring is configured, `java.time`, `java.util.stream`, `Optional` and
 > `java.util.function` are available down to API 21 and are **not** banned.
 > What is restricted is narrower and is about performance, not compatibility:
@@ -275,20 +280,48 @@ Android-only code stays in `android/`; desktop launcher + device-frame simulatio
 
 ## 6. Fixed-timestep design
 
+Implemented in Phase 4 as `game/Simulation.java`:
+
 ```java
-private static final float DT = 1f / 60f;
-private static final int   MAX_STEPS = 5;      // 83 ms of catch-up, then drop time
-accumulator += Math.min(Gdx.graphics.getDeltaTime(), 0.25f);
+public static final float DT        = 1f / 60f;   // = GameConfig.SIMULATION_STEP
+public static final int   MAX_STEPS = 5;          // 83 ms of catch-up, then drop time
+// the accumulator is a double, deliberately -- see the drift note below
+accumulator += clampAndSanitise(frameDelta);      // ≤ 0.25 s; NaN/∞/negative → 0
 int steps = 0;
-while (accumulator >= DT && steps < MAX_STEPS) { world.step(DT); accumulator -= DT; steps++; }
-if (steps == MAX_STEPS) accumulator = 0f;      // no spiral of death after a stall
-renderer.render(world, accumulator / DT);      // alpha available for interpolation
+while (accumulator >= DT && steps < MAX_STEPS) { stepper.step(DT); accumulator -= DT; steps++; }
+if (steps == MAX_STEPS) { accumulator = 0.0; droppedStepEvents++; }
+// time is stepCount * DT.  Never a summed delta, never wall-clock.
+renderer.render(viewports, alpha());              // alpha = accumulator / DT
 ```
 
-Python used a *variable* step capped at 50 ms. Every timer in the game is already
-`-= dt`, so a fixed step is a strict determinism improvement with no behavioural change.
-`pause()` zeroes the accumulator and forces `PLAYING → PAUSED` so an Android
-backgrounding can never be fed into one step.
+**This is an intentional behavioural change, not a free win.** Python used a
+*variable* step capped at 50 ms, so a 40 ms frame advanced every timer by exactly
+40 ms; the port advances it by two 16.67 ms steps and carries 6.7 ms forward.
+Every timer is `-= dt` in both, so the *shape* of the logic is unchanged, but the
+moment a threshold is crossed can differ by up to one step. Phase 13 parity tests
+must therefore measure, at minimum: attack and reload timers, projectile impact
+frames, fall-damage and bounce thresholds, cooldown boundaries (including the new
+difficulty grab cooldowns), spawn cadence, boss phase and fire timers, and
+wave-clear delays. Gameplay constants are **not** pre-adjusted to compensate —
+differences get measured against the Python reference first, and only then, if at
+all, tuned.
+
+Two implementation notes worth keeping:
+
+* **The accumulator is a `double`.** `DT = 1f/60f` is fractionally larger than a
+  true sixtieth, so a `float` accumulator drifts measurably over a long Endless
+  run; 3600 steps read 60.0000031 s rather than 60 s. The `double` keeps the
+  error at ~5.2e-8 s per 60 steps, which is documented in `Simulation`'s javadoc
+  and is why `SimulationTest` asserts 59-or-60 steps for 144 frames at 1/144
+  rather than pretending the arithmetic is exact.
+* **Dropped time is dropped, not banked.** Hitting the step budget discards the
+  remainder; banking it produces a spiral of death on a slow device.
+
+`pause()` cancels every pointer and persists settings; `resume()` calls
+`resetAccumulator()`, so a pause that lasted hours contributes nothing — the stale
+partial step from before it is discarded rather than replayed. Only `PLAYING`
+advances the world (`GameState.advancesWorld()`), which is also what freezes the
+Endless realtime shop.
 
 ---
 

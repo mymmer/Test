@@ -9,10 +9,25 @@ subprojects {
         google()
     }
 
-    // Every module compiles to the same Android-safe language level.  Using
-    // `release` (rather than source/target compatibility alone) makes javac
-    // check the API surface too, so `core` cannot accidentally use a JDK API
-    // that is missing on Android.
+    //  Settings that are safe for EVERY module, Android included.
+    //
+    //  Deliberately NOT here: javac's `--release`.  Two different compilation
+    //  models are in play and conflating them breaks the Android build:
+    //
+    //    * Plain JVM modules (:core, :lwjgl3) are compiled by the Java plugin.
+    //      They set `options.release = 17` themselves, which pins both the
+    //      language level and the JDK API surface they may call.
+    //
+    //    * :android is compiled by AGP, which derives Java compatibility from
+    //      `android { compileOptions { source/targetCompatibility } }` and pairs
+    //      it with D8/R8 and core-library desugaring.  Forcing `--release` onto
+    //      those JavaCompile tasks fights AGP's own configuration -- it bypasses
+    //      the bootclasspath AGP sets up (android.jar) and disables the
+    //      desugaring contract, which is exactly the combination that produces
+    //      confusing "cannot find symbol" or API-level errors.
+    //
+    //  So: never add `options.release` to a `subprojects` block.  Set it per
+    //  JVM module, and let AGP own Android.
     tasks.withType(JavaCompile).configureEach {
         options.encoding = 'UTF-8'
         options.compilerArgs += ['-Xlint:all', '-Xlint:-processing']

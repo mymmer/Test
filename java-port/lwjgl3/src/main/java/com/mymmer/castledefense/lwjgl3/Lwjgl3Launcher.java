@@ -78,7 +78,15 @@ public final class Lwjgl3Launcher {
             if (screenshotPath != null) {
                 saveScreenshot(screenshotPath);
             }
-            Gdx.app.log("CastleDefense", "frame limit " + limit + " reached, exiting");
+            // The smoke run's actual evidence: a headless test can prove the
+            // accumulator arithmetic, but only a real backend proves that a real
+            // frame delta drives it.  Steps should be close to frames at 60 Hz
+            // and clearly fewer at 144 Hz.
+            Gdx.app.log("CastleDefense", "frame limit " + limit + " reached, exiting"
+                    + " (steps=" + getStepsRun()
+                    + ", simTime=" + String.format("%.3f", getSimulation().timeSeconds()) + "s"
+                    + ", clampedFrames=" + getSimulation().clampedFrames()
+                    + ", droppedSteps=" + getSimulation().droppedStepEvents() + ")");
             Gdx.app.exit();
         }
 

@@ -9,9 +9,17 @@ nothing here modifies it. Both can be run side by side for parity testing.
 * Migration checklist: [`../PORTING_STATUS.md`](../PORTING_STATUS.md)
 * Analysis and design: [`../docs/PORT_ANALYSIS.md`](../docs/PORT_ANALYSIS.md)
 
-**Current state: Phase 2 (foundation).** There is no gameplay yet — no enemies,
-towers, skins or balance data. What exists is the project skeleton, the two
-viewports, the lifecycle, both launchers and the headless test foundation.
+**Current state: Phase 4 (simulation foundation).** There is no gameplay yet —
+no enemies, towers, combat, waves, progression or shop. What exists is the
+machinery they will run on: the project skeleton, the two viewports, the
+lifecycle, both launchers, the asset/skin/save/config infrastructure, the fixed
+1/60 s simulation clock, the entity lifecycle and the whole input pipeline.
+
+Subsystem contracts: [`docs/subsystems/`](docs/subsystems/) —
+[SIMULATION](docs/subsystems/SIMULATION.md) ·
+[INPUT](docs/subsystems/INPUT.md) ·
+[ASSETS_SKINS](docs/subsystems/ASSETS_SKINS.md) ·
+[PERSISTENCE](docs/subsystems/PERSISTENCE.md).
 
 ---
 
@@ -59,6 +67,9 @@ java -jar lwjgl3/build/libs/castle-defense.jar --size 2400x1080 --frames 90 \
 # tests
 ./gradlew :core:test
 
+# reproduce a run from a bug report's seed
+./gradlew :lwjgl3:run -Dcastledefense.seed=8149274512
+
 # android (needs the SDK configured)
 ./gradlew verifyAndroid           # assembles + reports the APK path
 ./gradlew :android:assembleDebug  # the same thing, plainly
@@ -101,7 +112,7 @@ These get conflated constantly, so the project states them separately:
 | Concern | This project | Notes |
 |---|---|---|
 | **1. JDK that runs Gradle/AGP** | 17 (21 also works) | A build-machine property. Nothing to do with what the app may call. |
-| **2. Java source/target language level** | **17**, in every module | Sets the *language* features available: records, sealed types, switch expressions, `var`, text blocks. Enforced with `options.release = 17`, so `javac` also validates the API surface rather than only accepting the syntax. |
+| **2. Java source/target language level** | **17**, in every module — but configured *differently* per module type. See "Two compilation models" below. |
 | **3. Android platform API availability** | minSdk 21 | Which `android.*` APIs and which *bundled* JDK APIs exist on the device. Without desugaring this would cap the JDK library at roughly Java 7 + parts of 8. |
 | **4. APIs supplied by desugaring** | enabled (`desugar_jdk_libs`) | AGP rewrites calls to modern JDK library APIs so they run on old devices. With it enabled, `java.time`, `java.util.stream`, `Optional`, `java.util.function` and friends are available **down to API 21**. |
 
@@ -124,6 +135,25 @@ compatibility one:
 
 `GameRendererFactory` is a named interface for readability, not because
 `Supplier` was unavailable.
+
+### Two compilation models
+
+Java 17 is the language level everywhere, but it is *configured* in two
+different ways, and mixing them up breaks the Android build:
+
+| Modules | Compiled by | How the level is set | Why |
+|---|---|---|---|
+| `:core`, `:lwjgl3` | the Gradle Java plugin | `options.release = 17` | `--release` pins the language level *and* the JDK API surface, so a plain JVM module cannot call an API that does not exist at that level. |
+| `:android` | the Android Gradle Plugin | `android { compileOptions { sourceCompatibility/targetCompatibility = VERSION_17; coreLibraryDesugaringEnabled true } }` | AGP owns this compilation: it supplies the `android.jar` bootclasspath, runs D8/R8, and applies core-library desugaring. Forcing `--release` onto its `JavaCompile` tasks bypasses that bootclasspath and disables the desugaring contract — which shows up as confusing "cannot find symbol" or API-level errors. |
+
+**Never put `options.release` in a `subprojects` block.** The root build script
+says so in a comment, and `:android` has a `doFirst` guard that fails the build
+if it ever appears there.
+
+> **Android Java compatibility is UNVERIFIED.** Everything above is the correct
+> configuration, but no Android compilation has happened in this environment (see
+> the next section). It stays unverified until `:android:assembleDebug` succeeds
+> on a real Android toolchain.
 
 ## Android build status in this environment
 

@@ -34,6 +34,12 @@ run {
     workingDir = assetsDir
     // so `gradle :lwjgl3:run --args="--frames 120"` reaches the launcher
     setIgnoreExitValue(true)
+    // The app runs in a forked JVM, so a -D on the gradle command line does not
+    // reach it by itself.  Forwarded explicitly so a bug report's seed can be
+    // replayed with `./gradlew :lwjgl3:run -Dcastledefense.seed=...`.
+    if (System.getProperty('castledefense.seed') != null) {
+        systemProperty 'castledefense.seed', System.getProperty('castledefense.seed')
+    }
 }
 
 sourceSets.main.resources.srcDirs += [assetsDir]

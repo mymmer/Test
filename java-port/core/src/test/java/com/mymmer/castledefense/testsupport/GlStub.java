@@ -1,30 +1,52 @@
 package com.mymmer.castledefense.testsupport;
 
 import com.badlogic.gdx.Gdx;
+import com.badlogic.gdx.backends.headless.mock.graphics.MockGraphics;
 import com.badlogic.gdx.graphics.GL20;
+import com.badlogic.gdx.utils.GdxNativesLoader;
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
 
 /**
- * A do-nothing {@link GL20} binding for headless tests.
+ * The minimum graphics environment a headless test needs to lay out a viewport.
  *
- * <p>libGDX applies a viewport by calling {@code glViewport}, so viewport layout
- * — the letterboxing this port depends on — cannot be asserted without *some*
- * GL binding present. The headless backend does not ship one.
+ * <p>Applying a viewport goes {@code Viewport.apply} → {@code HdpiUtils
+ * .glViewport} → {@code Gdx.gl.glViewport}, and {@code HdpiUtils} also reads
+ * {@code Gdx.graphics} on the way. So both must exist, and the headless backend
+ * ships neither: it installs a {@code MockGraphics} only when a full
+ * {@code HeadlessApplication} is started, and no GL binding at all.
+ *
+ * <p>Installing both here keeps every test that needs viewport maths
+ * self-contained, rather than depending on whichever test class happened to
+ * start an application first — which is exactly the sort of ordering dependency
+ * that makes a suite flaky.
  *
  * <p>This is the one place the project uses reflection, and the reason is
  * narrow: {@code GL20} declares ~350 methods and a hand-written stub would be
- * hundreds of lines of noise that no one will ever read. It is test scope only
- * and never reaches a shipped artifact.
+ * hundreds of lines of noise nobody will read. Test scope only; it never reaches
+ * a shipped artifact.
  */
 public final class GlStub {
 
     private GlStub() {
     }
 
-    /** Installs the stub into {@code Gdx.gl}/{@code Gdx.gl20}. Idempotent. */
+    private static boolean installedGraphics;
+
+    /**
+     * Installs a GL binding and, if none exists, a mock {@code Gdx.graphics}.
+     * Idempotent, and it never replaces a real backend's objects.
+     */
     public static void install() {
+        //  Camera maths goes through Matrix4.prj, which is a native method.
+        //  A HeadlessApplication would load the natives for us; a test that
+        //  does not start one has to ask. Idempotent by design in libGDX.
+        GdxNativesLoader.load();
+        if (Gdx.graphics == null) {
+            Gdx.graphics = new MockGraphics();
+            installedGraphics = true;
+        }
         if (Gdx.gl != null) {
             return;
         }
@@ -44,6 +66,10 @@ public final class GlStub {
     public static void uninstall() {
         Gdx.gl = null;
         Gdx.gl20 = null;
+        if (installedGraphics) {
+            Gdx.graphics = null;
+            installedGraphics = false;
+        }
     }
 
     private static Object defaultValue(Class<?> type) {

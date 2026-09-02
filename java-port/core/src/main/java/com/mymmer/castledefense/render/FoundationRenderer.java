@@ -75,14 +75,18 @@ public final class FoundationRenderer implements GameRenderer {
 
         batch.setProjectionMatrix(viewports.getUiCamera().combined);
         batch.begin();
-        font.draw(batch, GameConfig.TITLE + " -- Java/libGDX port, Phase 2 foundation",
+        font.draw(batch, GameConfig.TITLE + " -- Java/libGDX port, Phase 4 foundation",
                 18f, uiH - 18f);
         font.draw(batch, String.format(
                 "world %.0fx%.0f (fit)   ui %.0fx%.0f (extend)   screen %dx%d   letterbox %d,%d",
                 GameConfig.WORLD_WIDTH, GameConfig.WORLD_HEIGHT, uiW, uiH,
                 viewports.getScreenWidth(), viewports.getScreenHeight(),
                 viewports.getLetterboxX(), viewports.getLetterboxY()), 18f, uiH - 40f);
-        font.draw(batch, "fps " + Gdx.graphics.getFramesPerSecond(), 18f, uiH - 62f);
+        // alpha is the leftover fraction of a simulation step: it proves the
+        // fixed-step accumulator is driving this frame rather than the frame
+        // driving the world.  Phase 11 replaces this whole renderer.
+        font.draw(batch, String.format("fps %d   step alpha %.2f",
+                Gdx.graphics.getFramesPerSecond(), alpha), 18f, uiH - 62f);
         batch.end();
     }
 

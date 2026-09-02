@@ -61,6 +61,41 @@ public final class Rng {
         return gameSeed;
     }
 
+    /**
+     * A fresh seed for a new run, from the gameplay stream itself.
+     *
+     * <p>Players never see or choose a seed. A debug build, a test, or a bug
+     * report does: "build abc123, seed 82736191, mode endless" is enough to
+     * replay a session, which is the whole reason the seed is tracked.
+     */
+    public long nextRunSeed() {
+        return game.nextLong();
+    }
+
+    /** One line for the crash log and the debug overlay. */
+    public String describe() {
+        return "seed=" + gameSeed;
+    }
+
+    /**
+     * Reads a seed supplied for debugging, or returns {@code fallback}.
+     *
+     * <p>Checked in order: the {@code castledefense.seed} system property (which
+     * a launcher flag or a test can set), then nothing. Production players have
+     * no way to reach this and no reason to.
+     */
+    public static long debugSeedOr(long fallback) {
+        String raw = System.getProperty("castledefense.seed");
+        if (raw == null || raw.trim().isEmpty()) {
+            return fallback;
+        }
+        try {
+            return Long.parseLong(raw.trim());
+        } catch (NumberFormatException e) {
+            return fallback;
+        }
+    }
+
     // --- conveniences that read like the Python they replace -----------------
 
     /** Python {@code random.uniform(a, b)}. */

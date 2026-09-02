@@ -21,9 +21,12 @@ android {
         versionName '0.1.0-phase2'
     }
 
+    //  Java compatibility for this module is AGP's business, not the Java
+    //  plugin's.  Setting it here (rather than with javac --release) is what
+    //  keeps the android.jar bootclasspath and the desugaring contract intact.
     compileOptions {
-        sourceCompatibility JavaVersion.toVersion(libs.versions.java.get())
-        targetCompatibility JavaVersion.toVersion(libs.versions.java.get())
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
         //  Core-library desugaring backports the Java 8+ library APIs
         //  (java.time, java.util.stream, Optional, java.util.function, ...) to
         //  every API level this app supports, so minSdk 21 does not restrict
@@ -53,6 +56,20 @@ android {
         resources {
             excludes += ['META-INF/robovm/ios/robovm.xml', 'META-INF/DEPENDENCIES',
                          'META-INF/LICENSE', 'META-INF/NOTICE']
+        }
+    }
+}
+
+//  Guard: if anyone ever adds `options.release` to this module (directly or
+//  through a subprojects block), fail the build rather than producing an APK
+//  whose bytecode was compiled against the wrong bootclasspath.
+tasks.withType(JavaCompile).configureEach {
+    doFirst {
+        if (options.release.present) {
+            throw new GradleException(
+                    "javac --release must not be set on the Android module: AGP " +
+                    "owns Java compatibility here via android.compileOptions. " +
+                    "Remove it from " + path)
         }
     }
 }

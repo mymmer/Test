@@ -3,6 +3,11 @@ package com.mymmer.castledefense;
 import com.badlogic.gdx.ApplicationAdapter;
 import com.badlogic.gdx.Gdx;
 import com.mymmer.castledefense.data.DataException;
+import com.mymmer.castledefense.game.GameWorld;
+import com.mymmer.castledefense.game.Simulation;
+import com.mymmer.castledefense.input.DesktopInput;
+import com.mymmer.castledefense.input.GameInput;
+import com.mymmer.castledefense.input.InputRouter;
 import com.mymmer.castledefense.platform.NoOpPlatformServices;
 import com.mymmer.castledefense.platform.PlatformServices;
 import com.mymmer.castledefense.render.FoundationRenderer;
@@ -15,9 +20,11 @@ import com.mymmer.castledefense.render.ViewportSet;
  * fixed-step simulation. It knows nothing about windows, touch APIs, file paths
  * or Android.
  *
- * <p>Phase 2 scope: viewports, lifecycle hooks and a renderer seam. There is no
- * simulation yet — {@link #getStepsRun()} stays at zero until Phase 4 attaches
- * the accumulator described in {@code docs/PORT_ANALYSIS.md} §6.
+ * <p>It owns the four long-lived pieces of a session — {@link Services},
+ * {@link GameWorld}, {@link Simulation} and {@link GameInput} (plus its
+ * {@link InputRouter}) — creates them once, and is the only thing that may
+ * replace them. Gameplay systems are attached to the world in later phases
+ * rather than being held here.
  *
  * <p>Lifecycle counters are exposed for tests. That is the only reason they are
  * public: an Android pause/resume cycle is otherwise unobservable in CI.
@@ -27,6 +34,13 @@ public class CastleDefenseGame extends ApplicationAdapter {
     private final GameRendererFactory rendererFactory;
     private final ViewportSet viewports = new ViewportSet();
     private final Services services;
+
+    //  Ownership, stated once: this class creates and owns all four. Nothing
+    //  else may replace them, and their lifetimes match the application's.
+    private final GameWorld world;
+    private final Simulation simulation;
+    private final GameInput input;
+    private final InputRouter inputRouter;
 
     private volatile GameRenderer renderer;
 
@@ -76,6 +90,10 @@ public class CastleDefenseGame extends ApplicationAdapter {
         }
         this.rendererFactory = rendererFactory;
         this.services = services;
+        this.world = new GameWorld(services.rng());
+        this.simulation = new Simulation(world);
+        this.input = new DesktopInput(viewports);
+        this.inputRouter = new InputRouter(input);
     }
 
     @Override
@@ -117,11 +135,30 @@ public class CastleDefenseGame extends ApplicationAdapter {
         }
     }
 
+    /**
+     * One rendered frame.
+     *
+     * <p>Render rate and simulation rate are independent: the frame's elapsed
+     * time is handed to the accumulator, which runs zero or more fixed steps,
+     * and the leftover fraction becomes the interpolation alpha. Input is
+     * clocked from <em>simulation</em> time and stepped once per simulation
+     * step, so a press is seen by exactly one step whatever the display does.
+     */
     @Override
     public void render() {
         renderCount++;
+        float delta = Gdx.graphics != null ? Gdx.graphics.getDeltaTime() : 0f;
+
+        int steps = simulation.advance(delta);
+        for (int i = 0; i < steps; i++) {
+            // the input clock is simulation time, never wall-clock
+            input.setClock((float) world.simulationTime());
+            inputRouter.route();
+            input.endStep();
+        }
+
         if (renderer != null) {
-            renderer.render(viewports, 0f);
+            renderer.render(viewports, simulation.alpha());
         }
     }
 
@@ -136,6 +173,10 @@ public class CastleDefenseGame extends ApplicationAdapter {
     public void pause() {
         pauseCount++;
         paused = true;
+        // Every pointer is dropped: Android delivers no touch-up when the app
+        // backgrounds, and a finger that is no longer on the screen must not
+        // still be holding something on resume.
+        input.cancelAll();
         // Android may never call dispose(); backgrounding is the last reliable
         // chance to write settings, so it is taken here.
         services.persist();
@@ -146,6 +187,10 @@ public class CastleDefenseGame extends ApplicationAdapter {
     public void resume() {
         resumeCount++;
         paused = false;
+        // A pause can last hours. The frame delta after it is clamped, but the
+        // fraction of a step left in the accumulator from before is stale, so
+        // it is discarded rather than replayed into the world.
+        simulation.resetAccumulator();
         log("resumed");
     }
 
@@ -171,7 +216,8 @@ public class CastleDefenseGame extends ApplicationAdapter {
     private final class CrashContext implements com.mymmer.castledefense.util.CrashLogger.ContextProvider {
         @Override
         public String describe() {
-            return "phase=foundation frames=" + renderCount
+            return world.describe()
+                    + " frames=" + renderCount
                     + " paused=" + paused
                     + " screen=" + viewports.getScreenWidth() + "x" + viewports.getScreenHeight()
                     + " skin=" + services.skins().activeSkinId()
@@ -181,6 +227,22 @@ public class CastleDefenseGame extends ApplicationAdapter {
 
     public Services getServices() {
         return services;
+    }
+
+    public GameWorld getWorld() {
+        return world;
+    }
+
+    public Simulation getSimulation() {
+        return simulation;
+    }
+
+    public GameInput getInput() {
+        return input;
+    }
+
+    public InputRouter getInputRouter() {
+        return inputRouter;
     }
 
     /** Non-null when startup data could not be loaded. */
@@ -224,8 +286,8 @@ public class CastleDefenseGame extends ApplicationAdapter {
         return disposeCount;
     }
 
-    /** Simulation steps run so far. Zero until Phase 4. */
+    /** Simulation steps run since startup. */
     public long getStepsRun() {
-        return 0L;
+        return simulation.stepCount();
     }
 }

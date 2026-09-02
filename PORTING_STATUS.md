@@ -10,12 +10,17 @@ Legend: `[ ]` not started · `[~]` in progress · `[x]` ported (compiles, believ
 Nothing is complete merely because it compiles. A row may only reach `[T]` when a named
 test exercises it.
 
-**Phase status: Phases 1 and 3 complete. Phase 2 implemented and hardened but NOT
+**Phase status: Phases 1, 3 and 4 complete. Phase 2 implemented and hardened but NOT
 fully tested — the Android assembly gate is still open because Google's Maven is
 unreachable from the build environment, and stays open until
 `./gradlew verifyAndroid` succeeds on a machine with the SDK.**
 
-Phase 3 adds no gameplay: no enemies, towers, physics or progression exist yet.
+Phase 4 adds no gameplay: no enemies, towers, combat, waves, progression or shop
+exist yet. What exists is the machinery they will run on — the fixed-step clock,
+the entity lifecycle, the freeze rule and the whole input pipeline.
+
+Subsystem contracts for the infrastructure built so far:
+[`java-port/docs/subsystems/`](java-port/docs/subsystems/).
 
 The Java port lives in [`java-port/`](java-port/) and is isolated from the Python
 game, which remains the authoritative executable reference and is unmodified.
@@ -140,18 +145,71 @@ game, which remains the authoritative executable reference and is unmodified.
 
 ## Phase 4 — Simulation foundation
 
-- [ ] `Simulation` fixed 1/60 accumulator + `MAX_STEPS`
-- [ ] Frame-delta clamp + post-resume guard
-- [ ] `GameWorld` entity lists + insertion-order semantics
-- [ ] Mark-dead / skip-dead / sweep-after-iteration lifecycle
-- [ ] Snapshot iteration where Python relies on it (enemy update, air slams, tornado, blast)
-- [ ] `Collisions` primitive AABB helpers (no allocation)
-- [ ] `GameState` / `GameMode` enums + freeze rules
-- [ ] `GameInput` abstraction
-- [ ] `DesktopInput` (mouse → pointer 0, focus-loss release guard)
-- [ ] `TouchInput` (multitouch, pointer ownership, cancel handling)
-- [ ] `TouchVelocityTracker` (time-based eviction, 90 ms lookback, ±2600 clamp)
-- [ ] `InputRouter` UI-before-world consumption
+Contract: [`java-port/docs/subsystems/SIMULATION.md`](java-port/docs/subsystems/SIMULATION.md),
+[`INPUT.md`](java-port/docs/subsystems/INPUT.md).
+
+- [T] `Simulation` fixed 1/60 accumulator + `MAX_STEPS` — `SimulationTest`: one
+      step per DT, split frames, multi-step catch-up, the budget cap and its
+      dropped time, 144 Hz and 30 Hz frame rates, alpha range, reset. The
+      accumulator is a **`double`**: `DT = 1f/60f` is fractionally larger than a
+      true sixtieth and a `float` accumulator drifts over a long Endless run
+- [T] Frame-delta clamp + post-resume guard — clamps above 0.25 s, treats NaN /
+      infinity / negative deltas as zero, and `resume()` discards the stale
+      partial step instead of replaying it into the world
+- [T] Simulation-time accounting — `timeSeconds() == stepCount * DT`. **No
+      gameplay clock is ever derived from a frame delta or from wall-clock**;
+      `GameWorld` exposes `simulationTime()` (always advances) and
+      `gameplayTime()` (only while unfrozen)
+- [T] `GameWorld` lifecycle foundation + insertion-order semantics —
+      `GameWorldTest`, `EntityListTest`. `EntityList` never swap-removes, because
+      `separate_enemies`, Cannon cluster scoring and shared tower targeting all
+      depend on list position (deferred to Phase 12, per `PORT_ANALYSIS.md` §3)
+- [T] Mark-dead / skip-dead / sweep-after-iteration lifecycle — the sweep runs at
+      the end of a step, exactly where the Python `update` does it, and preserves
+      relative order
+- [T] Snapshot iteration support — pooled, nestable, `AutoCloseable`. A snapshot
+      keeps entities killed during the iteration and excludes ones spawned during
+      it; `peakOpenSnapshots()` turns a leak into a test failure. The Python
+      call sites that need it (enemy update, air slams, tornado, blast) are wired
+      in Phases 5–7
+- [T] `Collisions` primitive AABB helpers (no allocation) — `CollisionsTest`
+      asserts the inclusive `<=` boundaries against `enemies.py:274` (`covers`)
+      and `enemies.py:283` (`overlaps`). No spatial grid, quadtree or broadphase:
+      those change which pairs are tested and are Phase 12 work behind parity
+      proofs
+- [T] `GameState` / `GameMode` enums + freeze rules — only `PLAYING` advances the
+      world, which is what freezes the Endless realtime shop mid-fight. `GameMode`
+      carries a stable `id()`, never an ordinal
+- [T] `GameInput` abstraction — the **only** class in `core` that sees a screen
+      pixel; everything downstream is world or UI units. One shared logical model:
+      a desktop mouse is pointer 0
+- [T] `DesktopInput` (mouse → pointer 0, focus-loss release guard) —
+      `syncMouseButton` recovers from a button-up the window never delivered
+- [T] `TouchInput` (multitouch, pointer ownership, cancel handling) — `onAppPaused`
+      cancels every pointer, since Android sends no touch-up when backgrounded
+- [T] `TouchVelocityTracker` (time-based eviction, 90 ms lookback, ±2600 clamp) —
+      `TouchVelocityTrackerTest` asserts the same flick yields the same velocity
+      within 1 % at 30, 60, 120 and 240 Hz. Python's `deque(maxlen=12)` is a
+      **count** window that spans only 50 ms at 240 Hz, so the port keeps a
+      duration window instead
+- [T] `InputRouter` UI-before-world consumption — `InputRouterTest` (13): pointer
+      ownership cannot be stolen, only the owner may release, consumption is
+      sticky per pointer, and a cancel dispatches `onWorldCancel` rather than
+      `onWorldRelease`
+- [T] Deterministic gameplay RNG seed — `GameWorld.beginRun(mode)` returns the
+      seed and `describe()` puts it in the crash log; `beginRun(mode, seed)`
+      replays it; `-Dcastledefense.seed=…` sets it from the command line
+- [T] `SimulationTrace` observation seam — `NoOpSimulationTrace.INSTANCE` by
+      default (one predicted branch when off), `RecordingSimulationTrace` for
+      tests. Deliberately **not** an EventBus, a replay log or event sourcing:
+      the trace observes, it never carries control flow
+- [x] Wiring in `CastleDefenseGame` — it owns `GameWorld`, `Simulation`,
+      `GameInput` and `InputRouter`; `render()` advances the accumulator, routes
+      input once per simulation step, then draws with `alpha()`. Smoke-verified
+      on a real backend: 600 frames at 2400x1080 ran 69 steps / 1.150 s — steps
+      track elapsed *time*, not frames — with zero clamped frames and zero
+      dropped steps. `-Dcastledefense.seed=…` is forwarded by `:lwjgl3:run` and
+      logged at startup, verified end to end
 
 ## Phase 5 — Defences
 

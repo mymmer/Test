@@ -72,6 +72,13 @@ public final class Services implements Disposable {
     public void start() {
         crashLogger.installGlobalHandler();
         crashLogger.logInfo("starting on " + platform.deviceDescription());
+        // Logged once, loudly, because a pinned seed changes what every later
+        // line in this log means -- a "random" run in the report would not be.
+        long pinned = Rng.debugSeedOr(Long.MIN_VALUE);
+        if (pinned != Long.MIN_VALUE) {
+            crashLogger.logWarning("castledefense.seed=" + pinned
+                    + " -- every run this session is pinned to that seed");
+        }
 
         Strings.load();
 
