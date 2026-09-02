@@ -10,16 +10,18 @@ Legend: `[ ]` not started · `[~]` in progress · `[x]` ported (compiles, believ
 Nothing is complete merely because it compiles. A row may only reach `[T]` when a named
 test exercises it.
 
-**Phase status: Phases 1, 3 and 4 complete. Phase 2 implemented and hardened but NOT
-fully tested — the Android assembly gate is still open because Google's Maven is
-unreachable from the build environment, and stays open until
+**Phase status: Phases 1, 3, 4 and 5 complete. Phase 2 implemented and hardened but
+NOT fully tested — the Android assembly gate is still open because Google's Maven
+is unreachable from the build environment, and stays open until
 `./gradlew verifyAndroid` succeeds on a machine with the SDK.**
 
-Phase 4 adds no gameplay: no enemies, towers, combat, waves, progression or shop
-exist yet. What exists is the machinery they will run on — the fixed-step clock,
-the entity lifecycle, the freeze rule and the whole input pipeline.
+Phase 5 adds the player's side of the fight: castle, towers, projectiles, spikes,
+barricade and Outpost. There is still **no enemy roster** — the defence package
+does not import, reference or instantiate a single enemy type, exactly as
+`castle.py` never imports `enemies.py`. Towers shoot a narrow `Target` contract
+that Phase 6's `Enemy` will implement.
 
-Subsystem contracts for the infrastructure built so far:
+Subsystem contracts:
 [`java-port/docs/subsystems/`](java-port/docs/subsystems/).
 
 The Java port lives in [`java-port/`](java-port/) and is isolated from the Python
@@ -213,19 +215,64 @@ Contract: [`java-port/docs/subsystems/SIMULATION.md`](java-port/docs/subsystems/
 
 ## Phase 5 — Defences
 
-- [ ] `Projectile` (kinds, splash, pierce, gravity, wind, stun, `ownerUid`, `atPrisoner`)
-- [ ] Friendly projectile collision (primitive bounds test first)
-- [ ] Hostile projectile resolution order (barricade → tower → wall → keep)
-- [ ] Crit (talent) and per-target counter multipliers
-- [ ] `DefenseTower` base (regen, rebuild, 42 % per-hit cap, stun, aim lerp, lead target)
-- [ ] `Bowman` (AIR_RANGE_MULT 1.9 envelope)
-- [ ] `Ballista` (+200 % air, pierce, flyer-first scoring)
-- [ ] `Cannon` (+200 % heavy, splash, cluster scoring, ballistic solution)
-- [ ] Overcharge slingshot (both overchargeable towers, lockout, talent cooldown)
-- [ ] `Castle` (6 tiers, uncapped reinforcement, slots, repair, splash, tower smash)
-- [ ] `SpikeWalls` (reflect + bleed talent)
-- [ ] `Outpost` (garrison, turret upgrade, overdrive, untouchable)
-- [ ] `Barricade` (buy/rebuild/reinforce, ground-only blocking)
+Contracts: [`DEFENCES.md`](java-port/docs/subsystems/DEFENCES.md),
+[`PROJECTILES.md`](java-port/docs/subsystems/PROJECTILES.md).
+
+- [T] World seams that keep `defence` free of enemy types — `Target`,
+      `Trappable`, `AllyFactory`, `CombatModifiers`, `DefenceContext`. The
+      package imports no enemy class and never will: `castle.py` does not import
+      `enemies.py`, so `Target` is declared **here** and Phase 6's `Enemy` will
+      implement it
+- [T] `Projectile` (kinds, splash, pierce, gravity, wind, stun, `ownerUid`,
+      `atPrisoner`, life, damage falloff, hit-id tracking) — `ProjectileTest`.
+      The 8-sample `trail` and colour are drawing state and are deliberately
+      absent until Phase 11
+- [T] Friendly projectile collision, in the Python hot-path order (cheap
+      primitive bounds → alive/already-hit/targetable → resolve), at most one
+      target per step, nothing allocated per candidate
+- [T] Hostile projectile resolution order (prisoner shot; else barricade → tower
+      → wall → keep) — `HostileResolutionTest` places shots that **overlap
+      several structures at once** and proves the Python priority decides. A
+      disabled tower is transparent
+- [T] Crit (talent) and per-target counter multipliers — counters resolved per
+      victim at impact; splash bonus and crit chance sampled once at construction
+- [T] `DefenseTower` base (regen, rebuild, 42% per-hit cap, stun, aim lerp, lead
+      target, overcharge state) — `TowerLifecycleTest`. Fields are documented as
+      gameplay-authoritative or visual-only; no class here has a `draw` method
+- [T] `Bowman` (`AIR_RANGE_MULT` 1.9 envelope, stretched **upward only**) —
+      `TowerCountersTest`
+- [T] `Ballista` (+200% air, pierce, flyer-first then beefiest scoring). The
+      two-component score reproduces Python's tuple comparison
+- [T] `Cannon` (+200% heavy, splash, cluster scoring, ballistic solution,
+      no air). Cluster scoring is **O(E²), like Python's**; the grid is Phase 12
+- [T] Overcharge slingshot (both overchargeable towers, power scaling, lockout,
+      talent cooldown, 12 px minimum draw) — `OverchargeTest`. The gameplay
+      calculation only: no mouse or touch type reaches a tower
+- [T] `Castle` (6 tiers, uncapped reinforcement, slots, repair, splash, tower
+      smash, stun entry points) — `CastleTest`, including the Python self-test's
+      "Reinforce Walls must never refuse" and the `+N` label
+- [T] `SpikeWalls` (reflect + bleed talent, wave scaling) — `StructuresTest`.
+      The bleed is a second, separately tagged hit, not a bigger first one
+- [T] `Outpost` (garrison, turret upgrade at level 4, overdrive past the cap,
+      untouchable, prisoner state/damage/regen, rival aim point, ally seam) —
+      `StructuresTest`, using a counting fake factory. No Phase 6 type is pulled
+      forward
+- [T] `Barricade` (buy/rebuild/reinforce in one action, HP progression, regen
+      talent, projectile interception, collision band). Ground-unit *blocking* is
+      an enemy-side movement rule and belongs to Phase 6; what it will read
+      (`alive()`, `x()`) exists now
+- [T] `data/defences.json` + `DefenceTable` — every number transcribed from
+      `castle.py` and asserted against it, with load-time validation for
+      duplicate ids, non-positive cooldown/range/damage/health, negative splash,
+      unknown projectile kind, unknown tower id, missing stat block, counters
+      below 1.0, non-monotonic castle tiers, and slots that overlap or sit
+      outside the world
+- [T] Seeded determinism — cooldown jitter, crit rolls and the boss tower smash
+      all draw from the gameplay `Rng`. `DefenceIntegrationTest` runs the same
+      scenario twice on one seed and asserts identical outcomes
+- [T] Trace integration (`PROJECTILE_SPAWN`, `TOWER_FIRE`, `TOWER_DISABLED`,
+      `TOWER_REBUILT`, `CASTLE_DAMAGE`, `BARRICADE_DAMAGE`) — proven to be
+      observation only by running a scenario with tracing on and off
 
 ## Phase 6 — Enemies
 

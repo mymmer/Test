@@ -1,0 +1,95 @@
+{
+  "//": "Defence stat blocks, transcribed verbatim from castle.py.",
+  "//numbers": "Numbers only. Behaviour (targeting rules, ballistic solutions, overcharge) is Java -- see docs/PORT_ANALYSIS.md section 9.",
+  "//ids": "Every 'id' is a stable semantic id. Renaming a 'name' is free; changing an 'id' breaks saves and data.",
+
+  "towers": [
+    {
+      "id": "bowman",
+      "name": "Bowmen",
+      "//python": "castle.py class Bowman",
+      "range": 430.0,
+      "cooldown": 0.50,
+      "damage": 11.0,
+      "hitsAir": true,
+      "airRangeMult": 1.9,
+      "//airRangeMult": "reaches far higher than it does far -- the unit's whole point",
+      "maxHp": 70.0,
+      "width": 22,
+      "height": 32,
+      "regen": 0.05,
+      "rebuildTime": 9.0,
+      "projectile": "arrow",
+      "projectileSpeed": 880.0,
+      "overchargeable": false
+    },
+    {
+      "id": "ballista",
+      "name": "Ballista",
+      "//python": "castle.py class Ballista",
+      "range": 640.0,
+      "cooldown": 2.5,
+      "damage": 62.0,
+      "hitsAir": true,
+      "airRangeMult": 1.5,
+      "bonusVsAir": 3.0,
+      "//bonusVsAir": "3.0 == +200% damage to flyers",
+      "maxHp": 120.0,
+      "width": 34,
+      "height": 30,
+      "regen": 0.05,
+      "rebuildTime": 9.0,
+      "projectile": "bolt",
+      "projectileSpeed": 1150.0,
+      "overchargeable": true,
+      "overchargeSpeed": 1150.0
+    },
+    {
+      "id": "cannon",
+      "name": "Cannon",
+      "//python": "castle.py class Cannon",
+      "range": 600.0,
+      "cooldown": 3.1,
+      "damage": 40.0,
+      "splash": 86.0,
+      "hitsAir": false,
+      "//hitsAir": "a lobbed shell cannot lead a flyer",
+      "bonusVsHeavy": 3.0,
+      "//bonusVsHeavy": "3.0 == +200% damage to Siege Rams and other tanks",
+      "maxHp": 140.0,
+      "width": 36,
+      "height": 28,
+      "regen": 0.05,
+      "rebuildTime": 9.0,
+      "projectile": "cannon",
+      "projectileSpeed": 700.0,
+      "//projectileSpeed": "the lead speed for the ballistic solution, not a muzzle velocity",
+      "overchargeable": true,
+      "overchargeSpeed": 900.0
+    }
+  ],
+
+  "castle": {
+    "//tiers": "Wall tiers. maxHp must increase monotonically: upgradeWall() gains the difference between consecutive maxima. Colours are Phase 11 and deliberately absent.",
+    "tiers": [
+      { "id": "palisade",  "name": "Wooden Palisade", "maxHp": 400 },
+      { "id": "stone",     "name": "Stone Keep",      "maxHp": 620 },
+      { "id": "granite",   "name": "Granite Bastion", "maxHp": 900 },
+      { "id": "iron",      "name": "Reinforced Iron", "maxHp": 1300 },
+      { "id": "blacksteel","name": "Blacksteel Hold", "maxHp": 1800 },
+      { "id": "obsidian",  "name": "Runed Obsidian",  "maxHp": 2500 }
+    ],
+    "//slots": "Emplacements in unlock order, in pygame coordinates (y down). WALL_TOP=350, KEEP_TOP=230.",
+    "slots": [
+      { "id": "wall_1",  "x": 248, "y": 354 },
+      { "id": "wall_2",  "x": 210, "y": 354 },
+      { "id": "wall_3",  "x": 172, "y": 354 },
+      { "id": "wall_4",  "x": 140, "y": 354 },
+      { "id": "keep_1",  "x": 30,  "y": 234 },
+      { "id": "keep_2",  "x": 62,  "y": 234 },
+      { "id": "keep_3",  "x": 94,  "y": 234 },
+      { "id": "keep_4",  "x": 120, "y": 234 },
+      { "id": "corner",  "x": 228, "y": 288 }
+    ]
+  }
+}

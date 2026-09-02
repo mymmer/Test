@@ -498,6 +498,18 @@ behaviour are preserved.
 | Timestep | Fixed 1/60 vs variable ≤50 ms | Determinism; identical at the 60 fps the Python game targets |
 | Blend of castle damage flash | Additive tint approximation | `BLEND_RGBA_MULT`+`ADD` composite has no direct batch equivalent |
 
+### Findings in the Python source, reproduced rather than fixed (Phase 5)
+
+Two things turned up while porting the defences that look like bugs in the
+reference. Both are **reproduced as-is**, because the brief is a port and
+"fixing" a source behaviour silently would make later parity testing meaningless.
+Each is recorded here so it can be decided on deliberately, after parity.
+
+| Finding | Detail | Status in the port |
+|---|---|---|
+| `TalentTree.castle_hp` is dead code | `main.py:471` defines `castle_hp = 1 + value("maxhp")`, and **nothing reads it**. The "Deep Foundations" talent (5 ranks, +10% each) therefore does nothing to the castle's health. | Not implemented. `CombatModifiers` has no `castleHp()`, so nothing in the port pretends to apply it either. Adding it would be a balance change, not a port. |
+| Overcharge power is read from a live cursor position | `Game.release_grab` reads `overcharge_power()` *before* clearing `self.charging`, with a comment saying so — a fragile ordering that has clearly bitten before. | The port removes the hazard structurally rather than by comment: `overchargeFire(aimX, aimY, power)` takes the power as an argument, so there is no state to clear in the wrong order. The formula itself is unchanged and is asserted in `OverchargeTest.powerFormula`. |
+
 ---
 
 ## 15. Phase plan

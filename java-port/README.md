@@ -9,15 +9,17 @@ nothing here modifies it. Both can be run side by side for parity testing.
 * Migration checklist: [`../PORTING_STATUS.md`](../PORTING_STATUS.md)
 * Analysis and design: [`../docs/PORT_ANALYSIS.md`](../docs/PORT_ANALYSIS.md)
 
-**Current state: Phase 4 (simulation foundation).** There is no gameplay yet —
-no enemies, towers, combat, waves, progression or shop. What exists is the
-machinery they will run on: the project skeleton, the two viewports, the
-lifecycle, both launchers, the asset/skin/save/config infrastructure, the fixed
-1/60 s simulation clock, the entity lifecycle and the whole input pipeline.
+**Current state: Phase 5 (defences).** The player's side of the fight exists:
+the castle and its wall tiers, Bowman/Ballista/Cannon with their counters and
+manual overcharge, projectiles, spikes, the barricade and the Outpost with its
+garrison and prisoner. There is still no enemy roster, no waves, no shop and no
+rendering beyond the scaffolding — those are Phases 6 to 11.
 
 Subsystem contracts: [`docs/subsystems/`](docs/subsystems/) —
 [SIMULATION](docs/subsystems/SIMULATION.md) ·
 [INPUT](docs/subsystems/INPUT.md) ·
+[DEFENCES](docs/subsystems/DEFENCES.md) ·
+[PROJECTILES](docs/subsystems/PROJECTILES.md) ·
 [ASSETS_SKINS](docs/subsystems/ASSETS_SKINS.md) ·
 [PERSISTENCE](docs/subsystems/PERSISTENCE.md).
 

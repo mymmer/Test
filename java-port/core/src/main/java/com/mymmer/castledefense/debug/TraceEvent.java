@@ -15,7 +15,15 @@ public enum TraceEvent {
     ENTITY_SPAWN,
     ENTITY_DEATH,
     DAMAGE,
-    PROJECTILE_IMPACT,
     GOLD_CHANGE,
-    SCORE_CHANGE
+    SCORE_CHANGE,
+
+    // --- defences (Phase 5) -------------------------------------------------
+    PROJECTILE_SPAWN,
+    PROJECTILE_IMPACT,
+    TOWER_FIRE,
+    TOWER_DISABLED,
+    TOWER_REBUILT,
+    CASTLE_DAMAGE,
+    BARRICADE_DAMAGE
 }

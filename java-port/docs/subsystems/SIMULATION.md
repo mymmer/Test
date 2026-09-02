@@ -159,7 +159,9 @@ may only record. The default is `NoOpSimulationTrace.INSTANCE` (a singleton, so
 tracing costs one already-predicted `isEnabled()` branch when off);
 `RecordingSimulationTrace` keeps a bounded ring for tests. There is deliberately
 no EventBus, no replay log and no event sourcing — gameplay calls gameplay
-directly.
+directly. Phase 5 added `PROJECTILE_SPAWN`, `TOWER_FIRE`, `TOWER_DISABLED`,
+`TOWER_REBUILT`, `CASTLE_DAMAGE` and `BARRICADE_DAMAGE`; a test runs the same
+seeded scenario with tracing on and off and asserts the outcomes are identical.
 
 ## Relevant source files
 

@@ -82,6 +82,26 @@ public final class Collisions {
     }
 
     /**
+     * Point inside a pygame {@code Rect}, with pygame's exact semantics.
+     *
+     * <p>Not a duplicate of {@link #pointInAabb}: {@code Rect.collidepoint} is
+     * <b>half-open</b> ({@code left <= px < right}) and a {@code Rect} stores
+     * <b>integers</b>, so the float rect the caller thinks it has was truncated
+     * when it was built. Both details are load-bearing — they decide whether a
+     * hostile shell that lands exactly on a tower's right edge hits the tower or
+     * carries on into the wall — so the Python call sites that use a Rect
+     * ({@code Castle.tower_at}, {@code Outpost.body_rect}) use this and the ones
+     * that use raw arithmetic use the methods above.
+     *
+     * @param rx left edge, already truncated to an int as pygame would
+     * @param ry top edge in pygame's y-down space, already truncated
+     */
+    public static boolean pointInPygameRect(float px, float py,
+                                            int rx, int ry, int rw, int rh) {
+        return px >= rx && px < rx + rw && py >= ry && py < ry + rh;
+    }
+
+    /**
      * Horizontal-only proximity.
      *
      * <p>Its own method because the Python game uses it constantly — fire zones,
