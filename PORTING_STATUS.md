@@ -10,16 +10,20 @@ Legend: `[ ]` not started · `[~]` in progress · `[x]` ported (compiles, believ
 Nothing is complete merely because it compiles. A row may only reach `[T]` when a named
 test exercises it.
 
-**Phase status: Phases 1, 3, 4 and 5 complete. Phase 2 implemented and hardened but
-NOT fully tested — the Android assembly gate is still open because Google's Maven
-is unreachable from the build environment, and stays open until
+**Phase status: Phases 1, 3, 4, 5 and 6 complete. Phase 2 implemented and hardened
+but NOT fully tested — the Android assembly gate is still open because Google's
+Maven is unreachable from the build environment, and stays open until
 `./gradlew verifyAndroid` succeeds on a machine with the SDK.**
 
-Phase 5 adds the player's side of the fight: castle, towers, projectiles, spikes,
-barricade and Outpost. There is still **no enemy roster** — the defence package
-does not import, reference or instantiate a single enemy type, exactly as
-`castle.py` never imports `enemies.py`. Towers shoot a narrow `Target` contract
-that Phase 6's `Enemy` will implement.
+Phase 6 adds the enemy roster, the interaction physics and wave composition. The
+two sides now meet: `Enemy` implements the `Target` contract Phase 5 wrote its
+towers against, and **not one line of `defence` was changed to accommodate it** —
+the dependency still runs `enemy → defence`, exactly as `enemies.py` imports
+`castle.py`. There are still no bosses: composition places them as stable id
+specs that Phase 7 resolves, and none is faked.
+
+Numeric parity with the Python source is now proven for the isolated formulas by
+fixtures generated from it — see `tools/parity/generate_fixtures.py`.
 
 Subsystem contracts:
 [`java-port/docs/subsystems/`](java-port/docs/subsystems/).
@@ -274,24 +278,69 @@ Contracts: [`DEFENCES.md`](java-port/docs/subsystems/DEFENCES.md),
       `TOWER_REBUILT`, `CASTLE_DAMAGE`, `BARRICADE_DAMAGE`) — proven to be
       observation only by running a scenario with tracing on and off
 
-## Phase 6 — Enemies
+## Phase 6 — Enemies, interaction physics and wave composition
 
-- [ ] `Enemy` base state machine (walk/attack/grabbed/air/retrieve/trapped)
-- [ ] `waveScaling` + endgame tiers + difficulty scale/curve/speed
-- [ ] Armour model + stripping (progress, slow, vulnerability)
-- [ ] Grab gating (`grabbable` / `armored` / `shovable` / `tooHeavy`)
-- [ ] Throw physics (release power by mass, drag, wind, spin)
-- [ ] Fall damage + bounce ladder + stagger
-- [ ] Slam damage + knock-on
-- [ ] Shove (factor/decay/max)
-- [ ] Blocking / queueing (`blocked`) and crowd separation
-- [ ] Scout · FootSoldier · ShieldBearer · Berzerker (rage quirk) · SiegeRam
-- [ ] Skeleton · Necromancer (standoff, summon, rival bolts, Outpost targeting)
-- [ ] Assassin (cloak untargetable, dash) · Gargoyle (flying)
-- [ ] Volatile (detonation, chain, wall + barricade damage)
-- [ ] TreasureGoblin (flee, timer, silent death)
-- [ ] `FriendlySkeleton` ally (march, hold line, sentinels, decay)
-- [ ] `UNLOCKS` / `buildWave` / goblin roll / boss insertion / second boss ≥ wave 20
+Contracts: [`ENEMIES.md`](java-port/docs/subsystems/ENEMIES.md),
+[`INTERACTIONS_PHYSICS.md`](java-port/docs/subsystems/INTERACTIONS_PHYSICS.md).
+
+- [T] `Enemy` base state machine (walk / attack / grabbed / air / trapped;
+      `retrieve` declared for Phase 7) — explicit transitions, each traced, no
+      behaviour tree and no ECS. `EnemyBehaviourTest`
+- [T] `Enemy implements Target` — the Phase 5 contract, unchanged. `defence`
+      names no enemy type; `Necromancer implements Trappable`
+- [T] `WaveScaling` + endgame tiers + difficulty scale / curve / flat speed —
+      the chain's **order** is asserted against Python for 8 waves × 3
+      difficulties × 2 units in `PythonParityTest`
+- [T] Armour model + stripping (progress, permanent slow, vulnerability) —
+      the Siege Ram's plate-by-plate progression is checked against the source
+- [T] Grab gating (`grabbable` / `armored` / `shovable` / `tooHeavy`) — four
+      conditions, with mass-vs-capacity only the last: a plated tank rides out
+      every lift at any Grab Strength
+- [T] Grab capacity — a **table lookup times the talent**, not a formula, so the
+      talent can push a level past the next threshold. Asserted against Python
+- [T] Throw physics (release power by mass, air drag, wind, arena walls) —
+      `PythonParityTest` checks the integration step for step at dt = 1/60
+- [T] Fall damage + bounce ladder + stagger — thresholds tested just below, at,
+      just above and lethal; every bounce level tested by name. The chain ends on
+      `count > level`, **strictly**, so level 0 never rebounds
+- [T] Slam damage + knock-on + per-uid cooldown — including the regression that
+      a new mob never inherits a dead one's cooldown
+- [T] Shove (factor / decay / max) — magnitude and decay checked against Python
+- [T] Blocking / queueing and crowd separation — **order-dependent by contract**:
+      insertion order, nested `(i, j)` traversal, immediate per-pair mutation.
+      No bucketing, sorting, grid or parallelism
+- [T] Scout · FootSoldier · ShieldBearer · Berzerker · SiegeRam — the Berzerker
+      speed quirk is reproduced and pinned by a named test; the Siege Ram is the
+      integration test for the whole interaction stack
+- [T] Skeleton · Necromancer (stand-off, summon cap, rival bolts, halting level
+      with the Outpost, trappable) — no circular dependency: the Outpost knows
+      nothing about Necromancers
+- [T] Assassin (cloaked → untargetable, dash speed ordering) · Gargoyle (flying,
+      not a ground blocker). A cloaked Assassin is invisible to towers and
+      projectiles through the existing `targetable()` contract alone
+- [T] Volatile (detonation after `super.die()`, chain, wall and barricade damage)
+- [T] TreasureGoblin (flees, timer, off-map escape, **silent** death)
+- [T] `FriendlySkeleton` ally — **not** an `Enemy` and **not** a `Target`, so
+      towers cannot target it by construction. March, hold line, engage,
+      Sentinels chase, lifetime decay
+- [T] `CursorInteraction` — grab, drag, multi-grab, throw, cancel-drops, strip,
+      shove, overcharge power. No input device reaches gameplay
+- [T] Multi-grab release jitter ×0.85–1.15 from the seeded stream, with the
+      primary release exact
+- [T] Unlock table / wave composition / goblin roll / boss insertion / second
+      boss from wave 20 — bosses are `SpawnSpec`s carrying stable ids;
+      **no boss class is faked**
+- [T] `data/enemies.json` + `EnemyTable` — every number asserted against
+      `enemies.py`, with load-time validation for duplicate and unknown ids,
+      non-positive stats, incoherent armour flags, non-ascending endgame tiers,
+      bad tints and bad unlock weights
+- [T] Python↔Java numeric parity fixtures — `tools/parity/generate_fixtures.py`
+      generates 249 reference cases from the source (read-only, by parsing rather
+      than importing) covering wave scaling, the full scaling chain, release,
+      air integration, fall damage, bounce, slam, shove, stripping and capacity
+- [T] `EntityList.remove` + ordered backing array — a live entity can leave the
+      list (the Outpost trap) without breaking insertion order, and the
+      snapshot contract is proven against the real `EntityList`
 
 ## Phase 7 — Bosses
 

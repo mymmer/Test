@@ -79,6 +79,7 @@ String      describe();                         // one line, for the crash log
 // EntityList — insertion order, snapshots, deferred removal.
 void add(T);  int size();  T get(int);  int aliveCount();  boolean contains(T);
 int  sweep();                       // compacts dead entries, order preserved
+boolean remove(T);                  // removes a LIVE entity, order preserved
 Snapshot beginSnapshot();           // AutoCloseable; a stable view for iteration
 int openSnapshots(); int peakOpenSnapshots();
 Array<T> unsafeItems();             // escape hatch, tests and bulk render only
@@ -125,11 +126,16 @@ long uid();  boolean isAlive();  void markDead();   // revive() is protected
    state; `gameplayTime()`, entity updates and spawning advance only when
    `state().advancesWorld()`. This is what lets the Endless realtime shop freeze
    the horde mid-fight.
-7. **Insertion order is semantic.** `EntityList` never swap-removes. `sweep()`
-   compacts in place and preserves relative order, because the Python
-   `separate_enemies` pass, the Cannon cluster scoring and shared tower
-   targeting all depend on list position. Reordering them is a Phase 12 change
-   behind parity proofs, not a free optimisation.
+7. **Insertion order is semantic.** `EntityList` never swap-removes. Its backing
+   `Array` is **ordered**, so even a direct `removeValue` preserves order —
+   libGDX swap-removes on an unordered array, which would silently reorder the
+   list and change which mob the crowd pass, the Cannon's cluster scoring and
+   shared targeting all pick. `sweep()` compacts in place. Reordering is a Phase
+   12 change behind parity proofs, not a free optimisation.
+7b. **`remove(T)` takes a *live* entity out without killing it.** Rare and
+   deliberate: the Outpost imprisoning a Necromancer, who then lives on as the
+   prisoner. It can happen mid-iteration, which is why the enemy loop iterates a
+   snapshot — proven by `EnemyBehaviourTest.trapDuringSnapshotDoesNotSkip`.
 8. **Removal is deferred.** Kill marks; the sweep at the end of the step
    removes. Nothing mutates the collection mid-iteration.
 9. **Snapshots are pooled and nestable.** `beginSnapshot()` hands out a reusable
@@ -162,6 +168,9 @@ no EventBus, no replay log and no event sourcing — gameplay calls gameplay
 directly. Phase 5 added `PROJECTILE_SPAWN`, `TOWER_FIRE`, `TOWER_DISABLED`,
 `TOWER_REBUILT`, `CASTLE_DAMAGE` and `BARRICADE_DAMAGE`; a test runs the same
 seeded scenario with tracing on and off and asserts the outcomes are identical.
+Phase 6 added `ENTITY_STATE_CHANGED`, `ENEMY_GRABBED`, `ENEMY_RELEASED`,
+`ARMOUR_STRIPPED`, `SLAM`, `FALL_DAMAGE` and `GOLD_PAYOUT`. Nothing traces a
+position every frame; `Enemy.describe()` builds a bug-report line on demand.
 
 ## Relevant source files
 

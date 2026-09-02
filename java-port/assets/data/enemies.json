@@ -1,0 +1,90 @@
+{
+  "//": "Enemy stat blocks, endgame tiers and the unlock table, transcribed verbatim from enemies.py and sprites.py.",
+  "//numbers": "Numbers only. Behaviour (rage, dash, detonation, stand-off, escape) is Java -- see docs/PORT_ANALYSIS.md section 9.",
+  "//geometry": "width/height are the GAMEPLAY hitbox. Artwork never changes them: a 2x larger PNG must not change collision, grabbing, slamming, stripping or blocking.",
+
+  "enemies": [
+    {
+      "id": "scout", "name": "Scout", "description": "Fast, fragile skirmisher.",
+      "baseHp": 26.0, "baseSpeed": 122.0, "baseDamage": 5.0, "attackRate": 0.8,
+      "gold": 6, "mass": 0.8, "width": 26, "height": 34
+    },
+    {
+      "id": "foot_soldier", "name": "Foot Soldier", "description": "Reliable line infantry.",
+      "baseHp": 62.0, "baseSpeed": 72.0, "baseDamage": 10.0, "attackRate": 1.0,
+      "gold": 11, "mass": 1.5, "width": 26, "height": 34
+    },
+    {
+      "id": "shield_bearer", "name": "Shield Bearer", "description": "Slow bulwark; shrugs off arrows.",
+      "baseHp": 160.0, "baseSpeed": 46.0, "baseDamage": 12.0, "attackRate": 1.4,
+      "gold": 19, "armor": 0.60, "mass": 3.0, "width": 26, "height": 34,
+      "//armor": "armoured but NOT heavy: no plates to strip, no cannon bonus, cannot be shoved"
+    },
+    {
+      "id": "berzerker", "name": "Berzerker", "description": "Glass cannon; hits like a truck.",
+      "baseHp": 48.0, "baseSpeed": 134.0, "baseDamage": 24.0, "attackRate": 0.7,
+      "gold": 15, "mass": 1.2, "width": 26, "height": 32
+    },
+    {
+      "id": "siege_ram", "name": "Siege Ram", "description": "Armoured tank. Drag on it to tear the plating off.",
+      "baseHp": 520.0, "baseSpeed": 28.0, "baseDamage": 58.0, "attackRate": 2.2,
+      "gold": 52, "armor": 0.60, "mass": 9.0, "width": 76, "height": 44,
+      "grabbable": true, "heavy": true, "strippable": true, "armorLayers": 3,
+      "//mass": "MASS 9.0 stays above GRAB_CAPACITY until Grab Strength 3 (9.5)"
+    },
+    {
+      "id": "skeleton", "name": "Skeleton", "description": "Summoned rabble.",
+      "baseHp": 20.0, "baseSpeed": 92.0, "baseDamage": 6.0, "attackRate": 0.9,
+      "gold": 2, "mass": 0.7, "width": 18, "height": 28,
+      "//unlocks": "absent from the unlock table on purpose: only a Necromancer raises these"
+    },
+    {
+      "id": "necromancer", "name": "Necromancer", "description": "Hangs back and raises skeletons. Fling him into the Outpost!",
+      "baseHp": 90.0, "baseSpeed": 54.0, "baseDamage": 14.0, "attackRate": 1.1,
+      "gold": 26, "mass": 1.4, "width": 26, "height": 38, "trappable": true,
+      "//attackRate": "Python inherits the base 1.1; he never melees, but the field must exist"
+    },
+    {
+      "id": "assassin", "name": "Assassin", "description": "Cloaks, then dashes. Untargetable while hidden.",
+      "baseHp": 58.0, "baseSpeed": 96.0, "baseDamage": 20.0, "attackRate": 0.65,
+      "gold": 24, "mass": 1.0, "width": 22, "height": 30
+    },
+    {
+      "id": "gargoyle", "name": "Gargoyle", "description": "Flies over ballistas and cannons.",
+      "baseHp": 78.0, "baseSpeed": 92.0, "baseDamage": 13.0, "attackRate": 0.9,
+      "gold": 26, "mass": 1.1, "width": 30, "height": 26,
+      "flying": true, "flyY": 232.0
+    },
+    {
+      "id": "volatile", "name": "Volatile", "description": "Detonates violently when killed. Mind the blast.",
+      "baseHp": 46.0, "baseSpeed": 84.0, "baseDamage": 8.0, "attackRate": 1.1,
+      "gold": 16, "mass": 1.1, "width": 26, "height": 28
+    },
+    {
+      "id": "treasure_goblin", "name": "Treasure Goblin", "description": "Flees with a sack of gold. Kill it before it escapes!",
+      "baseHp": 70.0, "baseSpeed": 104.0, "baseDamage": 0.0, "attackRate": 1.1,
+      "gold": 140, "mass": 0.9, "width": 24, "height": 30,
+      "//baseDamage": "zero: it never attacks anything"
+    }
+  ],
+
+  "//endgameTiers": "Applied on top of the per-wave curve once the first three bosses are behind you. MUST be in ascending firstWave order: tierIndex() keeps the LAST match.",
+  "endgameTiers": [
+    { "id": "bloodied",    "name": "Bloodied",    "firstWave": 16, "tint": "#D63A34", "tintStrength": 0.42, "hpMult": 1.35, "damageMult": 1.22, "speedMult": 1.05 },
+    { "id": "frostbound",  "name": "Frostbound",  "firstWave": 26, "tint": "#4A94E6", "tintStrength": 0.46, "hpMult": 1.85, "damageMult": 1.46, "speedMult": 1.10 },
+    { "id": "voidtouched", "name": "Voidtouched", "firstWave": 36, "tint": "#181422", "tintStrength": 0.55, "hpMult": 2.60, "damageMult": 1.80, "speedMult": 1.16 }
+  ],
+
+  "//unlocks": "(first wave the type appears on, budget weight). Cheap units appear more often: the pick weight is 1/weight.",
+  "unlocks": [
+    { "id": "scout",         "firstWave": 1,  "weight": 1.0 },
+    { "id": "foot_soldier",  "firstWave": 2,  "weight": 1.5 },
+    { "id": "shield_bearer", "firstWave": 3,  "weight": 2.6 },
+    { "id": "berzerker",     "firstWave": 4,  "weight": 2.0 },
+    { "id": "siege_ram",     "firstWave": 6,  "weight": 4.5 },
+    { "id": "necromancer",   "firstWave": 7,  "weight": 3.2 },
+    { "id": "assassin",      "firstWave": 8,  "weight": 2.8 },
+    { "id": "gargoyle",      "firstWave": 9,  "weight": 2.8 },
+    { "id": "volatile",      "firstWave": 11, "weight": 2.2 }
+  ]
+}

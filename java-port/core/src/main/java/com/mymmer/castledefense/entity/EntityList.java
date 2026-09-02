@@ -112,7 +112,13 @@ public final class EntityList<T extends Entity> {
     }
 
     public EntityList(int initialCapacity) {
-        items = new Array<>(false, initialCapacity);
+        //  ordered = TRUE, and it matters.  libGDX's Array does a SWAP-remove
+        //  on an unordered array, so a single removeIndex/removeValue anywhere
+        //  -- here, or by anything holding unsafeItems() -- would silently
+        //  reorder the list and change which mob the crowd pass, the Cannon's
+        //  cluster scoring and the shared targeting all pick.  Ordered removal
+        //  is O(n); this list is tens of entries, and parity is worth far more.
+        items = new Array<>(true, initialCapacity);
     }
 
     /** Appends, keeping insertion order. */
@@ -169,6 +175,25 @@ public final class EntityList<T extends Entity> {
         }
         items.truncate(write);
         return removed;
+    }
+
+    /**
+     * Removes one entity <b>without killing it</b>, preserving order.
+     *
+     * <p>Rare and deliberate. The normal way out of the world is
+     * {@link Entity#markDead()} followed by a {@link #sweep()}; this exists for
+     * the one case where a unit <em>leaves</em> the collection while still very
+     * much alive — the Outpost imprisoning a Necromancer, who then lives on as
+     * the prisoner and must no longer be part of the horde.
+     *
+     * <p>It can happen <b>mid-iteration</b>, which is exactly why the enemy loop
+     * iterates a {@link Snapshot}: a snapshot already holds its own copy, so the
+     * entities after the removed one still get their update.
+     *
+     * @return true if it was present
+     */
+    public boolean remove(T entity) {
+        return items.removeValue(entity, true);
     }
 
     /** Marks everything dead and sweeps. Used when a run ends. */

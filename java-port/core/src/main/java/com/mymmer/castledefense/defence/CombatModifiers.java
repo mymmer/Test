@@ -82,4 +82,73 @@ public interface CombatModifiers {
     default float allyRate() {
         return 1f;
     }
+
+    // ========================================================================
+    //  Enemy-side effects (Phase 6).
+    //
+    //  Added here rather than in a second interface because there is one talent
+    //  tree, and splitting it would mean two objects to thread through the world
+    //  and two places for a talent to be forgotten.  Package `enemy` depends on
+    //  package `defence` already; the reverse is still never true.
+    // ========================================================================
+
+    /** Throw velocity multiplier applied on release. */
+    default float throwPower() {
+        return 1f;
+    }
+
+    /** Fall-damage multiplier applied on landing. */
+    default float fallDamage() {
+        return 1f;
+    }
+
+    /** How strongly wind pushes an airborne body. */
+    default float windMult() {
+        return 1f;
+    }
+
+    /** Health and damage multiplier for a raised ally. */
+    default float allyPower() {
+        return 1f;
+    }
+
+    /** Incoming damage multiplier for an ally. Lower is tougher. */
+    default float allyTough() {
+        return 1f;
+    }
+
+    /** Extra seconds before an ally crumbles. */
+    default float allyLife() {
+        return 0f;
+    }
+
+    /** Undead Sentinels: allies chase anything, in any direction. */
+    default boolean allySentinels() {
+        return false;
+    }
+
+    /** Crowd gold step per extra mob on screen. */
+    default float goldPop() {
+        return 1f;
+    }
+
+    /** Flat gold multiplier per kill. */
+    default float killGold() {
+        return 1f;
+    }
+
+    /** Heaviest-mass multiplier on the grab capacity table. */
+    default float grabBonus() {
+        return 1f;
+    }
+
+    /** Grave Chill: slows an attacking mob while allies are up, 0..0.6. */
+    default float graveChill() {
+        return 0f;
+    }
+
+    /** Gale: slows every mob while a strong headwind blows. */
+    default float stormWindSlow() {
+        return 0f;
+    }
 }

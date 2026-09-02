@@ -25,5 +25,14 @@ public enum TraceEvent {
     TOWER_DISABLED,
     TOWER_REBUILT,
     CASTLE_DAMAGE,
-    BARRICADE_DAMAGE
+    BARRICADE_DAMAGE,
+
+    // --- enemies and interaction physics (Phase 6) --------------------------
+    ENTITY_STATE_CHANGED,
+    ENEMY_GRABBED,
+    ENEMY_RELEASED,
+    ARMOUR_STRIPPED,
+    SLAM,
+    FALL_DAMAGE,
+    GOLD_PAYOUT
 }

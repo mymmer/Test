@@ -9,17 +9,22 @@ nothing here modifies it. Both can be run side by side for parity testing.
 * Migration checklist: [`../PORTING_STATUS.md`](../PORTING_STATUS.md)
 * Analysis and design: [`../docs/PORT_ANALYSIS.md`](../docs/PORT_ANALYSIS.md)
 
-**Current state: Phase 5 (defences).** The player's side of the fight exists:
-the castle and its wall tiers, Bowman/Ballista/Cannon with their counters and
-manual overcharge, projectiles, spikes, the barricade and the Outpost with its
-garrison and prisoner. There is still no enemy roster, no waves, no shop and no
-rendering beyond the scaffolding — those are Phases 6 to 11.
+**Current state: Phase 6 (enemies and interaction physics).** Both sides of the
+fight exist: the castle, its towers and their counters; the eleven-unit enemy
+roster with its armour, throw physics, crowd behaviour and wave composition; and
+the cursor that grabs, throws, strips and shoves. Still to come: bosses (7), the
+run directors and shop (8), talents (9), UI (10) and rendering (11).
+
+Numeric parity with the Python source is proven for the isolated formulas by
+fixtures generated from it — see [`../tools/parity/`](../tools/parity/).
 
 Subsystem contracts: [`docs/subsystems/`](docs/subsystems/) —
 [SIMULATION](docs/subsystems/SIMULATION.md) ·
 [INPUT](docs/subsystems/INPUT.md) ·
 [DEFENCES](docs/subsystems/DEFENCES.md) ·
 [PROJECTILES](docs/subsystems/PROJECTILES.md) ·
+[ENEMIES](docs/subsystems/ENEMIES.md) ·
+[INTERACTIONS_PHYSICS](docs/subsystems/INTERACTIONS_PHYSICS.md) ·
 [ASSETS_SKINS](docs/subsystems/ASSETS_SKINS.md) ·
 [PERSISTENCE](docs/subsystems/PERSISTENCE.md).
 
@@ -71,6 +76,9 @@ java -jar lwjgl3/build/libs/castle-defense.jar --size 2400x1080 --frames 90 \
 
 # reproduce a run from a bug report's seed
 ./gradlew :lwjgl3:run -Dcastledefense.seed=8149274512
+
+# regenerate the Python parity fixtures (read-only against the four source files)
+python3 ../tools/parity/generate_fixtures.py
 
 # android (needs the SDK configured)
 ./gradlew verifyAndroid           # assembles + reports the APK path

@@ -43,8 +43,13 @@ produces friendly skeletons. That is reproduced exactly:
 ```
 defence  ──depends on──▶  config, util, entity, debug, data
    ▲
-   └── enemy (Phase 6) will depend on defence, implementing Target/Trappable
+   └── enemy  depends on defence: Enemy implements Target,
+              Necromancer implements Trappable
 ```
+
+**Phase 6 confirmed this without changing anything here.** The concrete enemies
+arrived and implemented the existing contracts; not one line of `defence` was
+adjusted to accommodate them, and no class in this package names an enemy type.
 
 `Target` therefore lives **in** `defence`, not in a neutral "shared types"
 package. A middle package would look tidier and would let the dependency quietly
@@ -64,7 +69,9 @@ interface Target       { long uid(); boolean alive(), targetable(), flying(), he
                          void takeDamage(float amount, String source); }
 interface Trappable extends Target { float mass(); void onTrapped(); void moveTo(float, float); }
 interface AllyFactory  { boolean spawnAlly(float x, float y); int allyCount(); }   // .NONE
-interface CombatModifiers { /* 13 defaulted scalars */ }                           // .NONE
+interface CombatModifiers { /* defaulted scalars; Phase 6 added the enemy-side
+                              ones -- throwPower, fallDamage, windMult, ally*,
+                              grabBonus, graveChill, stormWindSlow */ }        // .NONE
 interface DefenceContext  { int targetCount(); Target target(int i);
                             void removeFromHorde(Target t); void addProjectile(Projectile p);
                             Castle castle(); Barricade barricade(); Outpost outpost();

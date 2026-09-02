@@ -510,6 +510,27 @@ Each is recorded here so it can be decided on deliberately, after parity.
 | `TalentTree.castle_hp` is dead code | `main.py:471` defines `castle_hp = 1 + value("maxhp")`, and **nothing reads it**. The "Deep Foundations" talent (5 ranks, +10% each) therefore does nothing to the castle's health. | Not implemented. `CombatModifiers` has no `castleHp()`, so nothing in the port pretends to apply it either. Adding it would be a balance change, not a port. |
 | Overcharge power is read from a live cursor position | `Game.release_grab` reads `overcharge_power()` *before* clearing `self.charging`, with a comment saying so — a fragile ordering that has clearly bitten before. | The port removes the hazard structurally rather than by comment: `overchargeFire(aimX, aimY, power)` takes the power as an argument, so there is no state to clear in the wrong order. The formula itself is unchanged and is asserted in `OverchargeTest.powerFormula`. |
 
+### Source quirks reproduced in Phase 6
+
+Each of these looks like a defect and each is authoritative. All are reproduced,
+and each has a **named** regression test so a later cleanup has to argue with it
+rather than silently changing the game.
+
+| Quirk | Detail | Test |
+|---|---|---|
+| **Berzerker discards difficulty and tier speed** | `Berzerker.think` recomputes `speed = BASE_SPEED × wave_scaling(wave)[2] × rage` instead of scaling the value it holds. Phase 1 recorded this as affecting the rage behaviour; it is in fact broader — the recompute runs on **every** call, so its stored speed (which does carry difficulty and the endgame tier) never moves it at all. On Hard at wave 36 the discarded factors are 1.4 × 1.16 = 1.624, more than the 1.45 rage cap, so a Berzerker there is slower than its own stat block at any health. | `EnemySpeedTest.berzerkerRageDiscardsDifficultyAndTierSpeed` |
+| **The gold multiplier counts the dying mob** | `Enemy.die` reads `game.gold_multiplier` before setting `alive = False`, so the mob about to die is still in the crowd count. Removing it first would quietly cut every payout. | `EnemyBehaviourTest.goldMultiplierIncludesTheDyingMob` |
+| **The bounce chain ends on `count > level`** | Strictly greater, so level 0 never rebounds at all. `>=` reads more evenly and would give every level one extra bounce. | `EnemyPhysicsTest.bounceLevelZeroDoesNotRebound`, `.bounceLadder` |
+| **`Outpost.trap` removes a live entry mid-iteration** | The enemy loop must iterate a snapshot or the mob after the captured one is skipped — silently, because a list does not complain. | `EnemyBehaviourTest.trapDuringSnapshotDoesNotSkip` |
+| **Temporary speed mutation** | The talent slow multiplies and divides one shared mutable field; the Berzerker and Assassin save-overwrite-restore around it. They compose through that field in an order that is observable, and the divide-back is not bit-exact. | `EnemySpeedTest` (five tests) |
+
+### Newly discovered in Phase 6
+
+| Finding | Detail | Status |
+|---|---|---|
+| **A Volatile blast cannot chain among healthy Volatiles** | The blast does `damage × 3.4` = 27.2 at wave 1; a Volatile has 46 health. Worse, it never closes: health scales at 1.14 per wave and damage at 1.11, so the gap only widens (wave 30: 561 blast against 2056 health). Chain reactions are therefore something the player *sets up* by softening a row first, not something a single kill triggers. | Reproduced exactly. The chain tests pre-damage the row, which is the situation the mechanic actually occurs in. Not a port bug and not "fixed"; recorded so a future balance pass knows the blast is far below the one-shot threshold. |
+| **`TalentTree.castle_hp` remains dead code** | Confirmed again in Phase 6: nothing reads it. | Still not implemented. |
+
 ---
 
 ## 15. Phase plan

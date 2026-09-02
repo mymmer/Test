@@ -24,9 +24,10 @@ faithful rehearsal of the phone build rather than a separate code path.
 
 ## Does not own
 
-* **What a press means.** Grabbing, throwing, armour stripping, tower
-  overcharge: all of that lives behind `WorldInteractionHandler`, implemented in
-  Phases 5–7. Routing does not change when it arrives.
+* **What a press means.** Grabbing, throwing, armour stripping and tower
+  overcharge live behind `WorldInteractionHandler`, implemented by
+  `interaction.CursorInteraction` in Phase 6. Routing did not change when it
+  arrived — see `docs/subsystems/INTERACTIONS_PHYSICS.md`.
 * **Widget layout or hit shapes.** A `UiConsumer` decides for itself whether a
   press is inside it.
 * **Wall-clock time.** The tracker is clocked from simulation time, set by
