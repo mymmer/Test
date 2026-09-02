@@ -47,7 +47,9 @@ number of steps for the same amount of elapsed time, and a bug report that says
 int      advance(float frameDelta);   // runs 0..MAX_STEPS steps, returns how many
 void     resetAccumulator();          // after a pause/resume; discards the partial step
 void     reset();                     // accumulator + clock + counters
-double   timeSeconds();               // stepCount * DT — the only time that exists
+double   timeSeconds();               // stepCount * FIXED_DT — the only time that exists
+static double secondsForSteps(long steps);   // canonical conversion, for other clocks
+static long   stepsForSeconds(double s);
 long     stepCount();
 int      lastStepsRun();
 float    alpha();                     // leftover fraction, for render interpolation only
@@ -87,12 +89,29 @@ long uid();  boolean isAlive();  void markDead();   // revive() is protected
 
 ## Important invariants
 
-1. **One `DT`.** `Simulation.DT == GameConfig.SIMULATION_STEP == 1/60`. Nothing
-   else defines a timestep. `step(dt)` always receives exactly `DT`.
-2. **Time is `stepCount * DT`.** The accumulator is a `double` because
-   `DT = 1f/60f` is fractionally larger than a true sixtieth; accumulating it as
-   a `float` drifts measurably over a long Endless run. The residual offset is
-   ~5.2e-8 s per 60 steps and is documented in `Simulation`'s javadoc.
+1. **One step, two representations.** `Simulation.FIXED_DT ==
+   GameConfig.SIMULATION_STEP == 1.0/60.0` (double, canonical) and
+   `Simulation.DT == GameConfig.SIMULATION_STEP_F == (float) FIXED_DT` (gameplay).
+   Nothing else defines a timestep; `step(dt)` always receives exactly `DT`.
+2. **The canonical step is a `double`; the gameplay step is a `float`.**
+   `FIXED_DT = 1.0/60.0` is used by the accumulator, the step comparison and the
+   clock. `DT = (float) FIXED_DT` is what `step(dt)` receives, because positions,
+   velocities and decay are float maths. The rule: **multiply by `DT`, never sum
+   it.** `1f/60f` is 0.016666668…, not a sixtieth, so summing it drifts ~188 µs
+   over an hour — `canonicalClockBeatsFloatAccumulation` demonstrates exactly
+   that and pins the difference.
+2b. **`timeSeconds()` is `stepCount * FIXED_DT`, computed fresh.** Not a running
+   total, so it cannot drift: 60 steps are 1.0 s, 3600 are 60.0 s, 216 000 are
+   3600.0 s, to double precision. Step ids in traces are the integer step count
+   itself. `secondsForSteps` / `stepsForSeconds` exist so later long-lived clocks
+   (Endless timetable, boss phases) convert the same way instead of summing their
+   own float. This does **not** make gameplay integer ticks: physics stays float.
+2c. **Exact assertions where the port controls the input, tolerance where the
+   platform supplies it.** A step count is an integer we chose, so N steps must be
+   exactly N/60 s and the tests assert that to 1e-12. A frame delta such as
+   `1/144f` is an approximate float from a display, so "59 or 60 steps in a
+   nominal second" is the honest assertion there. Loosening the first kind would
+   hide a real drift bug; tightening the second would be asserting float noise.
 3. **Bounded catch-up.** At most `MAX_STEPS` (5) steps per frame. Beyond that the
    remaining accumulated time is **dropped**, not banked — a spiral of death is
    worse than a hitch — and `droppedStepEvents()` counts it.

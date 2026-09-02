@@ -59,7 +59,7 @@ class SimulationTest {
         Simulation sim = new Simulation(r);
         assertEquals(3, sim.advance(DT * 3f));
         assertEquals(3, r.deltas.size);
-        assertEquals(3 * (double) DT, sim.timeSeconds(), 1e-9);
+        assertEquals(0.05, sim.timeSeconds(), 1e-12, "3 steps is exactly 3/60 s");
         for (int i = 0; i < r.deltas.size; i++) {
             assertEquals(DT, r.deltas.get(i), 0f, "every step is a whole DT");
         }
@@ -78,7 +78,8 @@ class SimulationTest {
         assertEquals(0f, sim.accumulatorSeconds(), 1e-7f,
                 "leftover time must be dropped, not carried into the next frame");
         // and gameplay time is dropped with it -- not caught up later
-        assertEquals(Simulation.MAX_STEPS * (double) DT, sim.timeSeconds(), 1e-9);
+        assertEquals(Simulation.MAX_STEPS / 60.0, sim.timeSeconds(), 1e-12,
+                "the steps that did run are canonical seconds");
 
         int next = sim.advance(DT);
         assertEquals(1, next, "the next frame starts clean");
@@ -122,22 +123,89 @@ class SimulationTest {
         assertEquals(0L, sim.stepCount());
     }
 
+    //  ------------------------------------------------------------------
+    //  Canonical clock.
+    //
+    //  These assertions are EXACT, because the port controls the input: a step
+    //  count is an integer we chose, so N steps must be exactly N/60 seconds.
+    //  The frame-rate tests further down are the opposite case -- there the
+    //  input is an approximate float delta supplied by the platform, so a
+    //  one-step tolerance is honest rather than sloppy.  Do not confuse the
+    //  two: loosening these would hide a real drift bug.
+    //  ------------------------------------------------------------------
+
+    /** Double tolerance for a value that should be exact bar the last few ulps. */
+    private static final double EXACT = 1e-12;
+
     @Test
-    @DisplayName("simulation time is exactly stepCount * DT over a long run")
+    @DisplayName("canonical seconds: 60 steps = 1 s, 3600 = 60 s, 216000 = 3600 s")
+    void canonicalSecondsAreExact() {
+        assertEquals(1.0, Simulation.secondsForSteps(60L), EXACT, "one second");
+        assertEquals(60.0, Simulation.secondsForSteps(3600L), EXACT, "one minute");
+        assertEquals(3600.0, Simulation.secondsForSteps(216_000L), EXACT, "one hour");
+        assertEquals(0.0, Simulation.secondsForSteps(0L), 0.0);
+
+        // and the inverse agrees
+        assertEquals(60L, Simulation.stepsForSeconds(1.0));
+        assertEquals(3600L, Simulation.stepsForSeconds(60.0));
+        assertEquals(216_000L, Simulation.stepsForSeconds(3600.0));
+    }
+
+    @Test
+    @DisplayName("the running clock is exact after an hour of stepping")
     void timeAccounting() {
         Recorder r = new Recorder();
         Simulation sim = new Simulation(r);
-        for (int i = 0; i < 3600; i++) {            // a minute at 60 fps
+        //  One float DT per call is very slightly more than a canonical step, so
+        //  each call runs exactly one step; the surplus over an hour is ~0.2 ms,
+        //  far under a step, so the count is exact and so is the clock.
+        for (int i = 0; i < 216_000; i++) {
             sim.advance(DT);
         }
-        assertEquals(3600L, sim.stepCount());
-        assertEquals(3600 * (double) DT, sim.timeSeconds(), 1e-9,
-                "time is derived from steps, so it cannot drift");
-        //  Not exactly 60.0: DT is 1f/60f, whose float value is a hair above a
-        //  true sixtieth, so 3600 steps read ~3 microseconds high. That is the
-        //  documented, intended behaviour -- the clock reports what the physics
-        //  actually integrated, not what a stopwatch says.
-        assertEquals(60.0, sim.timeSeconds(), 1e-4, "3600 steps is one minute");
+        assertEquals(216_000L, sim.stepCount(), "one step per frame, no drift");
+        assertEquals(3600.0, sim.timeSeconds(), EXACT,
+                "216000 steps is exactly one hour of canonical time");
+
+        // the intermediate marks land exactly too
+        sim.reset();
+        for (int i = 0; i < 60; i++) {
+            sim.advance(DT);
+        }
+        assertEquals(1.0, sim.timeSeconds(), EXACT, "60 steps is exactly one second");
+    }
+
+    @Test
+    @DisplayName("the clock does not accumulate the float step's error")
+    void canonicalClockBeatsFloatAccumulation() {
+        //  This is the bug the double canonical step exists to prevent.  Summing
+        //  the float step -- the obvious implementation -- is wrong by ~188 us
+        //  after an hour, because 1f/60f is not a sixtieth.  Multiplying an exact
+        //  step index by an exact double is wrong by essentially nothing.
+        float naive = 0f;
+        for (int i = 0; i < 216_000; i++) {
+            naive += DT;
+        }
+        assertTrue(Math.abs(naive - 3600.0) > 1e-3,
+                "a float running total is expected to be visibly wrong, was " + naive);
+        assertEquals(3600.0, Simulation.secondsForSteps(216_000L), EXACT,
+                "the canonical clock is not");
+    }
+
+    @Test
+    @DisplayName("gameplay still receives a float step, and it is the canonical one")
+    void gameplayStepIsTheFloatOfTheCanonicalOne() {
+        //  Gameplay maths stays in floats on purpose (positions, velocities,
+        //  decay); only the clock is a double.  The float handed to step() must
+        //  be exactly the float nearest the canonical step -- not a separately
+        //  written literal that could drift away from it in a later edit.
+        assertEquals((float) Simulation.FIXED_DT, Simulation.DT, 0f);
+        assertEquals(1.0 / 60.0, Simulation.FIXED_DT, 0.0);
+
+        Recorder r = new Recorder();
+        Simulation sim = new Simulation(r);
+        sim.advance(DT);
+        assertEquals(1, r.deltas.size);
+        assertEquals(Simulation.DT, r.deltas.get(0), 0f, "step() gets the float step");
     }
 
     @Test
@@ -149,10 +217,10 @@ class SimulationTest {
         for (int i = 0; i < 144; i++) {
             sim.advance(frame);
         }
-        //  One real second of frames must buy one second of gameplay. Not to
-        //  the step: 60 steps cost marginally more than a second (see DT's
-        //  float value), so a second's worth of frames yields 59 or 60. One
-        //  step of slack, no more -- a systematic error would fail this fast.
+        //  Tolerance is correct HERE and nowhere above: 1/144f is an
+        //  approximate float supplied by a display, so 144 of them do not sum to
+        //  exactly one second and the honest answer is 59 or 60 steps. One step
+        //  of slack, no more -- a systematic error would fail this immediately.
         assertTrue(sim.stepCount() == 60L || sim.stepCount() == 59L,
                 "render rate must not change how fast the game runs, got "
                         + sim.stepCount());

@@ -52,8 +52,9 @@ static final String DEFAULT_PATH = "castle-defense/save.json";
 SaveManager register(SaveMigration m);   // chain, applied in version order
 SaveData load();                         // never throws; falls back to defaults
 boolean  save(SaveData d);
-void     delete();
-String   path();  String lastLoadNote();  // why a load fell back, for the log
+void     delete();                       // removes the live and staged files
+String   path();  String stagingPath();
+String   lastLoadNote();                 // why a load fell back or recovered
 
 // SaveData  (version 1)
 static final int CURRENT_VERSION = 1;
@@ -97,6 +98,17 @@ JsonValue read(String path);  boolean exists(String path);
 4. **Loading never throws.** A missing, truncated, corrupt or future-versioned
    save produces defaults and a `lastLoadNote()` explaining why. A bad file
    cannot stop the game from starting.
+4b. **A write never destroys a good save.** Saves are staged:
+   serialise → write `save.json.tmp` → **read it back and re-parse it** →
+   replace `save.json` (`File.renameTo`, atomic on Android and desktop; a copy
+   where a rename is refused). The live file is untouched until a validated
+   replacement exists on disk. The one window where the live file can be absent —
+   killed mid-replace — is covered by recovery: `load()` promotes a valid staged
+   file and says so in `lastLoadNote()`. So after any interruption, either the
+   old save or the new one is intact; never neither. A stale staged file is
+   discarded once a good live save loads, and `delete()` removes both.
+   `java.nio.file` is deliberately unused — API 26+, not covered by desugaring,
+   so it would crash on minSdk 21 devices.
 5. **A save happens at `pause()`.** Android may never call `dispose()`, so
    backgrounding is the last reliable write opportunity and `persist()` is
    called there as well as on dispose.

@@ -118,14 +118,20 @@ public final class GameWorld implements Simulation.Stepper {
 
     // --- clocks -------------------------------------------------------------
 
-    /** Seconds of simulation, advancing in every state. */
+    /**
+     * Canonical seconds of simulation, advancing in every state.
+     *
+     * <p>{@code steps * FIXED_DT}, computed fresh — never a running total. See
+     * {@link Simulation} for why the canonical step is a double while the step
+     * handed to gameplay is a float.
+     */
     public double simulationTime() {
-        return steps * (double) Simulation.DT;
+        return Simulation.secondsForSteps(steps);
     }
 
-    /** Seconds of gameplay, advancing only while the world is unfrozen. */
+    /** Canonical seconds of gameplay, advancing only while the world is unfrozen. */
     public double gameplayTime() {
-        return gameplaySteps * (double) Simulation.DT;
+        return Simulation.secondsForSteps(gameplaySteps);
     }
 
     public long stepCount() {

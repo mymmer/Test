@@ -26,19 +26,38 @@ import com.mymmer.castledefense.config.GameConfig;
  *       catch a gameplay clock back up using real elapsed time.</li>
  * </ul>
  *
- * <p>Counting steps rather than summing floats keeps long runs stable: an hour
- * of Endless is 216,000 steps, and {@code 216000 * DT} carries no accumulated
- * rounding error the way {@code time += 0.016666f} would.
+ * <h2>Two representations of one step, and why</h2>
  *
- * <p>One honest caveat about precision. {@code DT} is {@code 1f/60f}, whose
- * float value is very slightly <em>larger</em> than a true sixtieth
- * (0.016666667536… against 0.016666666666…). Sixty steps therefore consume about
- * 5.2e-8 s more than one real second, so a wall-clock second occasionally yields
- * 59 steps rather than 60, and {@link #timeSeconds()} reads about 3 µs high per
- * simulated minute. This is deliberate: the reported clock is
- * {@code stepCount * DT}, which is exactly the time the physics actually
- * integrated, and agreeing with the systems matters more than agreeing with a
- * stopwatch. Nothing in the game compares gameplay time to wall-clock.
+ * <p>{@code 1f/60f} is <em>not</em> a sixtieth: as a float it is 0.016666668…,
+ * slightly larger than 0.016666666…. Anything that accumulates it drifts, so the
+ * step exists twice and the two are used for strictly different jobs:
+ *
+ * <table>
+ *   <tr><th>Constant</th><th>Type</th><th>Used for</th></tr>
+ *   <tr><td>{@link #FIXED_DT}</td><td>{@code double}</td>
+ *       <td><b>Canonical timing.</b> The accumulator, the step comparison, and
+ *       {@link #timeSeconds()}. Never approximate.</td></tr>
+ *   <tr><td>{@link #DT}</td><td>{@code float}</td>
+ *       <td><b>Gameplay arithmetic.</b> The value handed to {@code step(dt)}:
+ *       positions, velocities, per-step decay. Multiplied by, never summed.</td></tr>
+ * </table>
+ *
+ * <p>So the authoritative clock is {@code stepCount * FIXED_DT} — an exact
+ * integer times an exact double — and not a running float total. 60 steps are
+ * 1.0 s, 3600 steps are 60.0 s and 216,000 steps are 3600.0 s, to double
+ * precision, however long the session runs. Trace step ids are the integer
+ * {@code stepCount} itself, so they are exact by construction.
+ *
+ * <p>This does <b>not</b> mean gameplay must become integer ticks. A projectile
+ * still integrates in floats with {@code DT}; only the clock that says <em>when</em>
+ * is canonical. Later long-lived clocks (Endless timetable, boss phases) should
+ * read {@link #timeSeconds()} or a step count rather than summing their own float.
+ *
+ * <p>One thing this cannot fix: a frame delta arriving from the platform is a
+ * float and is approximate. Feeding {@code 1/144f} repeatedly may yield 59 or 60
+ * steps in a nominal second, because the <em>input</em> is imprecise, not the
+ * clock. Tests distinguish the two: exact assertions where the port controls the
+ * input (step counts), tolerance where the platform supplies it (frame deltas).
  *
  * <h2>This is an intentional behavioural change</h2>
  *
@@ -63,8 +82,19 @@ import com.mymmer.castledefense.config.GameConfig;
  */
 public final class Simulation {
 
-    /** One simulation step, in seconds. */
-    public static final float DT = GameConfig.SIMULATION_STEP;
+    /**
+     * One simulation step in seconds, canonical. The accumulator and the
+     * simulation clock use this and nothing else.
+     */
+    public static final double FIXED_DT = GameConfig.SIMULATION_STEP;
+
+    /**
+     * The same step as a float, for gameplay maths.
+     *
+     * <p>This is what {@code step(dt)} receives. It is safe to multiply by and
+     * unsafe to accumulate — accumulate {@link #FIXED_DT} or count steps.
+     */
+    public static final float DT = GameConfig.SIMULATION_STEP_F;
 
     /** Catch-up steps allowed in a single rendered frame. */
     public static final int MAX_STEPS = GameConfig.MAX_SIMULATION_STEPS_PER_FRAME;
@@ -112,13 +142,16 @@ public final class Simulation {
         accumulator += frameDelta;
 
         int steps = 0;
-        while (accumulator >= DT && steps < MAX_STEPS) {
+        //  FIXED_DT here, DT in the callback: the clock is exact, the physics
+        //  is float.  Subtracting the float step instead would put its
+        //  0.016666668 approximation straight back into the canonical timing.
+        while (accumulator >= FIXED_DT && steps < MAX_STEPS) {
             stepper.step(DT);
-            accumulator -= DT;
+            accumulator -= FIXED_DT;
             stepCount++;
             steps++;
         }
-        if (steps == MAX_STEPS && accumulator >= DT) {
+        if (steps == MAX_STEPS && accumulator >= FIXED_DT) {
             // Still behind after the budget: throw the rest away rather than
             // trying to catch up, which would only make the next frame worse.
             accumulator = 0d;
@@ -147,13 +180,30 @@ public final class Simulation {
     }
 
     /**
-     * Gameplay time, in seconds: exactly {@code stepCount * DT}.
+     * Canonical simulation time, in seconds: exactly {@code stepCount * FIXED_DT}.
      *
-     * <p>{@code double} because a long Endless run accumulates hundreds of
-     * thousands of steps and float would start losing sub-frame precision.
+     * <p>An exact integer times an exact double, computed fresh each call. It is
+     * never a running total, so it cannot drift no matter how long the session
+     * lasts: 216,000 steps read 3600.0 s.
      */
     public double timeSeconds() {
-        return stepCount * (double) DT;
+        return stepCount * FIXED_DT;
+    }
+
+    /**
+     * Canonical seconds for an arbitrary step count.
+     *
+     * <p>For subsystems that keep their own step index — a boss phase timer, the
+     * Endless timetable — so they convert the same way the clock does instead of
+     * summing a float of their own.
+     */
+    public static double secondsForSteps(long steps) {
+        return steps * FIXED_DT;
+    }
+
+    /** Steps in a duration, rounded down. The inverse of {@link #secondsForSteps}. */
+    public static long stepsForSeconds(double seconds) {
+        return (long) Math.floor(seconds / FIXED_DT);
     }
 
     /** Steps run since the last {@link #reset()}. */
@@ -173,7 +223,7 @@ public final class Simulation {
      * than one step's worth of time after {@link #advance} returns.
      */
     public float alpha() {
-        float a = (float) (accumulator / DT);
+        float a = (float) (accumulator / FIXED_DT);
         if (a < 0f) {
             return 0f;
         }

@@ -9,6 +9,7 @@ import com.badlogic.gdx.ApplicationAdapter;
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.backends.headless.HeadlessApplication;
 import com.badlogic.gdx.backends.headless.HeadlessApplicationConfiguration;
+import com.badlogic.gdx.files.FileHandle;
 import com.badlogic.gdx.utils.JsonValue;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
@@ -41,6 +42,170 @@ class SaveManagerTest {
     @AfterEach
     void cleanUp() {
         new SaveManager(PATH).delete();
+    }
+
+    //  ------------------------------------------------------------------
+    //  Interruption safety.
+    //
+    //  Saving happens at pause(), which on Android is the last moment before the
+    //  OS may kill the process.  A write that truncates the live file first
+    //  loses the player's settings and high score if it is interrupted there.
+    //  These tests pin the invariant: after ANY failed or interrupted save, one
+    //  of the two files on disk is still a complete, loadable save.
+    //  ------------------------------------------------------------------
+
+    @Test
+    @DisplayName("a normal save round-trips and leaves no staging file behind")
+    void normalSaveCleansUp() {
+        SaveManager saves = new SaveManager(PATH);
+        SaveData data = new SaveData();
+        data.difficulty = "hard";
+        data.highScore = 4242;
+        assertTrue(saves.save(data));
+
+        assertTrue(Gdx.files.local(PATH).exists(), "the live save exists");
+        assertFalse(Gdx.files.local(saves.stagingPath()).exists(),
+                "the staging file is consumed by the replace, not left lying around");
+
+        SaveData back = new SaveManager(PATH).load();
+        assertEquals("hard", back.difficulty);
+        assertEquals(4242, back.highScore);
+    }
+
+    @Test
+    @DisplayName("a failed staging write leaves the previous save intact")
+    void failedStagingWriteKeepsPreviousSave() {
+        SaveManager saves = new SaveManager(PATH);
+        SaveData good = new SaveData();
+        good.difficulty = "hard";
+        good.highScore = 900;
+        assertTrue(saves.save(good));
+
+        //  Make the staging path unwritable by putting a DIRECTORY there: any
+        //  attempt to write a file over it fails, which is the closest a test
+        //  can get to a full disk without one.
+        FileHandle blocker = Gdx.files.local(saves.stagingPath());
+        blocker.delete();
+        blocker.mkdirs();
+        try {
+            SaveData replacement = new SaveData();
+            replacement.difficulty = "easy";
+            replacement.highScore = 1;
+            assertFalse(saves.save(replacement), "the save must report failure");
+
+            SaveData back = new SaveManager(PATH).load();
+            assertEquals("hard", back.difficulty, "the good save survived");
+            assertEquals(900, back.highScore);
+        } finally {
+            blocker.deleteDirectory();
+        }
+    }
+
+    @Test
+    @DisplayName("malformed staged data never replaces a valid save")
+    void malformedStagedDataNeverReplaces() {
+        SaveManager saves = new SaveManager(PATH);
+        SaveData good = new SaveData();
+        good.difficulty = "hard";
+        good.highScore = 777;
+        assertTrue(saves.save(good));
+        String liveBefore = Gdx.files.local(PATH).readString("UTF-8");
+
+        //  Simulate the process dying part-way through writing the staging file.
+        //  load() must not prefer it: the live save is fine, and a half-written
+        //  replacement is not a save.
+        Gdx.files.local(saves.stagingPath())
+                .writeString("{\n  \"saveVersion\": 1,\n  \"sett", false, "UTF-8");
+
+        SaveData back = new SaveManager(PATH).load();
+        assertEquals("hard", back.difficulty, "the valid live save is still used");
+        assertEquals(777, back.highScore);
+        assertEquals(liveBefore, Gdx.files.local(PATH).readString("UTF-8"),
+                "and it was not rewritten from the garbage");
+    }
+
+    @Test
+    @DisplayName("a save interrupted between delete and rename is recovered")
+    void recoversFromAnInterruptedReplace() {
+        SaveManager saves = new SaveManager(PATH);
+
+        //  The one window where the live file can be missing: staged file
+        //  written and validated, live file already gone, process killed before
+        //  the rename landed.  Reproduced exactly.
+        Gdx.files.local(saves.stagingPath()).writeString(
+                "{\n  \"saveVersion\": 1,\n  \"settings\": {\n"
+                        + "    \"muted\": true,\n    \"difficulty\": \"hard\",\n"
+                        + "    \"quality\": \"LOW\",\n    \"haptics\": false,\n"
+                        + "    \"skin\": \"procedural\"\n  },\n"
+                        + "  \"highScore\": 31337\n}\n", false, "UTF-8");
+        assertFalse(Gdx.files.local(PATH).exists(), "the live save is gone");
+
+        SaveManager reader = new SaveManager(PATH);
+        SaveData back = reader.load();
+        assertEquals("hard", back.difficulty, "the staged save was recovered");
+        assertEquals(31337, back.highScore);
+        assertTrue(back.muted);
+        assertTrue(reader.lastLoadNote().contains("recovered"),
+                "and the recovery is reported, not silent: " + reader.lastLoadNote());
+
+        // it was promoted, so the next load is an ordinary one
+        SaveManager again = new SaveManager(PATH);
+        assertEquals(31337, again.load().highScore);
+        assertEquals("", again.lastLoadNote(), "no note the second time");
+        assertFalse(Gdx.files.local(again.stagingPath()).exists());
+    }
+
+    @Test
+    @DisplayName("a corrupt live save falls back to a valid staged one")
+    void corruptLiveSaveFallsBackToStaged() {
+        SaveManager saves = new SaveManager(PATH);
+        Gdx.files.local(PATH).writeString("}{ not json at all", false, "UTF-8");
+        Gdx.files.local(saves.stagingPath()).writeString(
+                "{\n  \"saveVersion\": 1,\n  \"settings\": {\n"
+                        + "    \"difficulty\": \"easy\"\n  },\n"
+                        + "  \"highScore\": 55\n}\n", false, "UTF-8");
+
+        SaveManager reader = new SaveManager(PATH);
+        SaveData back = reader.load();
+        assertEquals("easy", back.difficulty);
+        assertEquals(55, back.highScore, "the shared high score came back");
+        assertTrue(reader.lastLoadNote().contains("recovered"), reader.lastLoadNote());
+    }
+
+    @Test
+    @DisplayName("a stale staging file is discarded once a good save is loaded")
+    void staleStagingFileIsDiscarded() {
+        SaveManager saves = new SaveManager(PATH);
+        SaveData good = new SaveData();
+        good.highScore = 10;
+        assertTrue(saves.save(good));
+
+        // an older, complete-looking staged save that the replace already used
+        Gdx.files.local(saves.stagingPath()).writeString(
+                "{\n  \"saveVersion\": 1,\n  \"settings\": {},\n"
+                        + "  \"highScore\": 99999\n}\n", false, "UTF-8");
+
+        SaveManager reader = new SaveManager(PATH);
+        assertEquals(10, reader.load().highScore, "the live save wins while it is valid");
+        assertFalse(Gdx.files.local(reader.stagingPath()).exists(),
+                "and the stale staging file is cleared so it can never be promoted");
+    }
+
+    @Test
+    @DisplayName("delete() removes the staging file too")
+    void deleteRemovesStagingFile() {
+        SaveManager saves = new SaveManager(PATH);
+        SaveData data = new SaveData();
+        data.highScore = 5;
+        assertTrue(saves.save(data));
+        Gdx.files.local(saves.stagingPath()).writeString(
+                "{\"saveVersion\":1,\"settings\":{},\"highScore\":123}", false, "UTF-8");
+
+        saves.delete();
+        assertFalse(Gdx.files.local(PATH).exists());
+        assertFalse(Gdx.files.local(saves.stagingPath()).exists(),
+                "otherwise a reset would 'recover' the save it just deleted");
+        assertEquals(0, new SaveManager(PATH).load().highScore);
     }
 
     @Test

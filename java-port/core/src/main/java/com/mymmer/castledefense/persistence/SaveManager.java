@@ -22,11 +22,34 @@ import com.badlogic.gdx.utils.JsonWriter;
  * missing file, malformed JSON, a save from the future, or a read-only folder
  * all end in usable defaults and a log line, never an exception reaching the
  * caller.
+ *
+ * <h2>A write never destroys a good save</h2>
+ *
+ * <p>Saving happens at {@code pause()}, which on Android is the moment before
+ * the OS may kill the process. Writing in place there means a truncated file and
+ * a player who lost their settings and high score. So a save is staged:
+ *
+ * <pre>
+ *   serialise → write save.json.tmp → read it back and validate
+ *              → replace save.json (rename where the platform allows)
+ * </pre>
+ *
+ * <p>The live file is not touched until a complete, re-parsed, validated
+ * replacement exists. If the process dies at the worst moment — after the live
+ * file is gone and before the temp file has taken its place — {@link #load()}
+ * finds the valid temp file and promotes it. The failure modes are therefore:
+ * the old save survives, or the new save survives. Never neither.
+ *
+ * <p>This is deliberately not a journal or a database. One temp file, one
+ * validation, one replace, and a recovery branch on load.
  */
 public final class SaveManager {
 
     private static final String TAG = "SaveManager";
     public static final String DEFAULT_PATH = "castle-defense/save.json";
+
+    /** Appended to the save path for the staging file. */
+    private static final String STAGING_SUFFIX = ".tmp";
 
     private final String path;
     private final Array<SaveMigration> migrations = new Array<>();
@@ -60,23 +83,51 @@ public final class SaveManager {
     public SaveData load() {
         lastLoadNote = "";
         FileHandle file = fileHandle();
-        if (file == null || !file.exists()) {
-            lastLoadNote = "no save file yet; starting from defaults";
+        if (file == null) {
+            lastLoadNote = "no writable storage; starting from defaults";
             return new SaveData();
         }
-        JsonValue root;
-        try {
-            root = reader.parse(file);
-        } catch (RuntimeException e) {
-            lastLoadNote = "save file is not readable JSON (" + e.getMessage()
-                    + "); starting from defaults";
-            logError(lastLoadNote);
-            return new SaveData();
+
+        JsonValue root = null;
+        if (file.exists()) {
+            try {
+                root = reader.parse(file);
+            } catch (RuntimeException e) {
+                lastLoadNote = "save file is not readable JSON (" + e.getMessage() + ")";
+                logError(lastLoadNote);
+            }
         }
+
+        //  Recovery.  A staged temp file only outlives a save() call if the
+        //  process died mid-replace, so if the live file is missing or unusable
+        //  and the temp one parses, the temp one IS the save.
         if (root == null) {
-            lastLoadNote = "save file is empty; starting from defaults";
+            JsonValue staged = readStaged();
+            if (staged != null) {
+                String why = file.exists()
+                        ? "live save was unreadable"
+                        : "live save was missing";
+                if (promoteStaged()) {
+                    lastLoadNote = why + "; recovered the staged save from an "
+                            + "interrupted write";
+                } else {
+                    lastLoadNote = why + "; read the staged save from an interrupted "
+                            + "write but could not promote it";
+                }
+                log(lastLoadNote);
+                root = staged;
+            }
+        }
+
+        if (root == null) {
+            if (lastLoadNote.isEmpty()) {
+                lastLoadNote = "no save file yet; starting from defaults";
+            } else {
+                lastLoadNote = lastLoadNote + "; starting from defaults";
+            }
             return new SaveData();
         }
+        discardStaged();          // a leftover temp file is stale once we have a save
 
         int version = root.getInt("saveVersion", 0);
         if (version > SaveData.CURRENT_VERSION) {
@@ -152,26 +203,146 @@ public final class SaveManager {
      */
     public boolean save(SaveData data) {
         FileHandle file = fileHandle();
-        if (file == null) {
+        FileHandle temp = stagingHandle();
+        if (file == null || temp == null) {
             return false;
         }
+
+        String text = serialise(data);
+
+        // 1. stage: the live save is still untouched at this point
         try {
-            StringBuilder sb = new StringBuilder(256);
-            sb.append("{\n  \"saveVersion\": ").append(SaveData.CURRENT_VERSION)
-                    .append(",\n  \"settings\": {")
-                    .append("\n    \"muted\": ").append(data.muted)
-                    .append(",\n    \"difficulty\": ").append(quote(data.difficulty))
-                    .append(",\n    \"quality\": ").append(quote(data.quality))
-                    .append(",\n    \"haptics\": ").append(data.haptics)
-                    .append(",\n    \"skin\": ").append(quote(data.skin))
-                    .append("\n  },\n  \"highScore\": ").append(Math.max(0, data.highScore))
-                    .append("\n}\n");
-            file.writeString(sb.toString(), false, "UTF-8");
+            temp.writeString(text, false, "UTF-8");
+        } catch (RuntimeException e) {
+            logError("could not stage the save (" + e.getMessage()
+                    + "); the previous save is untouched");
+            discardStaged();
+            return false;
+        }
+
+        // 2. validate what actually reached the disk, not what we meant to write.
+        //    A short write, a full disk or a mangled encoding is caught here,
+        //    while the good save is still in place.
+        if (!isUsableSave(temp)) {
+            logError("the staged save did not read back correctly; the previous "
+                    + "save is untouched");
+            discardStaged();
+            return false;
+        }
+
+        // 3. replace.  Dying inside this step is the one window where the live
+        //    file may be absent -- load() recovers from the temp file there.
+        if (!replaceWithStaged(file, temp)) {
+            logError("could not replace the save file; the staged copy is kept at "
+                    + temp.path() + " and will be recovered on the next load");
+            return false;
+        }
+        return true;
+    }
+
+    /** The exact bytes a save consists of. Kept separate so it can be validated. */
+    private String serialise(SaveData data) {
+        StringBuilder sb = new StringBuilder(256);
+        sb.append("{\n  \"saveVersion\": ").append(SaveData.CURRENT_VERSION)
+                .append(",\n  \"settings\": {")
+                .append("\n    \"muted\": ").append(data.muted)
+                .append(",\n    \"difficulty\": ").append(quote(data.difficulty))
+                .append(",\n    \"quality\": ").append(quote(data.quality))
+                .append(",\n    \"haptics\": ").append(data.haptics)
+                .append(",\n    \"skin\": ").append(quote(data.skin))
+                .append("\n  },\n  \"highScore\": ").append(Math.max(0, data.highScore))
+                .append("\n}\n");
+        return sb.toString();
+    }
+
+    /**
+     * Does this file hold a save we would be willing to load?
+     *
+     * <p>Read back from disk and re-parsed, so it proves the write, not the
+     * intent. The check is the structure a save must have — it deliberately does
+     * not compare field by field, because {@link #fromJson} already tolerates a
+     * missing optional field and a validator stricter than the loader would
+     * reject files the game can read perfectly well.
+     */
+    private boolean isUsableSave(FileHandle handle) {
+        try {
+            if (!handle.exists() || handle.length() == 0) {
+                return false;
+            }
+            JsonValue root = reader.parse(handle);
+            if (root == null) {
+                return false;
+            }
+            int version = root.getInt("saveVersion", -1);
+            if (version < 1 || version > SaveData.CURRENT_VERSION) {
+                return false;
+            }
+            return root.get("settings") != null;
+        } catch (RuntimeException e) {
+            return false;
+        }
+    }
+
+    /** Reads the staged file if it is a usable save, else null. */
+    private JsonValue readStaged() {
+        FileHandle temp = stagingHandle();
+        if (temp == null || !isUsableSave(temp)) {
+            return null;
+        }
+        try {
+            return reader.parse(temp);
+        } catch (RuntimeException e) {
+            return null;          // unreachable: isUsableSave already parsed it
+        }
+    }
+
+    private boolean promoteStaged() {
+        FileHandle file = fileHandle();
+        FileHandle temp = stagingHandle();
+        return file != null && temp != null && replaceWithStaged(file, temp);
+    }
+
+    /**
+     * Moves the staged file over the live one.
+     *
+     * <p>Prefers {@code File.renameTo}, which is a POSIX rename on Android and
+     * desktop and therefore atomic within a filesystem. {@code java.nio.file} is
+     * deliberately not used: it is API 26+ and core-library desugaring does not
+     * cover it, so it would crash on the minSdk 21 devices this port targets.
+     * Where a rename is unavailable or refused (Windows will not rename onto an
+     * existing file) it falls back to libGDX's copy — non-atomic, but the temp
+     * file survives a failure there and {@link #load()} recovers from it.
+     */
+    private boolean replaceWithStaged(FileHandle file, FileHandle temp) {
+        try {
+            java.io.File src = temp.file();
+            java.io.File dst = file.file();
+            if (src.renameTo(dst)) {
+                return true;
+            }
+            if (dst.exists() && dst.delete() && src.renameTo(dst)) {
+                return true;
+            }
+        } catch (RuntimeException e) {
+            // no java.io.File behind this handle; fall through to the copy
+        }
+        try {
+            temp.moveTo(file);
             return true;
         } catch (RuntimeException e) {
-            logError("could not write the save file (" + e.getMessage()
-                    + "); progress this session will not persist");
             return false;
+        }
+    }
+
+    private void discardStaged() {
+        FileHandle temp = stagingHandle();
+        if (temp != null && temp.exists()) {
+            try {
+                temp.delete();
+            } catch (RuntimeException e) {
+                // a leftover temp file is harmless: load() only prefers it when
+                // the live save is unreadable, and validates it first
+            }
         }
     }
 
@@ -181,6 +352,13 @@ public final class SaveManager {
         if (file != null && file.exists()) {
             file.delete();
         }
+        // otherwise the next load would "recover" the save just deleted
+        discardStaged();
+    }
+
+    /** Where a save is staged before it replaces the live one. */
+    public String stagingPath() {
+        return path + STAGING_SUFFIX;
     }
 
     public String path() {
@@ -190,6 +368,14 @@ public final class SaveManager {
     /** Why the last {@link #load()} produced what it did. Empty when normal. */
     public String lastLoadNote() {
         return lastLoadNote;
+    }
+
+    private FileHandle stagingHandle() {
+        try {
+            return Gdx.files != null ? Gdx.files.local(stagingPath()) : null;
+        } catch (RuntimeException e) {
+            return null;
+        }
     }
 
     private FileHandle fileHandle() {

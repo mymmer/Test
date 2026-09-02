@@ -30,12 +30,28 @@ public final class GameConfig {
     public static final String TITLE = "Castle Defense";
 
     /**
-     * Simulation rate. The Python game steps a variable delta capped at 50 ms;
-     * the port steps a fixed 1/60 s (see {@code docs/PORT_ANALYSIS.md} §6). The
-     * constant lives here from Phase 2 so the launchers and the future
-     * {@code Simulation} agree on one number.
+     * Simulation rate, canonical. The Python game steps a variable delta capped
+     * at 50 ms; the port steps a fixed 1/60 s (see {@code docs/PORT_ANALYSIS.md}
+     * §6).
+     *
+     * <p><b>double, deliberately.</b> {@code 1f/60f} is not a sixtieth: its float
+     * value is 0.016666668…, slightly larger than 0.016666666…. Anything that
+     * <em>accumulates</em> a timestep — the accumulator, the simulation clock,
+     * an Endless or boss timer — must use this double, or 216,000 steps of a
+     * one-hour run drift measurably away from 3600 s.
      */
-    public static final float SIMULATION_STEP = 1f / 60f;
+    public static final double SIMULATION_STEP = 1.0 / 60.0;
+
+    /**
+     * The same step as a float, for gameplay arithmetic.
+     *
+     * <p>Positions, velocities and per-step decay are floats throughout the port
+     * (as they are in libGDX and in the Python source), so the value handed to a
+     * gameplay update is this. It is a <em>presentation</em> of the canonical
+     * step, never the thing that gets summed: gameplay multiplies by it, the
+     * clock counts steps.
+     */
+    public static final float SIMULATION_STEP_F = (float) SIMULATION_STEP;
 
     /** Most catch-up steps one rendered frame may run before time is dropped. */
     public static final int MAX_SIMULATION_STEPS_PER_FRAME = 5;
