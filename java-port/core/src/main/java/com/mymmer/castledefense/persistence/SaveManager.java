@@ -314,24 +314,61 @@ public final class SaveManager {
      * file survives a failure there and {@link #load()} recovers from it.
      */
     private boolean replaceWithStaged(FileHandle file, FileHandle temp) {
+        return renameStagedOver(file, temp) || copyStagedOver(file, temp);
+    }
+
+    /**
+     * The good path: one atomic rename, which also removes the staged file.
+     *
+     * @return false if the platform would not do it, leaving both files untouched
+     */
+    private boolean renameStagedOver(FileHandle file, FileHandle temp) {
         try {
             java.io.File src = temp.file();
             java.io.File dst = file.file();
             if (src.renameTo(dst)) {
                 return true;
             }
-            if (dst.exists() && dst.delete() && src.renameTo(dst)) {
-                return true;
-            }
+            //  Windows refuses to rename onto an existing file.  Removing the
+            //  destination first opens the crash window that load() recovers
+            //  from -- which is exactly why the staged file must still be on
+            //  disk at this point, and is.
+            return dst.exists() && dst.delete() && src.renameTo(dst);
         } catch (RuntimeException e) {
-            // no java.io.File behind this handle; fall through to the copy
+            return false;       // no java.io.File behind this handle
         }
+    }
+
+    /**
+     * The fallback: copy the staged file over the live one, <b>verify the copy,
+     * and only then drop the staged file</b>.
+     *
+     * <p>The ordering is the whole point. A copy is not atomic: the process can
+     * die with the live file half-overwritten. If the staged file had already
+     * been deleted at that moment there would be nothing left to recover from,
+     * and the player would lose the save. So the staged file is the last thing
+     * to go, after a re-read has proved the copy actually landed — and if the
+     * copy failed or produced something unloadable, it is not dropped at all and
+     * {@link #load()} promotes it on the next start.
+     *
+     * <p>Package-private so a test can drive this path directly: the rename
+     * above succeeds on every filesystem CI runs on, so the fallback would
+     * otherwise never be exercised.
+     */
+    boolean copyStagedOver(FileHandle file, FileHandle temp) {
         try {
-            temp.moveTo(file);
-            return true;
+            temp.copyTo(file);
         } catch (RuntimeException e) {
+            logError("could not copy the staged save into place (" + e.getMessage() + ")");
+            return false;       // staged file deliberately left where it is
+        }
+        if (!isUsableSave(file)) {
+            logError("the copied save did not read back correctly; keeping the "
+                    + "staged copy for recovery");
             return false;
         }
+        discardStaged();
+        return true;
     }
 
     private void discardStaged() {

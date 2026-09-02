@@ -109,6 +109,14 @@ JsonValue read(String path);  boolean exists(String path);
    discarded once a good live save loads, and `delete()` removes both.
    `java.nio.file` is deliberately unused — API 26+, not covered by desugaring,
    so it would crash on minSdk 21 devices.
+4c. **The fallback copy drops the staged file last.** A rename is atomic and
+   consumes the staged file itself. A copy is not: the process can die with the
+   live file half-overwritten. So the copy path re-reads the destination to prove
+   it landed, and only then deletes the staged file — and if the copy failed or
+   produced something unloadable, the staged file is kept and `load()` promotes
+   it on the next start. `load()` therefore never treats the mere *existence* of
+   `save.json` as authoritative: an unparseable live file with a valid staged one
+   beside it is a recovery, not a reset to defaults.
 5. **A save happens at `pause()`.** Android may never call `dispose()`, so
    backgrounding is the last reliable write opportunity and `persist()` is
    called there as well as on dispose.

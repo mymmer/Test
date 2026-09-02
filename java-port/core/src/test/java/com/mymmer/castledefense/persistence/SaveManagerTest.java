@@ -55,6 +55,95 @@ class SaveManagerTest {
     //  ------------------------------------------------------------------
 
     @Test
+    @DisplayName("an interrupted fallback COPY leaves a recoverable staged save")
+    void recoversFromAnInterruptedFallbackCopy() {
+        //  The scenario: renaming was unavailable, so the replace fell back to
+        //  copying, and the process died with save.json half-overwritten.  On
+        //  disk that leaves a malformed live save next to a valid staged one.
+        //  The mere EXISTENCE of save.json must not make it authoritative.
+        SaveManager saves = new SaveManager(PATH);
+        SaveData wanted = new SaveData();
+        wanted.difficulty = "hard";
+        wanted.quality = "LOW";
+        wanted.skin = "procedural";
+        wanted.muted = true;
+        wanted.haptics = false;
+        wanted.highScore = 123456;
+
+        //  Stage it exactly as save() would, then simulate the interrupted copy:
+        //  a truncated prefix of the intended content in the live file.
+        assertTrue(saves.save(wanted));
+        String complete = Gdx.files.local(PATH).readString("UTF-8");
+        Gdx.files.local(saves.stagingPath()).writeString(complete, false, "UTF-8");
+        Gdx.files.local(PATH).writeString(
+                complete.substring(0, complete.length() / 2), false, "UTF-8");
+        assertTrue(Gdx.files.local(PATH).exists(), "the live save exists...");
+        assertTrue(Gdx.files.local(PATH).length() > 0, "...and is not even empty");
+
+        SaveManager reader = new SaveManager(PATH);
+        SaveData back = reader.load();
+
+        assertTrue(reader.lastLoadNote().contains("recovered"),
+                "the staged save must be preferred: " + reader.lastLoadNote());
+        //  every field survived, not just the ones the truncation happened to keep
+        assertEquals("hard", back.difficulty);
+        assertEquals("LOW", back.quality);
+        assertEquals("procedural", back.skin);
+        assertTrue(back.muted);
+        assertFalse(back.haptics);
+        assertEquals(123456, back.highScore, "the shared high score survived");
+
+        //  and the game starts normally afterwards: the recovery was promoted,
+        //  so the next launch is an ordinary load with nothing left over
+        SaveManager next = new SaveManager(PATH);
+        SaveData again = next.load();
+        assertEquals("", next.lastLoadNote(), "an ordinary load, no note");
+        assertEquals(123456, again.highScore);
+        assertEquals("hard", again.difficulty);
+        assertFalse(Gdx.files.local(next.stagingPath()).exists(),
+                "and no staged file is left behind");
+    }
+
+    @Test
+    @DisplayName("the fallback copy drops the staged file only after the copy is verified")
+    void fallbackCopyKeepsTheStagedFileUntilItHasLanded() {
+        //  Drives the copy fallback directly.  renameTo succeeds on every
+        //  filesystem CI runs on, so this path would otherwise never be
+        //  exercised -- and it is the only path with a non-atomic window.
+        SaveManager saves = new SaveManager(PATH);
+        SaveData data = new SaveData();
+        data.highScore = 4321;
+        data.difficulty = "hard";
+        assertTrue(saves.save(data));
+
+        FileHandle live = Gdx.files.local(PATH);
+        FileHandle staged = Gdx.files.local(saves.stagingPath());
+        String content = live.readString("UTF-8");
+        staged.writeString(content, false, "UTF-8");
+
+        // 1. a copy that cannot land: the destination is a non-empty directory
+        live.delete();
+        FileHandle blocker = Gdx.files.local(PATH);
+        blocker.mkdirs();
+        Gdx.files.local(PATH + "/occupied").writeString("x", false, "UTF-8");
+        try {
+            assertFalse(saves.copyStagedOver(blocker, staged),
+                    "the copy could not land, so the replace failed");
+            assertTrue(staged.exists(),
+                    "and the staged save is STILL THERE -- it is the only copy left");
+        } finally {
+            Gdx.files.local(PATH + "/occupied").delete();
+            blocker.deleteDirectory();
+        }
+
+        // 2. a copy that does land: only now may the staged file go
+        assertTrue(saves.copyStagedOver(Gdx.files.local(PATH), staged));
+        assertFalse(Gdx.files.local(saves.stagingPath()).exists(),
+                "consumed once the copy was verified");
+        assertEquals(4321, new SaveManager(PATH).load().highScore);
+    }
+
+    @Test
     @DisplayName("a normal save round-trips and leaves no staging file behind")
     void normalSaveCleansUp() {
         SaveManager saves = new SaveManager(PATH);
