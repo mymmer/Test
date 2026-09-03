@@ -42,6 +42,7 @@ import json
 import math
 import os
 import re
+import struct
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -86,7 +87,9 @@ REQUIRED = ["GRAVITY", "AIR_DRAG", "THROW_POWER", "FALL_DMG_FLOOR", "FALL_DMG_SC
             "SLAM_DMG_FLOOR", "SLAM_DMG_SCALE", "BOUNCE_RESTITUTION", "BOUNCE_DMG_BONUS",
             "BOUNCE_STAGGER", "SHOVE_FACTOR", "SHOVE_DECAY", "SHOVE_MAX",
             "STRIP_DISTANCE", "STRIP_SLOW", "STRIP_VULN", "GROUND_Y", "CASTLE_FRONT",
-            "WIDTH", "GRAB_CAPACITY"]
+            "WIDTH", "GRAB_CAPACITY",
+            "REGALIA_COOLDOWN", "REGALIA_CD_GROWTH", "CROWN_RETRIEVE_SPEED",
+            "STAFF_DISARM_TIME", "CLAW_SMACK_DISTANCE", "CLAW_STAGGER", "WALL_TOP"]
 missing = [k for k in REQUIRED if k not in C]
 if missing:
     sys.exit("could not read these constants out of sprites.py: " + ", ".join(missing))
@@ -197,6 +200,125 @@ def grab_capacity(level, bonus=1.0):
     return C["GRAB_CAPACITY"][idx] * bonus
 
 
+# --- bosses (Phase 7) ------------------------------------------------------
+
+def regalia_guard(taken):
+    """enemies.py:341  Enemy.guard_regalia
+
+    NOTE the off-by-one that matters: regalia_taken is incremented when the item
+    is DETACHED, and guard_regalia() is called when it is RECOVERED.  So by the
+    time a guard is ever set, taken is already >= 1, and the FIRST guard a boss
+    ever has is 6.0 * (1 + 0.6 * 1) = 9.6 -- never 6.0.  Fixtures start at 1
+    because taken == 0 is a state in which no guard exists."""
+    return C["REGALIA_COOLDOWN"] * (1.0 + C["REGALIA_CD_GROWTH"] * taken)
+
+
+def crown_retrieve_step(speed, dt):
+    """enemies.py:388  TrollKing.retrieve_crown -- distance covered in one step."""
+    return speed * C["CROWN_RETRIEVE_SPEED"] * dt
+
+
+def f32(x):
+    """Round a Python float to the nearest float32, as Java's `float` would."""
+    return struct.unpack("f", struct.pack("f", x))[0]
+
+
+def breath_shot_count(breath_time, shot_interval, dt, fire_scale=1.0, single=False):
+    """enemies.py:1760  Dragon.think -- how many fireballs one breath produces.
+
+    Reproduces the loop exactly: the first shot leaves on the step the breath
+    starts (shot_timer is set to 0), then the timer is reset to the scaled
+    interval each time it fires.  Both timers count in simulation seconds.
+
+    `single=True` re-runs the same loop with every value rounded to float32,
+    which is what the Java port necessarily computes -- its timers are floats
+    like all its gameplay state, while Python's are doubles.  Emitting both makes
+    the precision boundary visible in the fixture instead of leaving it to be
+    rediscovered as a mysterious off-by-one."""
+    r = f32 if single else (lambda v: v)
+    breathing = r(breath_time)
+    shot_timer = r(0.0)
+    step = r(dt)
+    interval = r(r(shot_interval) * r(fire_scale))
+    shots = 0
+    guard = 0
+    while breathing > 0 and guard < 100000:
+        guard += 1
+        breathing = r(breathing - step)
+        shot_timer = r(shot_timer - step)
+        if shot_timer <= 0:
+            shot_timer = interval
+            shots += 1
+    return shots
+
+
+def dragon_smack_progress(amount):
+    """enemies.py:1800  Dragon.apply_smack -- progress added by one drag."""
+    return amount / C["CLAW_SMACK_DISTANCE"]
+
+
+def lich_ward_then_armour(amount, warded, armor, vulnerable):
+    """enemies.py:1912  LichLord.take_damage -> Enemy.take_damage
+
+    THE ORDER IS THE CONTRACT: the ward scales the incoming amount, and the
+    armour and vulnerability are applied by the base class to that result."""
+    if warded:
+        amount *= 0.25
+    return max(0.0, amount * (1.0 - armor) * vulnerable)
+
+
+def lich_armour_then_ward(amount, warded, armor, vulnerable):
+    """The WRONG order, generated so the test can prove the two differ."""
+    amount = max(0.0, amount * (1.0 - armor) * vulnerable)
+    if warded:
+        amount *= 0.25
+    return amount
+
+
+def dropped_item_step(x, y, vx, vy, w, h, dt):
+    """enemies.py:60  DroppedItem.update -- one flying step, with the walls."""
+    vy += C["GRAVITY"] * dt
+    x += vx * dt
+    y += vy * dt
+    left = C["CASTLE_FRONT"] + w
+    right = C["WIDTH"] - w
+    if x < left:
+        x = left
+        vx = abs(vx) * 0.4
+    if x > right:
+        x = right
+        vx = -abs(vx) * 0.4
+    rest_y = C["GROUND_Y"] - h / 2.0 + 2
+    grounded = False
+    if y >= rest_y:
+        y = rest_y
+        vy = -abs(vy) * 0.34
+        vx *= 0.6
+        if abs(vy) < 90:
+            vy = 0.0
+            grounded = True
+    return x, y, vx, vy, grounded
+
+
+def throw_cap(vx, vy, kind):
+    """enemies.py:50  DroppedItem.throw -- magnitude cap, direction preserved."""
+    cap = {"crown": 2300.0, "staff": 780.0}[kind]
+    sp = math.hypot(vx, vy)
+    if sp > cap:
+        return vx * cap / sp, vy * cap / sp
+    return vx, vy
+
+
+def lich_summon_interval(wave):
+    """enemies.py:1975  LichLord.think -- the summon cadence."""
+    return max(3.2, 6.0 - wave * 0.06)
+
+
+def lich_summon_count(wave):
+    """enemies.py:2016  LichLord.raise_dead"""
+    return 2 + min(4, wave // 8)
+
+
 # ===========================================================================
 #  Fixture cases
 # ===========================================================================
@@ -217,6 +339,14 @@ def build():
         "shove": [],
         "strip": [],
         "grabCapacity": [],
+        "regaliaGuard": [],
+        "crownRetrieve": [],
+        "dragonBreath": [],
+        "dragonSmack": [],
+        "lichWard": [],
+        "droppedItem": [],
+        "regaliaThrowCap": [],
+        "lichSummon": [],
     }
 
     for wave in (1, 2, 5, 10, 16, 26, 36, 50):
@@ -311,6 +441,75 @@ def build():
         for bonus in (1.0, 1.25):
             fx["grabCapacity"].append({"level": lvl, "bonus": bonus,
                                        "capacity": grab_capacity(lvl, bonus)})
+
+    # --- bosses ------------------------------------------------------------
+
+    #  taken starts at 1: see regalia_guard's note.  A boss with taken == 0 has
+    #  no guard at all rather than a 6.0 one.
+    for taken in range(1, 9):
+        fx["regaliaGuard"].append({"taken": taken, "guard": regalia_guard(taken)})
+
+    for speed in (34.0, 47.6, 66.0):
+        fx["crownRetrieve"].append({
+            "speed": speed, "dt": DT,
+            "stepDistance": crown_retrieve_step(speed, DT),
+            "retrieveSpeedMult": C["CROWN_RETRIEVE_SPEED"]})
+
+    #  shots        -- Python's own double arithmetic
+    #  shotsFloat32 -- the same loop in single precision, which is what the Java
+    #                  port computes.  They agree for the SHIPPED configuration
+    #                  (1.25 s / 0.15 s) and can differ by one at a boundary; the
+    #                  Java test asserts against shotsFloat32 and separately
+    #                  asserts that the shipped case has no divergence at all.
+    for fire_scale in (1.0, 0.5):
+        for breath_time, interval in ((1.25, 0.15), (2.0, 0.25), (0.5, 0.15)):
+            fx["dragonBreath"].append({
+                "breathTime": breath_time, "shotInterval": interval,
+                "fireScale": fire_scale, "dt": DT,
+                "shipped": breath_time == 1.25 and interval == 0.15,
+                "shots": breath_shot_count(breath_time, interval, DT, fire_scale),
+                "shotsFloat32": breath_shot_count(breath_time, interval, DT,
+                                                  fire_scale, single=True)})
+
+    for amount in (10.0, 90.0, 360.0, 720.0):
+        fx["dragonSmack"].append({
+            "amount": amount, "progress": dragon_smack_progress(amount),
+            "smackDistance": C["CLAW_SMACK_DISTANCE"],
+            "completesAlone": dragon_smack_progress(amount) >= 1.0})
+
+    #  ordering matters wherever vulnerable != 1: with armour alone the two
+    #  orders coincide, which is exactly why the fixture includes both
+    for armor in (0.0, 0.30, 0.60):
+        for vulnerable in (1.0, 1.22, 1.66):
+            for warded in (False, True):
+                fx["lichWard"].append({
+                    "amount": 400.0, "warded": warded, "armor": armor,
+                    "vulnerable": vulnerable,
+                    "correct": lich_ward_then_armour(400.0, warded, armor, vulnerable),
+                    "reversed": lich_armour_then_ward(400.0, warded, armor, vulnerable)})
+
+    for kind, (w, h) in (("crown", (44, 26)), ("staff", (18, 60))):
+        for steps in (1, 10, 60):
+            x, y, vx, vy = 800.0, 300.0, 400.0, -300.0
+            grounded = False
+            for _ in range(steps):
+                x, y, vx, vy, g = dropped_item_step(x, y, vx, vy, w, h, DT)
+                grounded = grounded or g
+            fx["droppedItem"].append({
+                "kind": kind, "steps": steps, "x": x, "y": y,
+                "vx": vx, "vy": vy, "grounded": grounded,
+                "restY": C["GROUND_Y"] - h / 2.0 + 2})
+
+    for kind in ("crown", "staff"):
+        for vx, vy in ((100.0, 0.0), (3000.0, -3000.0), (-5000.0, 0.0)):
+            cx, cy = throw_cap(vx, vy, kind)
+            fx["regaliaThrowCap"].append({"kind": kind, "vx": vx, "vy": vy,
+                                          "outVx": cx, "outVy": cy})
+
+    for wave in (1, 8, 16, 24, 40, 60):
+        fx["lichSummon"].append({"wave": wave,
+                                 "interval": lich_summon_interval(wave),
+                                 "count": lich_summon_count(wave)})
     return fx
 
 

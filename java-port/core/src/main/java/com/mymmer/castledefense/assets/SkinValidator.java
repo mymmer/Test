@@ -61,11 +61,11 @@ public final class SkinValidator {
             }
 
             for (AttachmentPoint p : unit.attachments.values()) {
-                if (p.x() < ATTACH_MIN || p.x() > ATTACH_MAX
-                        || p.y() < ATTACH_MIN || p.y() > ATTACH_MAX) {
+                if (p.visualX() < ATTACH_MIN || p.visualX() > ATTACH_MAX
+                        || p.visualY() < ATTACH_MIN || p.visualY() > ATTACH_MAX) {
                     report.error(label + ": attachment '" + p.name() + "' at ("
-                            + p.x() + ", " + p.y() + ") is outside the unit box; "
-                            + "attachment coordinates are normalised to it");
+                            + p.visualX() + ", " + p.visualY() + ") is outside the unit box; "
+                            + "visual attachment coordinates are normalised to it");
                 }
             }
 

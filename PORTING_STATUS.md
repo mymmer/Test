@@ -10,19 +10,27 @@ Legend: `[ ]` not started · `[~]` in progress · `[x]` ported (compiles, believ
 Nothing is complete merely because it compiles. A row may only reach `[T]` when a named
 test exercises it.
 
-**Phase status: Phases 1, 3, 4, 5 and 6 complete. Phase 2 implemented and hardened
-but NOT fully tested — the Android assembly gate is still open because Google's
-Maven is unreachable from the build environment, and stays open until
+**Phase status: Phases 1, 3, 4, 5, 6 and 7 complete. Phase 2 implemented and
+hardened but NOT fully tested — the Android assembly gate is still open because
+Google's Maven is unreachable from the build environment, and stays open until
 `./gradlew verifyAndroid` succeeds on a machine with the SDK.**
 
-Phase 6 adds the enemy roster, the interaction physics and wave composition. The
-two sides now meet: `Enemy` implements the `Target` contract Phase 5 wrote its
-towers against, and **not one line of `defence` was changed to accommodate it** —
-the dependency still runs `enemy → defence`, exactly as `enemies.py` imports
-`castle.py`. There are still no bosses: composition places them as stable id
-specs that Phase 7 resolves, and none is faked.
+Phase 7 adds the three bosses and their interactive disruptions. `Boss extends
+Enemy`, so a boss walks, takes damage, dies and pays out through contracts that
+were already tested; what it adds is immunity to ordinary grabbing, a
+difficulty-scaled fire clock, and a disruption the player performs by hand.
 
-Numeric parity with the Python source is now proven for the isolated formulas by
+The whole game loop now exists except the run directors, the shop, the talent
+tree and rendering — Phases 8 to 11.
+
+**A skin cannot change gameplay, and that is now enforced three ways:**
+gameplay packages cannot import `assets` (`ArchitectureTest`);
+`AttachmentPoint` has no `worldX`/`worldY` and is named `visual*`/`draw*`
+throughout; and `SkinIndependenceTest` loads two skins that disagree about every
+scale, offset and attachment and asserts every gameplay anchor, interaction area,
+dropped-item origin, hit box and projectile origin is identical to the float.
+
+Numeric parity with the Python source is proven for the isolated formulas by
 fixtures generated from it — see `tools/parity/generate_fixtures.py`.
 
 Subsystem contracts:
@@ -342,17 +350,60 @@ Contracts: [`ENEMIES.md`](java-port/docs/subsystems/ENEMIES.md),
       list (the Outpost trap) without breaking insertion order, and the
       snapshot contract is proven against the real `EntityList`
 
-## Phase 7 — Bosses
+## Phase 7 — Bosses and interactive disruption
 
-- [ ] `Boss` base (intro, aura, `fireDelay`)
-- [ ] `TrollKing` (crown detach, retrieve, leap, tower smash + stun)
-- [ ] `Dragon` (flight, breath stream on a real timer, claws, reel)
-- [ ] `LichLord` (staff disarm, raise dead, bone ward, barricade standoff)
-- [ ] `DroppedItem` physics (throw caps, bounce, rest, pickup)
-- [ ] Regalia guard cooldown growth
-- [ ] Attachment-point driven regalia anchors
-- [ ] Boss lifecycle purge (sprite, regalia, projectiles, cursor refs, flags)
-- [ ] Repeat-boss cleanliness
+Contract: [`BOSSES.md`](java-port/docs/subsystems/BOSSES.md).
+
+- [T] **Gameplay anchors separated from visual attachments** (pre-phase work).
+      `config.GameplayAnchor` is gameplay-authoritative and comes from
+      `data/bosses.json`; `assets.AttachmentPoint` is cosmetic, has no
+      `worldX`/`worldY` any more, and is named `visual*`/`draw*` so a call site
+      reading one is visibly a rendering call site. `ArchitectureTest` fails the
+      build if a gameplay package imports `assets`
+- [T] `ArchitectureTest` — nine dependency rules checked against the source:
+      gameplay never names assets, rendering, a backend or `java.util.Random`;
+      `defence` never names an enemy; `enemy` never names a boss; nothing does
+      `instanceof TrollKing`
+- [T] `Boss` base (intro, aura, `fireDelay`, shared disruption guard) — immunity
+      is a flag, never an `instanceof`, and a boss dies and pays out through the
+      ordinary `Enemy` contracts
+- [T] `TrollKing` (crown detach, retrieval at 1.7x attacking nothing, the
+      at-rest-only pickup rule, leap with its minimum range, tower smash + stun
+      via the existing `Castle.smashRandomTower`)
+- [T] `Dragon` (flight, breath **streamed on a simulation timer**, claw
+      battering, reel, breath cut off mid-stream, driven back 120 px)
+- [T] `LichLord` (staff disarm for 5 s with the ward dropping too, magical staff
+      recall, raise-dead through the enemy factory, bone ward applied **before**
+      armour, barricade stand-off, death bolt target priority)
+- [T] `DroppedItem` physics — **not an `Enemy`**: its own gravity response,
+      0.34 restitution, arena walls, rest state, and a pickup box from
+      `RegaliaKind` rather than from artwork. Throw caps 2300/780 by kind, applied
+      to the magnitude with the direction preserved
+- [T] Regalia guard cooldown growth — the ladder starts at **9.6 s, not 6 s**
+      (the counter increments at detach, the guard applies at recovery), and the
+      Dragon's claws grow the same ladder
+- [T] Boss lifecycle purge — the boss, the horde entry, every cursor reference,
+      its regalia (including a piece being carried) and its projectiles, all
+      matched by **owner uid**. Driven from the defeat hook, as in Python
+- [T] Repeat-boss cleanliness — spawn, interact, kill, purge, respawn, for all
+      three: new uid, full health, zero disruption count, no guard, no leftover
+      item, no cursor reference
+- [T] Simultaneous bosses — `BossRegistry` is a collection, never a
+      `currentBoss`. All three pairings tested for independent health, timers,
+      disruption state, projectiles and dropped items; one dying never purges
+      the other, and interaction ownership cannot cross instances
+- [T] Boss projectile ownership — killing boss A leaves boss B's fire in the air
+- [T] `data/bosses.json` + `BossTable` — every number transcribed from
+      `enemies.py`, with load-time validation for duplicate and unknown ids,
+      non-positive stats, an anchor far outside the box, an interactive area with
+      no size, a Dragon that could never breathe, a shot interval longer than the
+      breath, and inverted min/max ranges
+- [T] Boss parity fixtures — the guard ladder, crown retrieval speed, breath
+      cadence at **both precisions**, claw progress, ward ordering, dropped-item
+      flight, throw caps and the summon cadence, all generated from the Python
+      source
+- [T] `SkinIndependenceTest` — two skins that place the crown artwork over 100 px
+      apart produce byte-identical boss simulation over 900 seeded steps
 
 ## Phase 8 — Game progression
 

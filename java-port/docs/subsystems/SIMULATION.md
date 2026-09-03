@@ -169,8 +169,12 @@ directly. Phase 5 added `PROJECTILE_SPAWN`, `TOWER_FIRE`, `TOWER_DISABLED`,
 `TOWER_REBUILT`, `CASTLE_DAMAGE` and `BARRICADE_DAMAGE`; a test runs the same
 seeded scenario with tracing on and off and asserts the outcomes are identical.
 Phase 6 added `ENTITY_STATE_CHANGED`, `ENEMY_GRABBED`, `ENEMY_RELEASED`,
-`ARMOUR_STRIPPED`, `SLAM`, `FALL_DAMAGE` and `GOLD_PAYOUT`. Nothing traces a
-position every frame; `Enemy.describe()` builds a bug-report line on demand.
+`ARMOUR_STRIPPED`, `SLAM`, `FALL_DAMAGE` and `GOLD_PAYOUT`; Phase 7 added
+`BOSS_SPAWN`, `BOSS_STATE_CHANGE`, `BOSS_ATTACK`, `BOSS_DISRUPTION`,
+`BOSS_DEATH`, `REGALIA_DETACH`, `REGALIA_RECOVER`, `DROPPED_ITEM_CREATED` and
+`DROPPED_ITEM_RECOVERED`. Nothing traces a position every frame;
+`Enemy.describe()`, `Boss.describe()` and `BossRegistry.describe()` build
+bug-report lines on demand.
 
 ## Relevant source files
 

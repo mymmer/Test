@@ -84,8 +84,43 @@ static SkinValidationReport validate(SkinDefinition def, ...);
 
 1. **Gameplay geometry is independent of artwork.** Scale and offsets are
    presentation only. A sprite twice the size does not become twice as easy to
-   hit. Attachment points are stored **normalised against the gameplay box**,
-   not against the texture, so they survive an art change.
+   hit.
+
+1b. **A skin has no gameplay authority at all, and this is structural.**
+   Two distinct types, and they are not interchangeable:
+
+   | | `config.GameplayAnchor` | `assets.AttachmentPoint` |
+   |---|---|---|
+   | Defined in | gameplay data (`data/*.json`) or code | skin data (`skin.json`) |
+   | Authority | **gameplay** | **cosmetic** |
+   | Changing a skin | cannot move it | moves it |
+   | Read by | gameplay | the renderer, only |
+   | Accessors | `worldX` / `worldY` | `visualX` / `visualY`, `drawX` / `drawY` |
+
+   Everything the player can feel is an anchor: a projectile's spawn origin, the
+   point where a crown can be grabbed, where a dropped item is born, where
+   retrieval ends, and every collision, grab and strip box. A skin controls where
+   the crown *artwork* sits, the muzzle-flash offset, the health-bar offset and
+   animation alignment — and nothing else.
+
+   Three things enforce it rather than one convention:
+
+   * **Gameplay cannot reach a skin.** No context, service or entity exposes a
+     `UnitVisual`, and `ArchitectureTest` fails the build if a gameplay package
+     imports `assets`.
+   * **`AttachmentPoint` has no `worldX`/`worldY`.** Those names invited exactly
+     the mistake this must not permit; a call site reading `drawX`/`drawY` is
+     visibly a rendering call site. A reflective test fails if they come back.
+   * **The numbers are compared.** `SkinIndependenceTest` loads two skins that
+     disagree about every scale, offset and attachment — placing the crown
+     artwork over 100 px apart — and asserts that every gameplay anchor,
+     interaction area, dropped-item origin, hit box and projectile origin is
+     identical to the float, and that a 900-step seeded boss scenario produces
+     byte-identical output under both.
+
+   Attachment points remain **normalised against the gameplay box**, not the
+   texture, so artwork size cannot move even the visual alignment relative to
+   the unit.
 2. **Identity is a stable semantic id.** `VisualId` and `AnimationState` are
    enums; regions are addressed by logical name. Never an array index, never a
    frame position, never a localised string.
@@ -118,7 +153,8 @@ core/src/main/java/com/mymmer/castledefense/assets/SkinValidationReport.java
 core/src/main/java/com/mymmer/castledefense/assets/UnitVisual.java
 core/src/main/java/com/mymmer/castledefense/assets/AnimationSet.java
 core/src/main/java/com/mymmer/castledefense/assets/AnimationState.java
-core/src/main/java/com/mymmer/castledefense/assets/AttachmentPoint.java
+core/src/main/java/com/mymmer/castledefense/assets/AttachmentPoint.java   (visual)
+core/src/main/java/com/mymmer/castledefense/config/GameplayAnchor.java    (gameplay)
 core/src/main/java/com/mymmer/castledefense/assets/VisualId.java
 build.gradle                                   (the packAssets task and pack.json)
 ```
@@ -126,6 +162,8 @@ build.gradle                                   (the packAssets task and pack.jso
 ## Relevant tests
 
 ```
-core/src/test/java/com/mymmer/castledefense/assets/SkinSystemTest.java
+core/src/test/java/com/mymmer/castledefense/assets/SkinSystemTest.java          (20)
+core/src/test/java/com/mymmer/castledefense/boss/SkinIndependenceTest.java     (6)
+core/src/test/java/com/mymmer/castledefense/ArchitectureTest.java              (9)
 core/src/test/java/com/mymmer/castledefense/testsupport/FakeAtlasSource.java
 ```

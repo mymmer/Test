@@ -75,7 +75,7 @@ public final class FoundationRenderer implements GameRenderer {
 
         batch.setProjectionMatrix(viewports.getUiCamera().combined);
         batch.begin();
-        font.draw(batch, GameConfig.TITLE + " -- Java/libGDX port, Phase 6 enemies",
+        font.draw(batch, GameConfig.TITLE + " -- Java/libGDX port, Phase 7 bosses",
                 18f, uiH - 18f);
         font.draw(batch, String.format(
                 "world %.0fx%.0f (fit)   ui %.0fx%.0f (extend)   screen %dx%d   letterbox %d,%d",

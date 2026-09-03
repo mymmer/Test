@@ -531,6 +531,23 @@ rather than silently changing the game.
 | **A Volatile blast cannot chain among healthy Volatiles** | The blast does `damage × 3.4` = 27.2 at wave 1; a Volatile has 46 health. Worse, it never closes: health scales at 1.14 per wave and damage at 1.11, so the gap only widens (wave 30: 561 blast against 2056 health). Chain reactions are therefore something the player *sets up* by softening a row first, not something a single kill triggers. | Reproduced exactly. The chain tests pre-damage the row, which is the situation the mechanic actually occurs in. Not a port bug and not "fixed"; recorded so a future balance pass knows the blast is far below the one-shot threshold. |
 | **`TalentTree.castle_hp` remains dead code** | Confirmed again in Phase 6: nothing reads it. | Still not implemented. |
 
+### Source quirks reproduced in Phase 7
+
+| Quirk | Detail | Test |
+|---|---|---|
+| **Claw batterings grow the *regalia* guard** | `Dragon.apply_smack` increments `regalia_taken` and calls `guard_regalia()` — the crown/staff mechanism — even though claws are not regalia and nothing is taken away. The observable effect is that repeated batterings get harder on the same 9.6 / 13.2 / 16.8 s ladder as stealing a crown. Reproduced; the Java name is generalised to "disruption" where it reads better, the behaviour is not. | `BossMechanicsTest.clawSmacksShareTheRegaliaGuard` |
+| **The guard ladder starts at 9.6 s, not 6 s** | `regalia_taken` increments at *detach* and `guard_regalia()` is called at *recovery*, so by the time a guard exists the count is already 1. `REGALIA_COOLDOWN × (1 + 0.6 × 0)` = 6.0 is a state that never occurs. Easy to get wrong from the constant alone. | `BossMechanicsTest.guardGrowth`, `BossParityTest.regaliaGuardLadder` |
+| **A crown must be at rest to be recovered** | `TrollKing.retrieve_crown` requires `crown.state == "ground"`, so a crown still in the air is out of reach even when he is standing on it. A good throw therefore buys time after he arrives, not only before. | `BossMechanicsTest.crownMustBeAtRest` |
+| **The purge runs from the defeat hook** | `Enemy.die` → `game.on_boss_defeated` → `game.purge_boss`, not on a later tick. Deferring it lets the item list be swept before the cursor is told to let go, leaving the player holding a corpse's crown. Found by a failing test during the port. | `BossLifecycleTest.purgeDropsEverything` |
+
+### Newly discovered in Phase 7
+
+| Finding | Detail | Status |
+|---|---|---|
+| **The Lich ward ordering is not observable** | Phase 1 recorded "ward × 0.25 → armour" as an ordering that must be preserved because reversing it changes the result. It does not: both steps are pure multiplies and ×0.25 is an *exact power of two*, so the two orders agree bit for bit — verified across 100 float cases and all 18 fixtured ones. The order is still preserved, because it stops being equivalent the moment armour gains a floor, a cap or a flat subtraction. The test says so plainly rather than claiming to detect a difference that does not exist. | Order preserved; the claim corrected. `BossParityTest.wardOrdering` asserts the two agree, and fails if that ever changes. |
+| **Dragon breath: one extra fireball on Hard** | Python's timers are doubles; the port's are floats, like all its gameplay state. For the shipped **Normal** configuration (1.25 s breath, 0.15 s interval) both produce 8 fireballs. For the shipped **Hard** one (`boss_fire_scale` 0.5) Python produces 15 and the port 16 — about 7% more damage in that stream. | Reported, not patched. The cause is the precision of the timer type, so a fix is an architectural decision about gameplay state, not a balance tweak — and §32 of the brief forbids adjusting a constant to move a fixed-step boundary without proving the mismatch first. The mismatch is now proven and measured: `tools/parity/generate_fixtures.py` emits the count at *both* precisions (`shots` and `shotsFloat32`), and `BossParityTest.breathCadence` asserts the port against the single-precision one while `shippedNormalBreathAgreesExactly` pins the case that does agree. |
+| **A Volatile blast still cannot chain unaided** | Unchanged from Phase 6; re-confirmed. | Recorded above. |
+
 ---
 
 ## 15. Phase plan

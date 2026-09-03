@@ -54,7 +54,7 @@ class SkinSystemTest {
 
         AttachmentPoint crown = def.units().get("troll_king").attachments.get("crown");
         assertNotNull(crown);
-        assertEquals(0.91f, crown.y(), 1e-6f);
+        assertEquals(0.91f, crown.visualY(), 1e-6f);
     }
 
     @Test
@@ -79,15 +79,34 @@ class SkinSystemTest {
     // --- attachment points --------------------------------------------------
 
     @Test
-    @DisplayName("attachments are normalised, so artwork size cannot move them")
+    @DisplayName("a visual attachment is normalised to the GAMEPLAY box")
     void attachmentsAreNormalised() {
         AttachmentPoint crown = new AttachmentPoint("crown", 0.5f, 0.91f);
-        // a unit centred at (700, 300) with an 84x112 GAMEPLAY box
-        assertEquals(700f, crown.worldX(700f, 84f), 1e-4f);
-        assertEquals(300f + (0.91f - 0.5f) * 112f, crown.worldY(300f, 112f), 1e-4f);
-        // the same attachment on a skin whose PNG is twice the size: the
-        // gameplay box is what it is measured against, so nothing moves
-        assertEquals(700f, crown.worldX(700f, 84f), 1e-4f);
+        //  a unit centred at (700, 300) with an 84x112 gameplay box.  Note the
+        //  draw* naming: an attachment produces a place to DRAW, never a place
+        //  where something happens -- that is config.GameplayAnchor.
+        assertEquals(700f, crown.drawX(700f, 84f), 1e-4f);
+        //  y grows downward in the port's simulation space, so the top of the
+        //  box (visualY = 1) is above the centre
+        assertEquals(300f - (0.91f - 0.5f) * 112f, crown.drawY(300f, 112f), 1e-4f);
+        //  and a skin whose PNG is twice the size measures against the same
+        //  gameplay box, so nothing moves
+        assertEquals(700f, crown.drawX(700f, 84f), 1e-4f);
+    }
+
+    @Test
+    @DisplayName("an attachment offers no way to produce a gameplay position")
+    void attachmentHasNoWorldAccessors() {
+        //  worldX/worldY were removed deliberately: those names invited exactly
+        //  the mistake this class must not permit, and a call site reading
+        //  drawX/drawY is visibly a rendering call site.  Checked reflectively so
+        //  re-adding one fails here rather than in a design review.
+        for (java.lang.reflect.Method m : AttachmentPoint.class.getMethods()) {
+            String name = m.getName();
+            assertTrue(!name.equals("worldX") && !name.equals("worldY"),
+                    "AttachmentPoint." + name + " would let skin data produce a "
+                            + "gameplay position; use config.GameplayAnchor instead");
+        }
     }
 
     // --- validation ---------------------------------------------------------
@@ -307,7 +326,7 @@ class SkinSystemTest {
 
         UnitVisual troll = skins.visualFor(VisualId.TROLL_KING);
         assertTrue(troll.hasAttachment("crown"));
-        assertEquals(0.91f, troll.attachment("crown").y(), 1e-6f);
+        assertEquals(0.91f, troll.attachment("crown").visualY(), 1e-6f);
         assertNull(troll.attachment("staff"), "an undeclared attachment is absent, not invented");
     }
 }

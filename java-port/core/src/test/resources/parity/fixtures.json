@@ -34,7 +34,14 @@
       7.5,
       9.5,
       13.0
-    ]
+    ],
+    "REGALIA_COOLDOWN": 6.0,
+    "REGALIA_CD_GROWTH": 0.6,
+    "CROWN_RETRIEVE_SPEED": 1.7,
+    "STAFF_DISARM_TIME": 5.0,
+    "CLAW_SMACK_DISTANCE": 360.0,
+    "CLAW_STAGGER": 3.2,
+    "WALL_TOP": 350.0
   },
   "waveScaling": [
     {
@@ -1963,6 +1970,426 @@
       "level": 5,
       "bonus": 1.25,
       "capacity": 16.25
+    }
+  ],
+  "regaliaGuard": [
+    {
+      "taken": 1,
+      "guard": 9.600000000000001
+    },
+    {
+      "taken": 2,
+      "guard": 13.200000000000001
+    },
+    {
+      "taken": 3,
+      "guard": 16.799999999999997
+    },
+    {
+      "taken": 4,
+      "guard": 20.4
+    },
+    {
+      "taken": 5,
+      "guard": 24.0
+    },
+    {
+      "taken": 6,
+      "guard": 27.599999999999998
+    },
+    {
+      "taken": 7,
+      "guard": 31.200000000000003
+    },
+    {
+      "taken": 8,
+      "guard": 34.8
+    }
+  ],
+  "crownRetrieve": [
+    {
+      "speed": 34.0,
+      "dt": 0.016666666666666666,
+      "stepDistance": 0.9633333333333333,
+      "retrieveSpeedMult": 1.7
+    },
+    {
+      "speed": 47.6,
+      "dt": 0.016666666666666666,
+      "stepDistance": 1.3486666666666667,
+      "retrieveSpeedMult": 1.7
+    },
+    {
+      "speed": 66.0,
+      "dt": 0.016666666666666666,
+      "stepDistance": 1.87,
+      "retrieveSpeedMult": 1.7
+    }
+  ],
+  "dragonBreath": [
+    {
+      "breathTime": 1.25,
+      "shotInterval": 0.15,
+      "fireScale": 1.0,
+      "dt": 0.016666666666666666,
+      "shipped": true,
+      "shots": 8,
+      "shotsFloat32": 8
+    },
+    {
+      "breathTime": 2.0,
+      "shotInterval": 0.25,
+      "fireScale": 1.0,
+      "dt": 0.016666666666666666,
+      "shipped": false,
+      "shots": 8,
+      "shotsFloat32": 8
+    },
+    {
+      "breathTime": 0.5,
+      "shotInterval": 0.15,
+      "fireScale": 1.0,
+      "dt": 0.016666666666666666,
+      "shipped": false,
+      "shots": 4,
+      "shotsFloat32": 3
+    },
+    {
+      "breathTime": 1.25,
+      "shotInterval": 0.15,
+      "fireScale": 0.5,
+      "dt": 0.016666666666666666,
+      "shipped": true,
+      "shots": 15,
+      "shotsFloat32": 16
+    },
+    {
+      "breathTime": 2.0,
+      "shotInterval": 0.25,
+      "fireScale": 0.5,
+      "dt": 0.016666666666666666,
+      "shipped": false,
+      "shots": 16,
+      "shotsFloat32": 16
+    },
+    {
+      "breathTime": 0.5,
+      "shotInterval": 0.15,
+      "fireScale": 0.5,
+      "dt": 0.016666666666666666,
+      "shipped": false,
+      "shots": 7,
+      "shotsFloat32": 6
+    }
+  ],
+  "dragonSmack": [
+    {
+      "amount": 10.0,
+      "progress": 0.027777777777777776,
+      "smackDistance": 360.0,
+      "completesAlone": false
+    },
+    {
+      "amount": 90.0,
+      "progress": 0.25,
+      "smackDistance": 360.0,
+      "completesAlone": false
+    },
+    {
+      "amount": 360.0,
+      "progress": 1.0,
+      "smackDistance": 360.0,
+      "completesAlone": true
+    },
+    {
+      "amount": 720.0,
+      "progress": 2.0,
+      "smackDistance": 360.0,
+      "completesAlone": true
+    }
+  ],
+  "lichWard": [
+    {
+      "amount": 400.0,
+      "warded": false,
+      "armor": 0.0,
+      "vulnerable": 1.0,
+      "correct": 400.0,
+      "reversed": 400.0
+    },
+    {
+      "amount": 400.0,
+      "warded": true,
+      "armor": 0.0,
+      "vulnerable": 1.0,
+      "correct": 100.0,
+      "reversed": 100.0
+    },
+    {
+      "amount": 400.0,
+      "warded": false,
+      "armor": 0.0,
+      "vulnerable": 1.22,
+      "correct": 488.0,
+      "reversed": 488.0
+    },
+    {
+      "amount": 400.0,
+      "warded": true,
+      "armor": 0.0,
+      "vulnerable": 1.22,
+      "correct": 122.0,
+      "reversed": 122.0
+    },
+    {
+      "amount": 400.0,
+      "warded": false,
+      "armor": 0.0,
+      "vulnerable": 1.66,
+      "correct": 664.0,
+      "reversed": 664.0
+    },
+    {
+      "amount": 400.0,
+      "warded": true,
+      "armor": 0.0,
+      "vulnerable": 1.66,
+      "correct": 166.0,
+      "reversed": 166.0
+    },
+    {
+      "amount": 400.0,
+      "warded": false,
+      "armor": 0.3,
+      "vulnerable": 1.0,
+      "correct": 280.0,
+      "reversed": 280.0
+    },
+    {
+      "amount": 400.0,
+      "warded": true,
+      "armor": 0.3,
+      "vulnerable": 1.0,
+      "correct": 70.0,
+      "reversed": 70.0
+    },
+    {
+      "amount": 400.0,
+      "warded": false,
+      "armor": 0.3,
+      "vulnerable": 1.22,
+      "correct": 341.59999999999997,
+      "reversed": 341.59999999999997
+    },
+    {
+      "amount": 400.0,
+      "warded": true,
+      "armor": 0.3,
+      "vulnerable": 1.22,
+      "correct": 85.39999999999999,
+      "reversed": 85.39999999999999
+    },
+    {
+      "amount": 400.0,
+      "warded": false,
+      "armor": 0.3,
+      "vulnerable": 1.66,
+      "correct": 464.79999999999995,
+      "reversed": 464.79999999999995
+    },
+    {
+      "amount": 400.0,
+      "warded": true,
+      "armor": 0.3,
+      "vulnerable": 1.66,
+      "correct": 116.19999999999999,
+      "reversed": 116.19999999999999
+    },
+    {
+      "amount": 400.0,
+      "warded": false,
+      "armor": 0.6,
+      "vulnerable": 1.0,
+      "correct": 160.0,
+      "reversed": 160.0
+    },
+    {
+      "amount": 400.0,
+      "warded": true,
+      "armor": 0.6,
+      "vulnerable": 1.0,
+      "correct": 40.0,
+      "reversed": 40.0
+    },
+    {
+      "amount": 400.0,
+      "warded": false,
+      "armor": 0.6,
+      "vulnerable": 1.22,
+      "correct": 195.2,
+      "reversed": 195.2
+    },
+    {
+      "amount": 400.0,
+      "warded": true,
+      "armor": 0.6,
+      "vulnerable": 1.22,
+      "correct": 48.8,
+      "reversed": 48.8
+    },
+    {
+      "amount": 400.0,
+      "warded": false,
+      "armor": 0.6,
+      "vulnerable": 1.66,
+      "correct": 265.59999999999997,
+      "reversed": 265.59999999999997
+    },
+    {
+      "amount": 400.0,
+      "warded": true,
+      "armor": 0.6,
+      "vulnerable": 1.66,
+      "correct": 66.39999999999999,
+      "reversed": 66.39999999999999
+    }
+  ],
+  "droppedItem": [
+    {
+      "kind": "crown",
+      "steps": 1,
+      "x": 806.6666666666666,
+      "y": 295.4583333333333,
+      "vx": 400.0,
+      "vy": -272.5,
+      "grounded": false,
+      "restY": 609.0
+    },
+    {
+      "kind": "crown",
+      "steps": 10,
+      "x": 866.6666666666663,
+      "y": 275.2083333333333,
+      "vx": 400.0,
+      "vy": -25.0,
+      "grounded": false,
+      "restY": 609.0
+    },
+    {
+      "kind": "crown",
+      "steps": 60,
+      "x": 1170.6666666666665,
+      "y": 573.9558333333333,
+      "vx": 240.0,
+      "vy": -53.650000000000034,
+      "grounded": false,
+      "restY": 609.0
+    },
+    {
+      "kind": "staff",
+      "steps": 1,
+      "x": 806.6666666666666,
+      "y": 295.4583333333333,
+      "vx": 400.0,
+      "vy": -272.5,
+      "grounded": false,
+      "restY": 592.0
+    },
+    {
+      "kind": "staff",
+      "steps": 10,
+      "x": 866.6666666666663,
+      "y": 275.2083333333333,
+      "vx": 400.0,
+      "vy": -25.0,
+      "grounded": false,
+      "restY": 592.0
+    },
+    {
+      "kind": "staff",
+      "steps": 60,
+      "x": 1167.9999999999998,
+      "y": 558.3899999999999,
+      "vx": 240.0,
+      "vy": -16.80000000000001,
+      "grounded": false,
+      "restY": 592.0
+    }
+  ],
+  "regaliaThrowCap": [
+    {
+      "kind": "crown",
+      "vx": 100.0,
+      "vy": 0.0,
+      "outVx": 100.0,
+      "outVy": 0.0
+    },
+    {
+      "kind": "crown",
+      "vx": 3000.0,
+      "vy": -3000.0,
+      "outVx": 1626.3455967290595,
+      "outVy": -1626.3455967290595
+    },
+    {
+      "kind": "crown",
+      "vx": -5000.0,
+      "vy": 0.0,
+      "outVx": -2300.0,
+      "outVy": 0.0
+    },
+    {
+      "kind": "staff",
+      "vx": 100.0,
+      "vy": 0.0,
+      "outVx": 100.0,
+      "outVy": 0.0
+    },
+    {
+      "kind": "staff",
+      "vx": 3000.0,
+      "vy": -3000.0,
+      "outVx": 551.5432893255071,
+      "outVy": -551.5432893255071
+    },
+    {
+      "kind": "staff",
+      "vx": -5000.0,
+      "vy": 0.0,
+      "outVx": -780.0,
+      "outVy": 0.0
+    }
+  ],
+  "lichSummon": [
+    {
+      "wave": 1,
+      "interval": 5.94,
+      "count": 2
+    },
+    {
+      "wave": 8,
+      "interval": 5.52,
+      "count": 3
+    },
+    {
+      "wave": 16,
+      "interval": 5.04,
+      "count": 4
+    },
+    {
+      "wave": 24,
+      "interval": 4.5600000000000005,
+      "count": 5
+    },
+    {
+      "wave": 40,
+      "interval": 3.6,
+      "count": 6
+    },
+    {
+      "wave": 60,
+      "interval": 3.2,
+      "count": 6
     }
   ]
 }

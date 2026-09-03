@@ -179,15 +179,21 @@ public abstract class Enemy extends Entity implements Target {
         this.anim = ctx.rng().uniform(0f, 10f);
         this.bob = ctx.rng().uniform(0f, (float) (Math.PI * 2.0));
 
-        ctx.trace().event(TraceEvent.ENTITY_SPAWN, ctx.step(), uid(), x, y, config.type.id());
+        ctx.trace().event(TraceEvent.ENTITY_SPAWN, ctx.step(), uid(), x, y, config.typeId);
     }
 
     // ========================================================================
     //  Identity and the Target contract
     // ========================================================================
 
+    /** The roster type, or <b>null for a boss</b>. See {@link EnemyConfig#type}. */
     public EnemyType type() {
         return config.type;
+    }
+
+    /** A stable id that is always present, boss or not. */
+    public String typeId() {
+        return config.typeId;
     }
 
     public EnemyConfig config() {
@@ -405,7 +411,7 @@ public abstract class Enemy extends Entity implements Target {
         vulnerable += GameConfig.STRIP_VULN;
         ctx.addPlatesTorn();
         ctx.trace().event(TraceEvent.ARMOUR_STRIPPED, ctx.step(), uid(),
-                layers, armor, config.type.id());
+                layers, armor, config.typeId);
         return true;
     }
 
@@ -496,13 +502,13 @@ public abstract class Enemy extends Entity implements Target {
         markDead();
         hp = 0f;
         ctx.trace().event(TraceEvent.ENTITY_DEATH, ctx.step(), uid(),
-                x, y, silent ? "silent" : config.type.id());
+                x, y, silent ? "silent" : config.typeId);
         if (!silent) {
             int gain = Math.max(1, Math.round(gold * mult));
             ctx.addGold(gain);
             ctx.addKill();
             ctx.trace().event(TraceEvent.GOLD_PAYOUT, ctx.step(), uid(),
-                    gain, mult, config.type.id());
+                    gain, mult, config.typeId);
             resolveFling();
         }
     }
@@ -535,7 +541,7 @@ public abstract class Enemy extends Entity implements Target {
         vx = 0f;
         vy = 0f;
         spin = 0f;
-        ctx.trace().event(TraceEvent.ENEMY_GRABBED, ctx.step(), uid(), x, y, config.type.id());
+        ctx.trace().event(TraceEvent.ENEMY_GRABBED, ctx.step(), uid(), x, y, config.typeId);
     }
 
     /**
@@ -562,7 +568,7 @@ public abstract class Enemy extends Entity implements Target {
         flingT0 = ctx.gameTime();
         flingHits = 0;
         bounceCount = 0;
-        ctx.trace().event(TraceEvent.ENEMY_RELEASED, ctx.step(), uid(), vx, vy, config.type.id());
+        ctx.trace().event(TraceEvent.ENEMY_RELEASED, ctx.step(), uid(), vx, vy, config.typeId);
     }
 
     /**
@@ -591,7 +597,7 @@ public abstract class Enemy extends Entity implements Target {
             applyDamage(dmg, "fall");
             ctx.addThrownDamage(dmg);
             ctx.trace().event(TraceEvent.FALL_DAMAGE, ctx.step(), uid(),
-                    dmg, impact, config.type.id());
+                    dmg, impact, config.typeId);
         }
         vy = -Math.abs(vy) * GameConfig.BOUNCE_RESTITUTION[lvl];
         vx *= 0.45f + 0.07f * lvl;
@@ -648,7 +654,7 @@ public abstract class Enemy extends Entity implements Target {
         applyDamage(dmg * 0.45f, "impact");
         ctx.addThrownDamage(dmg);
         flingHits++;
-        ctx.trace().event(TraceEvent.SLAM, ctx.step(), uid(), dmg, rel, config.type.id());
+        ctx.trace().event(TraceEvent.SLAM, ctx.step(), uid(), dmg, rel, config.typeId);
 
         //  a light enough victim is knocked airborne too, and briefly made
         //  immune to a second hit from the same attacker
@@ -985,7 +991,7 @@ public abstract class Enemy extends Entity implements Target {
      * <p>Deliberately built on demand, never logged per frame.
      */
     public String describe() {
-        return config.type.id() + "#" + uid()
+        return config.typeId + "#" + uid()
                 + " " + state.id()
                 + " x=" + Math.round(x) + " y=" + Math.round(y)
                 + " v=(" + Math.round(vx) + "," + Math.round(vy) + ")"

@@ -1,0 +1,72 @@
+{
+  "//": "Boss stat blocks and GAMEPLAY ANCHORS, transcribed verbatim from enemies.py.",
+  "//anchors": "regaliaAnchor is GAMEPLAY-AUTHORITATIVE: it decides where the crown/staff/claws can be interacted with, where the dropped item is born, and where retrieval ends. It is normalised to the gameplay box and is IDENTICAL UNDER EVERY SKIN. The matching AttachmentPoint in skin.json decides only where the artwork is drawn.",
+  "//behaviour": "Numbers only. Retrieval, breath streaming, ward ordering and disarm are Java.",
+
+  "bosses": [
+    {
+      "id": "troll_king",
+      "name": "The Troll King",
+      "description": "Smashes walls and flattens your defences.",
+      "hint": "Drag the CROWN off his head! He must go and fetch it before he can attack again.",
+      "baseHp": 1150.0, "baseSpeed": 34.0, "baseDamage": 42.0, "attackRate": 2.2,
+      "gold": 320, "armor": 0.25, "mass": 12.0,
+      "width": 84, "height": 112,
+      "introTime": 1.6,
+
+      "//regaliaAnchor": "Python regalia_anchor() = (rect.centerx, rect.y + 2): the top-centre of the box, two pixels down. Normalised: x = 0.5, y = 1 - 2/112.",
+      "regaliaAnchor": { "name": "crown", "x": 0.5, "y": 0.98214286 },
+      "//regaliaBox": "Python regalia_rect() = Rect(cx - 26, cy - 20, 52, 34), i.e. half-extents 26x17 centred 3 px BELOW the anchor.",
+      "regaliaHalfWidth": 26, "regaliaHalfHeight": 17, "regaliaBoxOffsetY": 3,
+
+      "leapDistance": 170, "leapMinRange": 200,
+      "leapIntervalMin": 5.0, "leapIntervalMax": 7.5
+    },
+    {
+      "id": "dragon",
+      "name": "The Dragon",
+      "description": "Airborne. Breathes searing AoE fire.",
+      "hint": "FLYING - Ballistas hit it for +200%. Bowmen reach it too.",
+      "baseHp": 1200.0, "baseSpeed": 66.0, "baseDamage": 34.0, "attackRate": 2.6,
+      "gold": 520, "armor": 0.15, "mass": 14.0,
+      "width": 118, "height": 62,
+      "flying": true, "flyY": 210.0,
+      "introTime": 1.6,
+
+      "//regaliaAnchor": "Python regalia_anchor() = (centerx - 6, bottom - 2). The CLAWS, which are not regalia -- but they share the guard mechanism, so they share the anchor slot. Normalised: x = 0.5 - 6/118, y = 2/62.",
+      "regaliaAnchor": { "name": "claws", "x": 0.44915254, "y": 0.03225806 },
+      "//regaliaBox": "Python smack_rect() = Rect(centerx - 40, bottom - 18, 80, 40): half-extents 40x20, centred 2 px BELOW the anchor.",
+      "regaliaHalfWidth": 40, "regaliaHalfHeight": 20, "regaliaBoxOffsetY": -2,
+
+      "breathTime": 1.25,
+      "breathShotInterval": 0.15,
+      "breathPower": 0.34,
+      "breathIntervalMin": 4.4, "breathIntervalMax": 5.8,
+      "standoffX": 582,
+      "//standoffX": "CASTLE_FRONT (252) + 330"
+    },
+    {
+      "id": "lich_lord",
+      "name": "The Lich Lord",
+      "description": "Summons endless dead and hurls death magic.",
+      "hint": "Flick the STAFF out of his hands to disarm him for 5s - no bolts, no summons, no ward.",
+      "baseHp": 2900.0, "baseSpeed": 36.0, "baseDamage": 24.0, "attackRate": 1.6,
+      "gold": 780, "armor": 0.30, "mass": 10.0,
+      "width": 70, "height": 100,
+      "introTime": 1.6,
+
+      "//regaliaAnchor": "Python regalia_anchor() = (rect.right + 6, rect.y - 16): above and to the RIGHT of the box, which is why the normalised values exceed 1.",
+      "regaliaAnchor": { "name": "staff", "x": 1.08571429, "y": 1.16 },
+      "//regaliaBox": "Python regalia_rect() = Rect(sx - 20, sy - 20, 40, 62): half-extents 20x31, centred 11 px BELOW the anchor.",
+      "regaliaHalfWidth": 20, "regaliaHalfHeight": 31, "regaliaBoxOffsetY": 11,
+
+      "standoffX": 652,
+      "//standoffX": "CASTLE_FRONT (252) + 400, kept inside a front-slot Bowman's reach so the wave can always be finished",
+      "wardDamageMultiplier": 0.25,
+      "wardDuration": 4.0,
+      "wardIntervalMin": 9.0, "wardIntervalMax": 13.0,
+      "summonIntervalBase": 6.0, "summonIntervalFloor": 3.2, "summonIntervalPerWave": 0.06,
+      "summonBaseCount": 2, "summonMaxBonus": 4
+    }
+  ]
+}

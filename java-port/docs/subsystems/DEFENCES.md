@@ -34,6 +34,9 @@ cage.
   and Phase 11 owns everything that reads it.
 * **The shop.** Buying, pricing and affordability are Phase 8; the methods those
   will call (`addTower`, `upgradeWall`, `buy`, `upgrade`) exist and are tested.
+* **Bosses.** Phase 7 arrived and changed nothing here: the Troll King's tower
+  smash calls the existing `Castle.smashRandomTower(damage, stun)`, and boss
+  projectiles are ordinary `Projectile`s carrying an `ownerUid`.
 
 ## The dependency direction
 
@@ -164,6 +167,11 @@ DefenceTable.load(JsonSource) → tower(TowerType), tier(int), slot(int),
     projectile kind, unknown tower id, missing stat block, a counter below 1.0, a
     castle tier that does not strengthen, a slot outside the world or sharing a
     position.
+15b. **A tower's muzzle is a gameplay origin, not a skin attachment.**
+    `muzzleX()`/`muzzleY()` derive from the config box, so a skin that declares a
+    `muzzle` attachment somewhere else moves the flash artwork and not the
+    projectile. `SkinIndependenceTest.towerMuzzleIsSkinIndependent` proves it by
+    firing a real shot under two wildly different skins.
 16. **Allocation discipline in the step:** no per-target rectangle or vector,
     reused `float[]` for scoring and lead points, indexed loops throughout, no
     per-shot target list. `Castle.freeSlots()` does allocate — it runs on a shop

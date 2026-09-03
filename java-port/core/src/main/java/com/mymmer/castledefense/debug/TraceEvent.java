@@ -34,5 +34,16 @@ public enum TraceEvent {
     ARMOUR_STRIPPED,
     SLAM,
     FALL_DAMAGE,
-    GOLD_PAYOUT
+    GOLD_PAYOUT,
+
+    // --- bosses (Phase 7) ---------------------------------------------------
+    BOSS_SPAWN,
+    BOSS_STATE_CHANGE,
+    BOSS_ATTACK,
+    BOSS_DISRUPTION,
+    BOSS_DEATH,
+    REGALIA_DETACH,
+    REGALIA_RECOVER,
+    DROPPED_ITEM_CREATED,
+    DROPPED_ITEM_RECOVERED
 }

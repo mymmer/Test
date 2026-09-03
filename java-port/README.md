@@ -9,11 +9,17 @@ nothing here modifies it. Both can be run side by side for parity testing.
 * Migration checklist: [`../PORTING_STATUS.md`](../PORTING_STATUS.md)
 * Analysis and design: [`../docs/PORT_ANALYSIS.md`](../docs/PORT_ANALYSIS.md)
 
-**Current state: Phase 6 (enemies and interaction physics).** Both sides of the
-fight exist: the castle, its towers and their counters; the eleven-unit enemy
-roster with its armour, throw physics, crowd behaviour and wave composition; and
-the cursor that grabs, throws, strips and shoves. Still to come: bosses (7), the
-run directors and shop (8), talents (9), UI (10) and rendering (11).
+**Current state: Phase 7 (bosses).** The whole fight exists: the castle and its
+towers, the eleven-unit enemy roster with its armour and throw physics, the
+cursor that grabs and throws and strips, and the three bosses with their
+interactive disruptions — steal the Troll King's crown, batter the Dragon's
+claws, flick the Lich Lord's staff away. Still to come: the run directors and
+shop (8), talents (9), UI (10) and rendering (11).
+
+**A skin cannot change gameplay**, and it is enforced rather than asserted:
+gameplay packages cannot import `assets`, `AttachmentPoint` offers no route to a
+gameplay position, and two radically different skins are proven to produce
+identical simulation output.
 
 Numeric parity with the Python source is proven for the isolated formulas by
 fixtures generated from it — see [`../tools/parity/`](../tools/parity/).
@@ -24,6 +30,7 @@ Subsystem contracts: [`docs/subsystems/`](docs/subsystems/) —
 [DEFENCES](docs/subsystems/DEFENCES.md) ·
 [PROJECTILES](docs/subsystems/PROJECTILES.md) ·
 [ENEMIES](docs/subsystems/ENEMIES.md) ·
+[BOSSES](docs/subsystems/BOSSES.md) ·
 [INTERACTIONS_PHYSICS](docs/subsystems/INTERACTIONS_PHYSICS.md) ·
 [ASSETS_SKINS](docs/subsystems/ASSETS_SKINS.md) ·
 [PERSISTENCE](docs/subsystems/PERSISTENCE.md).

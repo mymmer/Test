@@ -1,6 +1,9 @@
 package com.mymmer.castledefense.interaction;
 
 import com.badlogic.gdx.utils.Array;
+import com.mymmer.castledefense.boss.Boss;
+import com.mymmer.castledefense.boss.BossRegistry;
+import com.mymmer.castledefense.boss.DroppedItem;
 import com.mymmer.castledefense.config.GameConfig;
 import com.mymmer.castledefense.defence.DefenceTower;
 import com.mymmer.castledefense.defence.Target;
@@ -36,17 +39,33 @@ import com.mymmer.castledefense.util.Collisions;
  *
  * <pre>
  *   overchargeable tower under the cursor  → start charging
+ *   boss regalia under the cursor          → tear it off and carry it
+ *   loose regalia on the ground            → pick it up again
+ *   boss smack target under the cursor     → start battering (the Dragon's claws)
  *   grabbable mob under the cursor         → grab it (and its neighbours)
  *   heavy unit under the cursor            → start stripping / shoving
  * </pre>
+ *
+ * <p>Boss regalia sits high in that order because it sits <em>on top of</em> a
+ * very large target: without it, every attempt to grab a crown would be an
+ * attempt to grab the Troll King underneath it — which is refused, so the click
+ * would do nothing at all.
  */
-public final class CursorInteraction implements WorldInteractionHandler {
+public final class CursorInteraction
+        implements WorldInteractionHandler, BossRegistry.InteractionOwner {
 
     /** Python's grab hitbox inflation, and the tower's. */
     private static final float TOWER_GRAB_INFLATE = 14f;
 
     private final EnemyContext ctx;
     private final PointerVelocity velocity;
+    /**
+     * Every dropped regalia item in the world, or null before Phase 7 wiring.
+     *
+     * <p>A <b>collection</b>, never a {@code currentDroppedItem}: two bosses can
+     * be on the field at once, each with its own crown or staff on the ground.
+     */
+    private com.mymmer.castledefense.entity.EntityList<DroppedItem> items;
 
     /** Seconds until another grab is allowed. Difficulty sets the base. */
     private float grabCd;
@@ -58,6 +77,12 @@ public final class CursorInteraction implements WorldInteractionHandler {
 
     private Enemy stripping;
     private DefenceTower charging;
+
+    // --- boss interactions --------------------------------------------------
+    /** A crown or staff currently on the cursor. */
+    private DroppedItem heldItem;
+    /** A boss whose smack target is being battered. */
+    private Boss smacking;
 
     /** Last drag position, in world units. Strip and shove measure against it. */
     private float anchorX;
@@ -85,6 +110,11 @@ public final class CursorInteraction implements WorldInteractionHandler {
         }
         this.ctx = ctx;
         this.velocity = velocity;
+    }
+
+    /** Gives the cursor the world's dropped-item list, so loose regalia can be picked up. */
+    public void setDroppedItems(com.mymmer.castledefense.entity.EntityList<DroppedItem> items) {
+        this.items = items;
     }
 
     // --- upgrades -----------------------------------------------------------
@@ -157,8 +187,19 @@ public final class CursorInteraction implements WorldInteractionHandler {
         return charging;
     }
 
+    /** A crown or staff currently on the cursor, or null. */
+    public DroppedItem heldItem() {
+        return heldItem;
+    }
+
+    /** The boss whose claws are being battered, or null. */
+    public Boss smacking() {
+        return smacking;
+    }
+
     public boolean busy() {
-        return grabbed != null || stripping != null || charging != null;
+        return grabbed != null || stripping != null || charging != null
+                || heldItem != null || smacking != null;
     }
 
     // --- the press ----------------------------------------------------------
@@ -180,14 +221,41 @@ public final class CursorInteraction implements WorldInteractionHandler {
             return true;
         }
 
-        //  2. a grabbable mob
+        //  2. boss regalia wins the click: it sits on top of a big target, and
+        //     the boss underneath refuses to be grabbed, so without this the
+        //     click would simply do nothing.
+        Boss withRegalia = bossRegaliaUnder(px, py);
+        if (withRegalia != null) {
+            DroppedItem item = withRegalia.detachRegalia();
+            if (item != null) {
+                heldItem = item;
+                return true;
+            }
+        }
+
+        //  3. a crown already lying about can be picked up and thrown again
+        DroppedItem loose = looseItemUnder(px, py);
+        if (loose != null) {
+            loose.hold();
+            heldItem = loose;
+            return true;
+        }
+
+        //  4. a Dragon's claws can be battered
+        Boss smackable = bossSmackTargetUnder(px, py);
+        if (smackable != null) {
+            smacking = smackable;
+            return true;
+        }
+
+        //  5. a grabbable mob
         Enemy e = grabbableUnder(px, py);
         if (e != null) {
             beginGrab(e);
             return true;
         }
 
-        //  3. nothing liftable here -- is there a tank to dismantle instead?
+        //  6. nothing liftable here -- is there a tank to dismantle instead?
         Enemy heavy = heavyUnder(px, py);
         if (heavy != null) {
             stripping = heavy;
@@ -213,6 +281,51 @@ public final class CursorInteraction implements WorldInteractionHandler {
                     (int) t.width() + (int) TOWER_GRAB_INFLATE,
                     (int) t.height() + (int) TOWER_GRAB_INFLATE)) {
                 return t;
+            }
+        }
+        return null;
+    }
+
+    /** A boss whose regalia is exposed at this point. */
+    private Boss bossRegaliaUnder(float px, float py) {
+        int n = ctx.targetCount();
+        for (int i = 0; i < n; i++) {
+            Target t = ctx.target(i);
+            if (t instanceof Boss) {
+                Boss b = (Boss) t;
+                if (!b.isSmackTarget() && b.regaliaCovers(px, py)) {
+                    return b;
+                }
+            }
+        }
+        return null;
+    }
+
+    /** A boss whose smack target is exposed at this point. */
+    private Boss bossSmackTargetUnder(float px, float py) {
+        int n = ctx.targetCount();
+        for (int i = 0; i < n; i++) {
+            Target t = ctx.target(i);
+            if (t instanceof Boss) {
+                Boss b = (Boss) t;
+                if (b.isSmackTarget() && b.regaliaCovers(px, py)) {
+                    return b;
+                }
+            }
+        }
+        return null;
+    }
+
+    /** A dropped item resting on the ground at this point. */
+    private DroppedItem looseItemUnder(float px, float py) {
+        if (items == null) {
+            return null;
+        }
+        for (int i = 0; i < items.size(); i++) {
+            DroppedItem it = items.get(i);
+            if (it.isAlive() && it.state() == DroppedItem.State.GROUND
+                    && it.covers(px, py)) {
+                return it;
             }
         }
         return null;
@@ -296,6 +409,34 @@ public final class CursorInteraction implements WorldInteractionHandler {
                 charging = null;        // it went down or got stunned mid-pull
             }
             return;
+        }
+
+        //  carrying a crown or staff: it follows the cursor, quickly but not
+        //  instantly, and its physics stays suspended while held
+        if (heldItem != null) {
+            if (!heldItem.isAlive()) {
+                heldItem = null;
+            } else {
+                heldItem.moveTo(heldItem.x() + (px - heldItem.x()) * 0.55f,
+                        heldItem.y() + (py - heldItem.y()) * 0.55f);
+                heldItem.addSpin(0.25f);
+                return;
+            }
+        }
+
+        //  battering a Dragon's claws: drag distance, not position
+        if (smacking != null) {
+            if (!smacking.regaliaCovers(anchorX, anchorY) && !smacking.isAlive()) {
+                smacking = null;
+            } else {
+                float moved = Collisions.distance(px, py, anchorX, anchorY);
+                anchorX = px;
+                anchorY = py;
+                if (moved > 0.5f) {
+                    smacking.applySmack(moved);
+                }
+                return;
+            }
         }
 
         if (stripping != null) {
@@ -398,6 +539,23 @@ public final class CursorInteraction implements WorldInteractionHandler {
     }
 
     private void release(Pointer pointer, boolean throwIt) {
+        if (heldItem != null) {
+            DroppedItem item = heldItem;
+            heldItem = null;
+            grabCd = grabCooldown;
+            if (throwIt && item.isAlive()) {
+                velocity.velocityFor(pointer.id(), velocityOut);
+                item.throwIt(velocityOut[0], velocityOut[1]);
+            } else if (item.isAlive()) {
+                item.throwIt(0f, 0f);       // cancelled: it simply drops
+            }
+            return;
+        }
+        if (smacking != null) {
+            smacking = null;
+            grabCd = grabCooldown;
+            return;
+        }
         if (charging != null) {
             DefenceTower t = charging;
             charging = null;
@@ -448,6 +606,44 @@ public final class CursorInteraction implements WorldInteractionHandler {
 
     /** Reused, so a release allocates nothing. */
     private final float[] velocityOut = new float[2];
+
+    // ========================================================================
+    //  BossRegistry.InteractionOwner -- what a purge calls
+    // ========================================================================
+
+    /**
+     * A boss died or was purged: drop every reference to it.
+     *
+     * <p>Called by {@link BossRegistry#purge}. Without it the cursor would go on
+     * holding a corpse — still battering claws that no longer exist, or still
+     * dragging a mob that has left the field.
+     */
+    @Override
+    public void releaseBoss(Boss boss) {
+        if (grabbed == boss) {
+            grabbed = null;
+            grabbedExtra.clear();
+        }
+        for (int i = grabbedExtra.size - 1; i >= 0; i--) {
+            if (grabbedExtra.get(i).enemy == boss) {
+                grabbedExtra.removeIndex(i);
+            }
+        }
+        if (stripping == boss) {
+            stripping = null;
+        }
+        if (smacking == boss) {
+            smacking = null;
+        }
+    }
+
+    /** A dropped item was destroyed: stop carrying it. */
+    @Override
+    public void releaseItem(DroppedItem item) {
+        if (heldItem == item) {
+            heldItem = null;
+        }
+    }
 
     /**
      * How far the slingshot has been drawn back, 0..1.

@@ -23,8 +23,10 @@ Every hostile unit, its state machine, its scaling, and what a wave is made of.
   and knows nothing about pointers.
 * **Spawning and pacing.** Composition says *what*; the Phase 8 directors say
   *when*.
-* **Bosses.** Not one exists. Composition emits a `SpawnSpec` carrying a stable
-  boss id; Phase 7 resolves it.
+* **Bosses.** `Boss extends Enemy`, so the arrow runs `boss → enemy` and this
+  package never names a concrete boss — `ArchitectureTest` enforces it. Boss
+  identity is `Enemy.isBoss()`, a flag on the base. Wave composition still emits
+  a `SpawnSpec` carrying a stable boss id; Phase 7's factory resolves it.
 * **Drawing.** No class here has a `draw` method. Visual state Python computes
   in `update` (`anim`, `spin`, `hurtFlash`, `fuse`, `hop`, `ramPush`, `glow`) is
   kept and labelled, because Phase 13 parity will compare it.
@@ -53,6 +55,8 @@ abstract Enemy extends Entity implements Target
         hp(), maxHp(), damage(), armor(), vulnerable(), shove(), stagger();
   int   layers(), gold(), tier();  String tierName(), describe();
   boolean blocked(), trapped(), isBoss();
+  EnemyType type();      // NULL for a boss -- bosses are not in the roster
+  String   typeId();     // always present: the roster id, or the boss id
 
 Necromancer  implements Trappable: summon(), castBolt(), castAtPrisoner(),
              huntingPrisoner(), currentStandoff(), minionCount()
@@ -128,6 +132,12 @@ EnemyContext  extends DefenceContext: horde(), createEnemy(), spawnEnemy(),
     altitude, timers, cloak, dash, summon jitter, multi-grab scatter, wave
     composition. No `new Random()`.
 16. **No pooling, no ECS, no EventBus.** Deferred or rejected per the phase brief.
+17. **`EnemyConfig.type` is null for a boss**, because a boss is not in the
+    roster — it never appears in the unlock table, is never picked by wave
+    weight, and cannot be found by `EnemyType.byId`. Anything that just needs a
+    name uses `typeId()`, which is always present. `EnemyConfig.forBoss` is the
+    one way to build a config from outside this package, and it cannot produce a
+    grabbable, trappable, heavy or strippable unit.
 
 ## Relevant source files
 
