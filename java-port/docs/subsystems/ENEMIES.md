@@ -85,6 +85,13 @@ EnemyContext  extends DefenceContext: horde(), createEnemy(), spawnEnemy(),
 
 ## Important invariants
 
+0b. **A Volatile detonation iterates a SNAPSHOT.** Python walks
+   `list(g.enemies)`, and the reason is not decorative: the blast can kill a
+   boss, and a boss's death purges it and its debris from the roster on the
+   spot. Caching only the count is not enough — the contents move too. Found by
+   a Phase 8 Endless run and fixed there; `EnemyBehaviourTest` and the Endless
+   long-run tests both cover it now.
+
 0. **Gameplay time is `double`.** `attackTimer`, `stagger`, `stormCd`, `tornadoHold`, the per-victim slam cooldowns, and every subclass timer (cloak, dash, summon, cast, escape, ally lifetime) are `double` seconds; positions,
    velocities, angles and drawing state stay `float`. `update`/`think` receive
    the canonical `double` step and narrow it once, themselves, with

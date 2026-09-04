@@ -3,7 +3,9 @@ package com.mymmer.castledefense;
 import com.badlogic.gdx.ApplicationAdapter;
 import com.badlogic.gdx.Gdx;
 import com.mymmer.castledefense.data.DataException;
+import com.mymmer.castledefense.game.GameMode;
 import com.mymmer.castledefense.game.GameWorld;
+import com.mymmer.castledefense.game.RunWorld;
 import com.mymmer.castledefense.game.Simulation;
 import com.mymmer.castledefense.input.DesktopInput;
 import com.mymmer.castledefense.input.GameInput;
@@ -43,6 +45,8 @@ public class CastleDefenseGame extends ApplicationAdapter {
     private final InputRouter inputRouter;
 
     private volatile GameRenderer renderer;
+    /** The run, built once the balance tables are loaded. Null before create(). */
+    private volatile RunWorld run;
 
     //  volatile: libGDX runs create()/render() on the application thread while
     //  tests (and Android lifecycle callbacks) observe from another one
@@ -111,6 +115,16 @@ public class CastleDefenseGame extends ApplicationAdapter {
             services.crashLogger().logCrash(e, "startup data loading");
             startupFailure = e;
         }
+        //  The run is assembled only if the tables loaded.  A startup data
+        //  failure leaves it null and the game shows a broken-content screen
+        //  rather than crashing inside a step.
+        if (startupFailure == null) {
+            run = new RunWorld(world, services.enemies(), services.defences(),
+                    services.bosses(), com.mymmer.castledefense.defence.CombatModifiers.NONE,
+                    input::releaseVelocity);
+            inputRouter.setWorldHandler(run.cursor());
+        }
+
         renderer = rendererFactory.create();
         renderer.create(viewports);
         // A backend may never call resize() before the first frame (the headless
@@ -154,6 +168,12 @@ public class CastleDefenseGame extends ApplicationAdapter {
             // the input clock is simulation time, never wall-clock
             input.setClock((float) world.simulationTime());
             inputRouter.route();
+            if (run != null) {
+                //  the world position the cursor is working at, sampled once
+                //  per step -- gameplay never reads a device
+                com.mymmer.castledefense.input.Pointer p = input.pointer(0);
+                run.setPointer(p.isDown(), p.worldX(), p.worldY());
+            }
             input.endStep();
         }
 
@@ -216,7 +236,7 @@ public class CastleDefenseGame extends ApplicationAdapter {
     private final class CrashContext implements com.mymmer.castledefense.util.CrashLogger.ContextProvider {
         @Override
         public String describe() {
-            return world.describe()
+            return (run != null ? run.describeRun() : world.describe())
                     + " frames=" + renderCount
                     + " paused=" + paused
                     + " screen=" + viewports.getScreenWidth() + "x" + viewports.getScreenHeight()
@@ -231,6 +251,25 @@ public class CastleDefenseGame extends ApplicationAdapter {
 
     public GameWorld getWorld() {
         return world;
+    }
+
+    /** The assembled run, or null if the balance tables failed to load. */
+    public RunWorld getRun() {
+        return run;
+    }
+
+    /**
+     * Starts a run. The entry point Phase 10's menu will call.
+     *
+     * @return the seed the run is on, or {@code Long.MIN_VALUE} if content is
+     *         broken and there is no run to start
+     */
+    public long startRun(GameMode mode) {
+        if (run == null) {
+            return Long.MIN_VALUE;
+        }
+        String id = services.save() != null ? services.save().difficulty : null;
+        return run.beginRun(mode, services.difficulties().get(id));
     }
 
     public Simulation getSimulation() {

@@ -46,7 +46,8 @@ class ArchitectureTest {
     @Test
     @DisplayName("no gameplay package may import the assets package")
     void gameplayNeverImportsAssets() {
-        String[] gameplayPackages = {"enemy", "boss", "defence", "interaction", "game", "entity"};
+        String[] gameplayPackages =
+                {"enemy", "boss", "defence", "interaction", "game", "entity", "progress"};
         Array<String> violations = new Array<>();
         for (String pkg : gameplayPackages) {
             scan(SOURCE_ROOT.resolve(pkg), file -> {
@@ -126,7 +127,8 @@ class ArchitectureTest {
     @Test
     @DisplayName("gameplay packages may not name a rendering type")
     void gameplayNeverImportsRendering() {
-        String[] gameplayPackages = {"enemy", "boss", "defence", "interaction", "entity"};
+        String[] gameplayPackages =
+                {"enemy", "boss", "defence", "interaction", "entity", "progress"};
         Array<String> violations = new Array<>();
         for (String pkg : gameplayPackages) {
             scan(SOURCE_ROOT.resolve(pkg), file -> {

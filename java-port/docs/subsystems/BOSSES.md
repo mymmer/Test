@@ -81,6 +81,14 @@ BossContext extends EnemyContext: addDroppedItem, onBossDefeated,
 
 ## Important invariants
 
+0b. **Scheduling goes through `BossRegistry`, never a `currentBoss`.** Both
+   directors summon by `BossType` through `DirectorContext.summonBoss`, which
+   purges dead bosses first (as `summon_boss` does) and registers the new one.
+   The Endless timetable can therefore put a second boss on the field while the
+   first is still alive, and a repeated boss is a fresh instance with a new uid,
+   full health, no disruption history and no leftover guard. See
+   [`MODES_PROGRESSION.md`](MODES_PROGRESSION.md).
+
 0. **Gameplay time is `double`.** The intro, the regalia guard ladder, `fireDelay`, the Dragon's breath/shot/reel timers and the Lich's summon, bolt, phase, ward and disarm timers are `double` seconds; positions,
    velocities, angles and drawing state stay `float`. `update`/`think` receive
    the canonical `double` step and narrow it once, themselves, with

@@ -612,6 +612,70 @@ public final class CursorInteraction
     // ========================================================================
 
     /**
+     * Lets go of everything, dropping nothing and throwing nothing.
+     *
+     * <p>Python's {@code end_wave}, {@code open_realtime_shop} and
+     * {@code on_castle_destroyed} all clear the same six references by hand. It
+     * is one operation with one meaning — the cursor is no longer holding
+     * anything — so it is one method here.
+     *
+     * <p>A held mob is simply let go where it is: it keeps its state and falls
+     * or walks on. It is not thrown, because no release velocity was ever
+     * measured.
+     */
+    public void releaseEverything() {
+        if (grabbed != null && grabbed.alive()) {
+            grabbed.onRelease(0f, 0f);          // dropped, not thrown
+        }
+        for (int i = 0; i < grabbedExtra.size; i++) {
+            Enemy o = grabbedExtra.get(i).enemy;
+            if (o.alive()) {
+                o.onRelease(0f, 0f);
+            }
+        }
+        grabbed = null;
+        grabbedExtra.clear();
+        stripping = null;
+        charging = null;
+        smacking = null;
+        if (heldItem != null && heldItem.isAlive()) {
+            heldItem.throwIt(0f, 0f);           // it simply falls
+        }
+        heldItem = null;
+    }
+
+    /**
+     * Drops references to anything that died this step.
+     *
+     * <p>Python does this inline at the end of {@code update}. It is separate
+     * here because the world runs it after the sweep, which is the only moment
+     * the answers are all settled.
+     */
+    public void dropDeadReferences() {
+        if (grabbed != null && !grabbed.alive()) {
+            grabbed = null;
+            grabbedExtra.clear();
+        }
+        for (int i = grabbedExtra.size - 1; i >= 0; i--) {
+            if (!grabbedExtra.get(i).enemy.alive()) {
+                grabbedExtra.removeIndex(i);
+            }
+        }
+        if (stripping != null && !stripping.alive()) {
+            stripping = null;
+        }
+        if (heldItem != null && !heldItem.isAlive()) {
+            heldItem = null;
+        }
+        if (charging != null && charging.disabled()) {
+            charging = null;
+        }
+        if (smacking != null && !smacking.isAlive()) {
+            smacking = null;
+        }
+    }
+
+    /**
      * A boss died or was purged: drop every reference to it.
      *
      * <p>Called by {@link BossRegistry#purge}. Without it the cursor would go on

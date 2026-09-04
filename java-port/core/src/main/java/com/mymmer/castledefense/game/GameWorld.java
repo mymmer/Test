@@ -63,6 +63,7 @@ public final class GameWorld implements Simulation.Stepper {
     private long runSeed;
 
     private StepListener stepListener;
+    private AlwaysListener alwaysListener;
 
     /**
      * Hook for systems that must run inside a step.
@@ -73,6 +74,22 @@ public final class GameWorld implements Simulation.Stepper {
      */
     public interface StepListener {
         void onStep(GameWorld world, double dt);
+    }
+
+    /**
+     * Hook for the things that age in <b>every</b> state.
+     *
+     * <p>Python's {@code update} has three tiers, and this is the first of them:
+     * the screen shake, the combo and horn flashes, the storm flash and the
+     * banner countdowns all run before the state check, so a shake started just
+     * before a pause keeps unwinding on the pause screen and a banner posted at
+     * the end of a wave is still counting down in the shop.
+     *
+     * <p>Kept separate from {@link StepListener} rather than folded into it,
+     * because the whole point is that they are governed by different rules.
+     */
+    public interface AlwaysListener {
+        void onAlwaysStep(GameWorld world, double dt);
     }
 
     public GameWorld(Rng rng) {
@@ -101,9 +118,14 @@ public final class GameWorld implements Simulation.Stepper {
             trace.event(TraceEvent.SIMULATION_STEP, steps, 0L, (float) dt, 0f, state.name());
         }
 
+        //  Tier 1: runs in every state, before the freeze check.
+        if (alwaysListener != null) {
+            alwaysListener.onAlwaysStep(this, dt);
+        }
+
         if (!state.advancesWorld()) {
             // Frozen: no gameplay clock, no entity updates, no spawning.
-            // Effects and cosmetic timers will tick here in Phase 11.
+            // Effects will tick here in Phase 11.
             return;
         }
 
@@ -120,6 +142,11 @@ public final class GameWorld implements Simulation.Stepper {
     /** Attaches the per-step system hook. One owner, set by the run builder. */
     public void setStepListener(StepListener listener) {
         this.stepListener = listener;
+    }
+
+    /** Attaches the always-tier hook. One owner, set by the run builder. */
+    public void setAlwaysListener(AlwaysListener listener) {
+        this.alwaysListener = listener;
     }
 
     // --- clocks -------------------------------------------------------------

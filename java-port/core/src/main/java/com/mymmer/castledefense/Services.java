@@ -40,6 +40,9 @@ public final class Services implements Disposable {
     private final Rng rng;
 
     private DifficultyTable difficulties;
+    private com.mymmer.castledefense.enemy.EnemyTable enemies;
+    private com.mymmer.castledefense.defence.DefenceTable defences;
+    private com.mymmer.castledefense.boss.BossTable bosses;
     private SaveData save;
     private QualityConfig quality = QualityConfig.HIGH;
 
@@ -82,7 +85,13 @@ public final class Services implements Disposable {
 
         Strings.load();
 
-        difficulties = DifficultyTable.load(json);   // fatal if broken
+        //  All four balance tables are fatal if broken, for the same reason:
+        //  a game that cannot be balanced correctly should say so at startup
+        //  rather than at wave 12.
+        difficulties = DifficultyTable.load(json);
+        enemies = com.mymmer.castledefense.enemy.EnemyTable.load(json);
+        defences = com.mymmer.castledefense.defence.DefenceTable.load(json);
+        bosses = com.mymmer.castledefense.boss.BossTable.load(json);
 
         save = saves.load();
         if (!saves.lastLoadNote().isEmpty()) {
@@ -143,6 +152,21 @@ public final class Services implements Disposable {
     }
 
     /** Null until {@link #start()} has run. */
+    /** The enemy stat, unlock and endgame-tier table. */
+    public com.mymmer.castledefense.enemy.EnemyTable enemies() {
+        return enemies;
+    }
+
+    /** The tower, castle and structure table. */
+    public com.mymmer.castledefense.defence.DefenceTable defences() {
+        return defences;
+    }
+
+    /** The boss table. */
+    public com.mymmer.castledefense.boss.BossTable bosses() {
+        return bosses;
+    }
+
     public SaveData save() {
         return save;
     }

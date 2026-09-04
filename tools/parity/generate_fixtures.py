@@ -47,6 +47,7 @@ import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 SPRITES = os.path.join(ROOT, "sprites.py")
+MAIN = os.path.join(ROOT, "main.py")
 OUT = os.path.join(ROOT, "java-port", "core", "src", "test",
                    "resources", "parity", "fixtures.json")
 
@@ -82,6 +83,11 @@ def read_constants(path):
 
 
 C = read_constants(SPRITES)
+#  The Endless timetable, the horn and the talent income live in main.py's
+#  tuning block rather than in sprites.py, so it is parsed the same way -- read
+#  only, never imported.
+M = read_constants(MAIN)
+C.update({k: v for k, v in M.items() if k not in C})
 
 REQUIRED = ["GRAVITY", "AIR_DRAG", "THROW_POWER", "FALL_DMG_FLOOR", "FALL_DMG_SCALE",
             "SLAM_DMG_FLOOR", "SLAM_DMG_SCALE", "BOUNCE_RESTITUTION", "BOUNCE_DMG_BONUS",
@@ -89,7 +95,17 @@ REQUIRED = ["GRAVITY", "AIR_DRAG", "THROW_POWER", "FALL_DMG_FLOOR", "FALL_DMG_SC
             "STRIP_DISTANCE", "STRIP_SLOW", "STRIP_VULN", "GROUND_Y", "CASTLE_FRONT",
             "WIDTH", "GRAB_CAPACITY",
             "REGALIA_COOLDOWN", "REGALIA_CD_GROWTH", "CROWN_RETRIEVE_SPEED",
-            "STAFF_DISARM_TIME", "CLAW_SMACK_DISTANCE", "CLAW_STAGGER", "WALL_TOP"]
+            "STAFF_DISARM_TIME", "CLAW_SMACK_DISTANCE", "CLAW_STAGGER", "WALL_TOP",
+            #  --- Phase 8: progression, scoring and the Endless timetable ---
+            "POP_GOLD_FREE", "POP_GOLD_STEP", "POP_GOLD_CAP",
+            "SCORE_PER_PX", "SCORE_PER_SEC", "SCORE_COMBO_STEP",
+            "STARTING_GOLD", "WIND_MAX", "STORM_CHANCE", "STORM_DAMAGE",
+            "STORM_CEILING", "STORM_COOLDOWN",
+            "ENDLESS_TIER_SECONDS", "ENDLESS_SPAWN_START", "ENDLESS_SPAWN_MIN",
+            "ENDLESS_SPAWN_RAMP", "ENDLESS_SPAWN_JITTER", "ENDLESS_MAX_ALIVE",
+            "ENDLESS_BOSS_REPEAT", "ENDLESS_HORN_RUSH",
+            "HARD_HORN_RUSH", "HARD_HORN_TIER_BONUS", "HORN_BONUS",
+            "TALENT_POINTS_PER_WAVE", "TALENT_SECONDS_PER_POINT"]
 missing = [k for k in REQUIRED if k not in C]
 if missing:
     sys.exit("could not read these constants out of sprites.py: " + ", ".join(missing))
@@ -323,6 +339,170 @@ def lich_summon_count(wave):
 #  Fixture cases
 # ===========================================================================
 
+# ===========================================================================
+#  PHASE 8: progression, scoring and the Endless timetable.
+#
+#  Same rule as the block above -- each function names the source location it
+#  mirrors, and every one of them is DOUBLE arithmetic, because that is what
+#  Python does and now what the port does too.
+# ===========================================================================
+
+#  main.py:244 ENDLESS_BOSS_SCHEDULE, transcribed: the parser above reads
+#  scalars, not tuples of (time, class).
+ENDLESS_BOSS_SCHEDULE = ((120.0, "troll_king"), (240.0, "dragon"), (360.0, "lich_lord"))
+MAX_ALIVE_CLASSIC = 58          # enemies.py:2131 -- NOT the Endless 60
+
+
+def classic_wave_bonus(wave, wave_purse=0.0):
+    """main.py:1783  end_wave -- 80 + wave * 22 + int(talents.wave_purse)."""
+    return 80 + wave * 22 + int(wave_purse)
+
+
+def classic_spawn_interval(wave):
+    """main.py:1740  start_wave -- max(0.32, 1.25 - wave * 0.032)."""
+    return max(0.32, 1.25 - wave * 0.032)
+
+
+def endless_tier(play_time):
+    """main.py:1668  update_endless_schedule -- 1 + int(play_time / 30)."""
+    return 1 + int(play_time / C["ENDLESS_TIER_SECONDS"])
+
+
+def endless_spawn_gap_base(play_time):
+    """main.py:1619  endless_spawn_gap, before the jitter.
+
+    lerp(START, MIN, clamp(play_time / RAMP, 0, 1))."""
+    t = min(1.0, max(0.0, play_time / C["ENDLESS_SPAWN_RAMP"]))
+    a, b = C["ENDLESS_SPAWN_START"], C["ENDLESS_SPAWN_MIN"]
+    return a + (b - a) * t
+
+
+def endless_spawn_gap(play_time, u):
+    """The same gap with an explicit uniform sample u in [0, 1].
+
+    Python draws random.uniform(1 - J, 1 + J); passing u makes the fixture
+    independent of the RNG while still checking the arithmetic."""
+    j = C["ENDLESS_SPAWN_JITTER"]
+    return endless_spawn_gap_base(play_time) * ((1.0 - j) + u * 2.0 * j)
+
+
+def endless_bosses_due(play_time):
+    """How many scripted bosses have arrived by play_time, and how many
+    repeats.  main.py:1678.
+
+      scripted:  while next < len(SCHEDULE) and play_time >= SCHEDULE[next][0]
+      repeats:   due = int((play_time - LAST) / REPEAT), summoned when it
+                 exceeds the number already sent
+    """
+    scripted = sum(1 for (t, _c) in ENDLESS_BOSS_SCHEDULE if play_time >= t)
+    repeats = 0
+    if scripted >= len(ENDLESS_BOSS_SCHEDULE):
+        last = ENDLESS_BOSS_SCHEDULE[-1][0]
+        repeats = max(0, int((play_time - last) / C["ENDLESS_BOSS_REPEAT"]))
+    return scripted, repeats
+
+
+def endless_talent_points(play_time):
+    """main.py:1663 -- one point per TALENT_SECONDS_PER_POINT survived.
+
+    The counter SUBTRACTS rather than resetting, so the answer is exactly
+    floor(play_time / 60) with no drift however long the run is."""
+    return int(play_time / C["TALENT_SECONDS_PER_POINT"])
+
+
+def crowd_gold_multiplier(n, horn_bonus=0.0, gold_scale=1.0,
+                          gold_pop=1.0, kill_gold=1.0):
+    """main.py:1332  gold_multiplier.
+
+    NOTE the cap is scaled by the talent as well as the step, and NOTE that
+    `n` includes the mob that is dying -- Enemy.die reads this before it
+    clears its own alive flag."""
+    step = C["POP_GOLD_STEP"] * gold_pop
+    base = min(C["POP_GOLD_CAP"] * gold_pop,
+               1.0 + step * max(0, n - int(C["POP_GOLD_FREE"])))
+    return base * (1.0 + horn_bonus) * kill_gold * gold_scale
+
+
+def kill_payout(gold, mult):
+    """enemies.py:426  die -- max(1, int(round(gold * mult)))."""
+    return max(1, int(round(gold * mult)))
+
+
+def fling_travel(x, x0, y0, peak):
+    """enemies.py:514 -- across, plus how high it got."""
+    return abs(x - x0) + max(0.0, y0 - peak)
+
+
+def fling_combo(hits):
+    """enemies.py:516 -- 1 + SCORE_COMBO_STEP * hits."""
+    return 1.0 + C["SCORE_COMBO_STEP"] * hits
+
+
+def fling_points(travel, airtime, hits):
+    """enemies.py:515  base = travel*PER_PX + airtime*PER_SEC; int(base*combo).
+
+    The int() TRUNCATES; it does not round."""
+    base = travel * C["SCORE_PER_PX"] + airtime * C["SCORE_PER_SEC"]
+    return int(base * fling_combo(hits))
+
+
+def awarded_score(points, horn_bonus=0.0, score_mult=1.0):
+    """main.py:1442  add_score -- int(pts * (1 + horn) * showman).
+
+    A SECOND truncation, applied to the already-truncated fling points."""
+    return int(points * (1.0 + horn_bonus) * score_mult)
+
+
+def wind_from_sample(u):
+    """main.py:1597  roll_weather -- uniform(-1, 1) * WIND_MAX, with u in [0,1]."""
+    return (-1.0 + u * 2.0) * C["WIND_MAX"]
+
+
+def storm_strike_damage(max_hp, lightning_mult=1.0):
+    """main.py:1430  strike_lightning -- max_hp * STORM_DAMAGE * talent."""
+    return max_hp * C["STORM_DAMAGE"] * lightning_mult
+
+
+def shake_add(current, amount):
+    """main.py:1483  add_shake -- min(14, shake + amount)."""
+    return min(14.0, current + amount)
+
+
+def shake_after(current, dt):
+    """main.py:2098 -- max(0, shake - dt * 42)."""
+    return max(0.0, current - dt * 42.0)
+
+
+def horn_head_count(endless, elite, queued):
+    """How many units a horn puts on the field.  main.py:1380 blow_horn.
+
+    Classic keeps the head-count of the remaining queue, elite or not: the
+    Hard horn SWAPS chaff rather than adding to it."""
+    if endless:
+        return int(C["HARD_HORN_RUSH"]) if elite else int(C["ENDLESS_HORN_RUSH"])
+    return queued
+
+
+def horn_swap_cap(queued):
+    """main.py:1370  upgrade_horn_queue -- max(1, len // 2) entries swapped."""
+    return max(1, queued // 2)
+
+
+def wave_clear_fires(elapsed, dt):
+    """main.py:2190 -- the delay accumulates and fires on `> 1.1`, strictly.
+
+    Returns the step index the wave ends on when the field is clear from
+    step 1, or -1."""
+    acc = 0.0
+    for step in range(1, 100000):
+        acc += dt
+        if acc > 1.1:
+            return step
+        if step * dt > elapsed:
+            return -1
+    return -1
+
+
 def build():
     fx = {
         "//": "Generated by tools/parity/generate_fixtures.py from the "
@@ -343,6 +523,19 @@ def build():
         "crownRetrieve": [],
         "dragonBreath": [],
         "dragonSmack": [],
+        "classicWaveBonus": [],
+        "classicSpawnInterval": [],
+        "endlessTier": [],
+        "endlessSpawnGap": [],
+        "endlessBossSchedule": [],
+        "endlessTalentIncome": [],
+        "crowdGold": [],
+        "killPayout": [],
+        "flingScore": [],
+        "weather": [],
+        "screenShake": [],
+        "hornComposition": [],
+        "waveClear": [],
         "lichWard": [],
         "droppedItem": [],
         "regaliaThrowCap": [],
@@ -510,6 +703,103 @@ def build():
         fx["lichSummon"].append({"wave": wave,
                                  "interval": lich_summon_interval(wave),
                                  "count": lich_summon_count(wave)})
+
+    # ---------------------------------------------------------------- Phase 8
+    for wave in (1, 2, 5, 10, 20, 33, 50, 99):
+        for purse in (0.0, 40.0, 125.0):
+            fx["classicWaveBonus"].append({"wave": wave, "wavePurse": purse,
+                                           "bonus": classic_wave_bonus(wave, purse)})
+        fx["classicSpawnInterval"].append({"wave": wave,
+                                           "interval": classic_spawn_interval(wave)})
+
+    #  Boundaries first: 30 s is a tier edge, and the step either side of it is
+    #  where a float clock would disagree with a double one.
+    tier_times = [0.0, 29.98333333333333, 30.0, 30.016666666666666,
+                  59.98333333333333, 60.0, 60.016666666666666,
+                  119.98333333333333, 120.0, 120.016666666666666,
+                  300.0, 599.9, 600.0, 1800.0, 3600.0]
+    for t in tier_times:
+        fx["endlessTier"].append({"playTime": t, "tier": endless_tier(t)})
+        fx["endlessTalentIncome"].append({"playTime": t,
+                                          "points": endless_talent_points(t)})
+        s, r = endless_bosses_due(t)
+        fx["endlessBossSchedule"].append({"playTime": t, "scripted": s, "repeats": r})
+
+    for t in (0.0, 30.0, 60.0, 150.0, 299.9, 300.0, 300.1, 600.0, 3600.0):
+        row = {"playTime": t, "baseGap": endless_spawn_gap_base(t)}
+        for name, u in (("gapAtMinJitter", 0.0), ("gapAtMidJitter", 0.5),
+                        ("gapAtMaxJitter", 1.0)):
+            row[name] = endless_spawn_gap(t, u)
+        fx["endlessSpawnGap"].append(row)
+
+    for t in (480.0, 600.0, 720.0, 1200.0):
+        s, r = endless_bosses_due(t)
+        fx["endlessBossSchedule"].append({"playTime": t, "scripted": s, "repeats": r})
+
+    for n in (0, 1, 4, 5, 6, 12, 30, 60, 100):
+        for horn in (0.0, C["HORN_BONUS"]):
+            for gold_scale in (1.0, 1.35):
+                fx["crowdGold"].append({
+                    "alive": n, "hornBonus": horn, "goldScale": gold_scale,
+                    "multiplier": crowd_gold_multiplier(n, horn, gold_scale)})
+    for gold, n in ((8, 1), (8, 30), (46, 12), (520, 60), (1, 100)):
+        mult = crowd_gold_multiplier(n)
+        fx["killPayout"].append({"baseGold": gold, "alive": n, "multiplier": mult,
+                                 "payout": kill_payout(gold, mult)})
+
+    for (x, x0, y0, peak, airtime, hits) in (
+            (900.0, 900.0, 600.0, 600.0, 0.0, 0),
+            (1200.0, 400.0, 600.0, 180.0, 1.75, 0),
+            (1200.0, 400.0, 600.0, 180.0, 1.75, 3),
+            (300.0, 1100.0, 620.0, 24.0, 3.5, 7),
+            (640.0, 640.0, 500.0, 120.0, 0.9166666666666666, 1)):
+        travel = fling_travel(x, x0, y0, peak)
+        pts = fling_points(travel, airtime, hits)
+        fx["flingScore"].append({
+            "x": x, "startX": x0, "startY": y0, "peakY": peak,
+            "airtime": airtime, "hits": hits,
+            "travel": travel, "combo": fling_combo(hits), "points": pts,
+            "awardedPlain": awarded_score(pts),
+            "awardedWithHorn": awarded_score(pts, C["HORN_BONUS"]),
+            "awardedWithShowman": awarded_score(pts, 0.0, 1.25)})
+
+    for u in (0.0, 0.25, 0.5, 0.75, 1.0):
+        fx["weather"].append({"sample": u, "wind": wind_from_sample(u),
+                              "windMax": C["WIND_MAX"],
+                              "headwindThreshold": C["WIND_MAX"] * 0.45})
+    for hp in (120.0, 1200.0, 8400.0):
+        fx["weather"].append({"maxHp": hp, "strikeDamage": storm_strike_damage(hp),
+                              "stormCeiling": C["STORM_CEILING"],
+                              "stormCooldown": C["STORM_COOLDOWN"]})
+
+    for start, add in ((0.0, 8.0), (8.0, 9.0), (13.0, 10.0), (14.0, 5.0)):
+        fx["screenShake"].append({"before": start, "add": add,
+                                  "after": shake_add(start, add)})
+    for start in (14.0, 8.0, 0.5):
+        fx["screenShake"].append({"before": start, "dt": DT,
+                                  "afterOneStep": shake_after(start, DT),
+                                  "stepsToZero": int(math.ceil(start / (DT * 42.0)))})
+
+    for queued in (1, 4, 9, 12, 25):
+        fx["hornComposition"].append({
+            "endless": False, "elite": False, "queued": queued,
+            "spawned": horn_head_count(False, False, queued),
+            "swapCap": horn_swap_cap(queued)})
+        fx["hornComposition"].append({
+            "endless": False, "elite": True, "queued": queued,
+            "spawned": horn_head_count(False, True, queued),
+            "swapCap": horn_swap_cap(queued)})
+    fx["hornComposition"].append({"endless": True, "elite": False, "queued": 0,
+                                  "spawned": horn_head_count(True, False, 0),
+                                  "swapCap": 0})
+    fx["hornComposition"].append({"endless": True, "elite": True, "queued": 0,
+                                  "spawned": horn_head_count(True, True, 0),
+                                  "swapCap": 0,
+                                  "tierBonus": int(C["HARD_HORN_TIER_BONUS"])})
+
+    fx["waveClear"].append({"delay": 1.1, "dt": DT,
+                            "firesOnStep": wave_clear_fires(10.0, DT),
+                            "note": "strictly greater than 1.1"})
     return fx
 
 

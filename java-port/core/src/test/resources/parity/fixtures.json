@@ -41,7 +41,32 @@
     "STAFF_DISARM_TIME": 5.0,
     "CLAW_SMACK_DISTANCE": 360.0,
     "CLAW_STAGGER": 3.2,
-    "WALL_TOP": 350.0
+    "WALL_TOP": 350.0,
+    "POP_GOLD_FREE": 4.0,
+    "POP_GOLD_STEP": 0.055,
+    "POP_GOLD_CAP": 3.0,
+    "SCORE_PER_PX": 0.32,
+    "SCORE_PER_SEC": 55.0,
+    "SCORE_COMBO_STEP": 0.75,
+    "STARTING_GOLD": 220.0,
+    "WIND_MAX": 260.0,
+    "STORM_CHANCE": 0.3,
+    "STORM_DAMAGE": 0.34,
+    "STORM_CEILING": 132.0,
+    "STORM_COOLDOWN": 1.1,
+    "ENDLESS_TIER_SECONDS": 30.0,
+    "ENDLESS_SPAWN_START": 1.7,
+    "ENDLESS_SPAWN_MIN": 0.38,
+    "ENDLESS_SPAWN_RAMP": 300.0,
+    "ENDLESS_SPAWN_JITTER": 0.28,
+    "ENDLESS_MAX_ALIVE": 60.0,
+    "ENDLESS_BOSS_REPEAT": 120.0,
+    "ENDLESS_HORN_RUSH": 12.0,
+    "HARD_HORN_RUSH": 10.0,
+    "HARD_HORN_TIER_BONUS": 3.0,
+    "HORN_BONUS": 0.6,
+    "TALENT_POINTS_PER_WAVE": 1.0,
+    "TALENT_SECONDS_PER_POINT": 60.0
   },
   "waveScaling": [
     {
@@ -2106,6 +2131,955 @@
       "progress": 2.0,
       "smackDistance": 360.0,
       "completesAlone": true
+    }
+  ],
+  "classicWaveBonus": [
+    {
+      "wave": 1,
+      "wavePurse": 0.0,
+      "bonus": 102
+    },
+    {
+      "wave": 1,
+      "wavePurse": 40.0,
+      "bonus": 142
+    },
+    {
+      "wave": 1,
+      "wavePurse": 125.0,
+      "bonus": 227
+    },
+    {
+      "wave": 2,
+      "wavePurse": 0.0,
+      "bonus": 124
+    },
+    {
+      "wave": 2,
+      "wavePurse": 40.0,
+      "bonus": 164
+    },
+    {
+      "wave": 2,
+      "wavePurse": 125.0,
+      "bonus": 249
+    },
+    {
+      "wave": 5,
+      "wavePurse": 0.0,
+      "bonus": 190
+    },
+    {
+      "wave": 5,
+      "wavePurse": 40.0,
+      "bonus": 230
+    },
+    {
+      "wave": 5,
+      "wavePurse": 125.0,
+      "bonus": 315
+    },
+    {
+      "wave": 10,
+      "wavePurse": 0.0,
+      "bonus": 300
+    },
+    {
+      "wave": 10,
+      "wavePurse": 40.0,
+      "bonus": 340
+    },
+    {
+      "wave": 10,
+      "wavePurse": 125.0,
+      "bonus": 425
+    },
+    {
+      "wave": 20,
+      "wavePurse": 0.0,
+      "bonus": 520
+    },
+    {
+      "wave": 20,
+      "wavePurse": 40.0,
+      "bonus": 560
+    },
+    {
+      "wave": 20,
+      "wavePurse": 125.0,
+      "bonus": 645
+    },
+    {
+      "wave": 33,
+      "wavePurse": 0.0,
+      "bonus": 806
+    },
+    {
+      "wave": 33,
+      "wavePurse": 40.0,
+      "bonus": 846
+    },
+    {
+      "wave": 33,
+      "wavePurse": 125.0,
+      "bonus": 931
+    },
+    {
+      "wave": 50,
+      "wavePurse": 0.0,
+      "bonus": 1180
+    },
+    {
+      "wave": 50,
+      "wavePurse": 40.0,
+      "bonus": 1220
+    },
+    {
+      "wave": 50,
+      "wavePurse": 125.0,
+      "bonus": 1305
+    },
+    {
+      "wave": 99,
+      "wavePurse": 0.0,
+      "bonus": 2258
+    },
+    {
+      "wave": 99,
+      "wavePurse": 40.0,
+      "bonus": 2298
+    },
+    {
+      "wave": 99,
+      "wavePurse": 125.0,
+      "bonus": 2383
+    }
+  ],
+  "classicSpawnInterval": [
+    {
+      "wave": 1,
+      "interval": 1.218
+    },
+    {
+      "wave": 2,
+      "interval": 1.186
+    },
+    {
+      "wave": 5,
+      "interval": 1.09
+    },
+    {
+      "wave": 10,
+      "interval": 0.9299999999999999
+    },
+    {
+      "wave": 20,
+      "interval": 0.61
+    },
+    {
+      "wave": 33,
+      "interval": 0.32
+    },
+    {
+      "wave": 50,
+      "interval": 0.32
+    },
+    {
+      "wave": 99,
+      "interval": 0.32
+    }
+  ],
+  "endlessTier": [
+    {
+      "playTime": 0.0,
+      "tier": 1
+    },
+    {
+      "playTime": 29.98333333333333,
+      "tier": 1
+    },
+    {
+      "playTime": 30.0,
+      "tier": 2
+    },
+    {
+      "playTime": 30.016666666666666,
+      "tier": 2
+    },
+    {
+      "playTime": 59.98333333333333,
+      "tier": 2
+    },
+    {
+      "playTime": 60.0,
+      "tier": 3
+    },
+    {
+      "playTime": 60.016666666666666,
+      "tier": 3
+    },
+    {
+      "playTime": 119.98333333333333,
+      "tier": 4
+    },
+    {
+      "playTime": 120.0,
+      "tier": 5
+    },
+    {
+      "playTime": 120.01666666666667,
+      "tier": 5
+    },
+    {
+      "playTime": 300.0,
+      "tier": 11
+    },
+    {
+      "playTime": 599.9,
+      "tier": 20
+    },
+    {
+      "playTime": 600.0,
+      "tier": 21
+    },
+    {
+      "playTime": 1800.0,
+      "tier": 61
+    },
+    {
+      "playTime": 3600.0,
+      "tier": 121
+    }
+  ],
+  "endlessSpawnGap": [
+    {
+      "playTime": 0.0,
+      "baseGap": 1.7,
+      "gapAtMinJitter": 1.224,
+      "gapAtMidJitter": 1.7,
+      "gapAtMaxJitter": 2.176
+    },
+    {
+      "playTime": 30.0,
+      "baseGap": 1.568,
+      "gapAtMinJitter": 1.12896,
+      "gapAtMidJitter": 1.568,
+      "gapAtMaxJitter": 2.00704
+    },
+    {
+      "playTime": 60.0,
+      "baseGap": 1.436,
+      "gapAtMinJitter": 1.03392,
+      "gapAtMidJitter": 1.436,
+      "gapAtMaxJitter": 1.83808
+    },
+    {
+      "playTime": 150.0,
+      "baseGap": 1.04,
+      "gapAtMinJitter": 0.7488,
+      "gapAtMidJitter": 1.04,
+      "gapAtMaxJitter": 1.3312000000000002
+    },
+    {
+      "playTime": 299.9,
+      "baseGap": 0.3804400000000001,
+      "gapAtMinJitter": 0.27391680000000007,
+      "gapAtMidJitter": 0.3804400000000001,
+      "gapAtMaxJitter": 0.48696320000000015
+    },
+    {
+      "playTime": 300.0,
+      "baseGap": 0.3800000000000001,
+      "gapAtMinJitter": 0.27360000000000007,
+      "gapAtMidJitter": 0.3800000000000001,
+      "gapAtMaxJitter": 0.48640000000000017
+    },
+    {
+      "playTime": 300.1,
+      "baseGap": 0.3800000000000001,
+      "gapAtMinJitter": 0.27360000000000007,
+      "gapAtMidJitter": 0.3800000000000001,
+      "gapAtMaxJitter": 0.48640000000000017
+    },
+    {
+      "playTime": 600.0,
+      "baseGap": 0.3800000000000001,
+      "gapAtMinJitter": 0.27360000000000007,
+      "gapAtMidJitter": 0.3800000000000001,
+      "gapAtMaxJitter": 0.48640000000000017
+    },
+    {
+      "playTime": 3600.0,
+      "baseGap": 0.3800000000000001,
+      "gapAtMinJitter": 0.27360000000000007,
+      "gapAtMidJitter": 0.3800000000000001,
+      "gapAtMaxJitter": 0.48640000000000017
+    }
+  ],
+  "endlessBossSchedule": [
+    {
+      "playTime": 0.0,
+      "scripted": 0,
+      "repeats": 0
+    },
+    {
+      "playTime": 29.98333333333333,
+      "scripted": 0,
+      "repeats": 0
+    },
+    {
+      "playTime": 30.0,
+      "scripted": 0,
+      "repeats": 0
+    },
+    {
+      "playTime": 30.016666666666666,
+      "scripted": 0,
+      "repeats": 0
+    },
+    {
+      "playTime": 59.98333333333333,
+      "scripted": 0,
+      "repeats": 0
+    },
+    {
+      "playTime": 60.0,
+      "scripted": 0,
+      "repeats": 0
+    },
+    {
+      "playTime": 60.016666666666666,
+      "scripted": 0,
+      "repeats": 0
+    },
+    {
+      "playTime": 119.98333333333333,
+      "scripted": 0,
+      "repeats": 0
+    },
+    {
+      "playTime": 120.0,
+      "scripted": 1,
+      "repeats": 0
+    },
+    {
+      "playTime": 120.01666666666667,
+      "scripted": 1,
+      "repeats": 0
+    },
+    {
+      "playTime": 300.0,
+      "scripted": 2,
+      "repeats": 0
+    },
+    {
+      "playTime": 599.9,
+      "scripted": 3,
+      "repeats": 1
+    },
+    {
+      "playTime": 600.0,
+      "scripted": 3,
+      "repeats": 2
+    },
+    {
+      "playTime": 1800.0,
+      "scripted": 3,
+      "repeats": 12
+    },
+    {
+      "playTime": 3600.0,
+      "scripted": 3,
+      "repeats": 27
+    },
+    {
+      "playTime": 480.0,
+      "scripted": 3,
+      "repeats": 1
+    },
+    {
+      "playTime": 600.0,
+      "scripted": 3,
+      "repeats": 2
+    },
+    {
+      "playTime": 720.0,
+      "scripted": 3,
+      "repeats": 3
+    },
+    {
+      "playTime": 1200.0,
+      "scripted": 3,
+      "repeats": 7
+    }
+  ],
+  "endlessTalentIncome": [
+    {
+      "playTime": 0.0,
+      "points": 0
+    },
+    {
+      "playTime": 29.98333333333333,
+      "points": 0
+    },
+    {
+      "playTime": 30.0,
+      "points": 0
+    },
+    {
+      "playTime": 30.016666666666666,
+      "points": 0
+    },
+    {
+      "playTime": 59.98333333333333,
+      "points": 0
+    },
+    {
+      "playTime": 60.0,
+      "points": 1
+    },
+    {
+      "playTime": 60.016666666666666,
+      "points": 1
+    },
+    {
+      "playTime": 119.98333333333333,
+      "points": 1
+    },
+    {
+      "playTime": 120.0,
+      "points": 2
+    },
+    {
+      "playTime": 120.01666666666667,
+      "points": 2
+    },
+    {
+      "playTime": 300.0,
+      "points": 5
+    },
+    {
+      "playTime": 599.9,
+      "points": 9
+    },
+    {
+      "playTime": 600.0,
+      "points": 10
+    },
+    {
+      "playTime": 1800.0,
+      "points": 30
+    },
+    {
+      "playTime": 3600.0,
+      "points": 60
+    }
+  ],
+  "crowdGold": [
+    {
+      "alive": 0,
+      "hornBonus": 0.0,
+      "goldScale": 1.0,
+      "multiplier": 1.0
+    },
+    {
+      "alive": 0,
+      "hornBonus": 0.0,
+      "goldScale": 1.35,
+      "multiplier": 1.35
+    },
+    {
+      "alive": 0,
+      "hornBonus": 0.6,
+      "goldScale": 1.0,
+      "multiplier": 1.6
+    },
+    {
+      "alive": 0,
+      "hornBonus": 0.6,
+      "goldScale": 1.35,
+      "multiplier": 2.16
+    },
+    {
+      "alive": 1,
+      "hornBonus": 0.0,
+      "goldScale": 1.0,
+      "multiplier": 1.0
+    },
+    {
+      "alive": 1,
+      "hornBonus": 0.0,
+      "goldScale": 1.35,
+      "multiplier": 1.35
+    },
+    {
+      "alive": 1,
+      "hornBonus": 0.6,
+      "goldScale": 1.0,
+      "multiplier": 1.6
+    },
+    {
+      "alive": 1,
+      "hornBonus": 0.6,
+      "goldScale": 1.35,
+      "multiplier": 2.16
+    },
+    {
+      "alive": 4,
+      "hornBonus": 0.0,
+      "goldScale": 1.0,
+      "multiplier": 1.0
+    },
+    {
+      "alive": 4,
+      "hornBonus": 0.0,
+      "goldScale": 1.35,
+      "multiplier": 1.35
+    },
+    {
+      "alive": 4,
+      "hornBonus": 0.6,
+      "goldScale": 1.0,
+      "multiplier": 1.6
+    },
+    {
+      "alive": 4,
+      "hornBonus": 0.6,
+      "goldScale": 1.35,
+      "multiplier": 2.16
+    },
+    {
+      "alive": 5,
+      "hornBonus": 0.0,
+      "goldScale": 1.0,
+      "multiplier": 1.055
+    },
+    {
+      "alive": 5,
+      "hornBonus": 0.0,
+      "goldScale": 1.35,
+      "multiplier": 1.42425
+    },
+    {
+      "alive": 5,
+      "hornBonus": 0.6,
+      "goldScale": 1.0,
+      "multiplier": 1.688
+    },
+    {
+      "alive": 5,
+      "hornBonus": 0.6,
+      "goldScale": 1.35,
+      "multiplier": 2.2788
+    },
+    {
+      "alive": 6,
+      "hornBonus": 0.0,
+      "goldScale": 1.0,
+      "multiplier": 1.11
+    },
+    {
+      "alive": 6,
+      "hornBonus": 0.0,
+      "goldScale": 1.35,
+      "multiplier": 1.4985000000000002
+    },
+    {
+      "alive": 6,
+      "hornBonus": 0.6,
+      "goldScale": 1.0,
+      "multiplier": 1.7760000000000002
+    },
+    {
+      "alive": 6,
+      "hornBonus": 0.6,
+      "goldScale": 1.35,
+      "multiplier": 2.3976000000000006
+    },
+    {
+      "alive": 12,
+      "hornBonus": 0.0,
+      "goldScale": 1.0,
+      "multiplier": 1.44
+    },
+    {
+      "alive": 12,
+      "hornBonus": 0.0,
+      "goldScale": 1.35,
+      "multiplier": 1.944
+    },
+    {
+      "alive": 12,
+      "hornBonus": 0.6,
+      "goldScale": 1.0,
+      "multiplier": 2.304
+    },
+    {
+      "alive": 12,
+      "hornBonus": 0.6,
+      "goldScale": 1.35,
+      "multiplier": 3.1104
+    },
+    {
+      "alive": 30,
+      "hornBonus": 0.0,
+      "goldScale": 1.0,
+      "multiplier": 2.4299999999999997
+    },
+    {
+      "alive": 30,
+      "hornBonus": 0.0,
+      "goldScale": 1.35,
+      "multiplier": 3.2805
+    },
+    {
+      "alive": 30,
+      "hornBonus": 0.6,
+      "goldScale": 1.0,
+      "multiplier": 3.888
+    },
+    {
+      "alive": 30,
+      "hornBonus": 0.6,
+      "goldScale": 1.35,
+      "multiplier": 5.2488
+    },
+    {
+      "alive": 60,
+      "hornBonus": 0.0,
+      "goldScale": 1.0,
+      "multiplier": 3.0
+    },
+    {
+      "alive": 60,
+      "hornBonus": 0.0,
+      "goldScale": 1.35,
+      "multiplier": 4.050000000000001
+    },
+    {
+      "alive": 60,
+      "hornBonus": 0.6,
+      "goldScale": 1.0,
+      "multiplier": 4.800000000000001
+    },
+    {
+      "alive": 60,
+      "hornBonus": 0.6,
+      "goldScale": 1.35,
+      "multiplier": 6.480000000000001
+    },
+    {
+      "alive": 100,
+      "hornBonus": 0.0,
+      "goldScale": 1.0,
+      "multiplier": 3.0
+    },
+    {
+      "alive": 100,
+      "hornBonus": 0.0,
+      "goldScale": 1.35,
+      "multiplier": 4.050000000000001
+    },
+    {
+      "alive": 100,
+      "hornBonus": 0.6,
+      "goldScale": 1.0,
+      "multiplier": 4.800000000000001
+    },
+    {
+      "alive": 100,
+      "hornBonus": 0.6,
+      "goldScale": 1.35,
+      "multiplier": 6.480000000000001
+    }
+  ],
+  "killPayout": [
+    {
+      "baseGold": 8,
+      "alive": 1,
+      "multiplier": 1.0,
+      "payout": 8
+    },
+    {
+      "baseGold": 8,
+      "alive": 30,
+      "multiplier": 2.4299999999999997,
+      "payout": 19
+    },
+    {
+      "baseGold": 46,
+      "alive": 12,
+      "multiplier": 1.44,
+      "payout": 66
+    },
+    {
+      "baseGold": 520,
+      "alive": 60,
+      "multiplier": 3.0,
+      "payout": 1560
+    },
+    {
+      "baseGold": 1,
+      "alive": 100,
+      "multiplier": 3.0,
+      "payout": 3
+    }
+  ],
+  "flingScore": [
+    {
+      "x": 900.0,
+      "startX": 900.0,
+      "startY": 600.0,
+      "peakY": 600.0,
+      "airtime": 0.0,
+      "hits": 0,
+      "travel": 0.0,
+      "combo": 1.0,
+      "points": 0,
+      "awardedPlain": 0,
+      "awardedWithHorn": 0,
+      "awardedWithShowman": 0
+    },
+    {
+      "x": 1200.0,
+      "startX": 400.0,
+      "startY": 600.0,
+      "peakY": 180.0,
+      "airtime": 1.75,
+      "hits": 0,
+      "travel": 1220.0,
+      "combo": 1.0,
+      "points": 486,
+      "awardedPlain": 486,
+      "awardedWithHorn": 777,
+      "awardedWithShowman": 607
+    },
+    {
+      "x": 1200.0,
+      "startX": 400.0,
+      "startY": 600.0,
+      "peakY": 180.0,
+      "airtime": 1.75,
+      "hits": 3,
+      "travel": 1220.0,
+      "combo": 3.25,
+      "points": 1581,
+      "awardedPlain": 1581,
+      "awardedWithHorn": 2529,
+      "awardedWithShowman": 1976
+    },
+    {
+      "x": 300.0,
+      "startX": 1100.0,
+      "startY": 620.0,
+      "peakY": 24.0,
+      "airtime": 3.5,
+      "hits": 7,
+      "travel": 1396.0,
+      "combo": 6.25,
+      "points": 3995,
+      "awardedPlain": 3995,
+      "awardedWithHorn": 6392,
+      "awardedWithShowman": 4993
+    },
+    {
+      "x": 640.0,
+      "startX": 640.0,
+      "startY": 500.0,
+      "peakY": 120.0,
+      "airtime": 0.9166666666666666,
+      "hits": 1,
+      "travel": 380.0,
+      "combo": 1.75,
+      "points": 301,
+      "awardedPlain": 301,
+      "awardedWithHorn": 481,
+      "awardedWithShowman": 376
+    }
+  ],
+  "weather": [
+    {
+      "sample": 0.0,
+      "wind": -260.0,
+      "windMax": 260.0,
+      "headwindThreshold": 117.0
+    },
+    {
+      "sample": 0.25,
+      "wind": -130.0,
+      "windMax": 260.0,
+      "headwindThreshold": 117.0
+    },
+    {
+      "sample": 0.5,
+      "wind": 0.0,
+      "windMax": 260.0,
+      "headwindThreshold": 117.0
+    },
+    {
+      "sample": 0.75,
+      "wind": 130.0,
+      "windMax": 260.0,
+      "headwindThreshold": 117.0
+    },
+    {
+      "sample": 1.0,
+      "wind": 260.0,
+      "windMax": 260.0,
+      "headwindThreshold": 117.0
+    },
+    {
+      "maxHp": 120.0,
+      "strikeDamage": 40.800000000000004,
+      "stormCeiling": 132.0,
+      "stormCooldown": 1.1
+    },
+    {
+      "maxHp": 1200.0,
+      "strikeDamage": 408.00000000000006,
+      "stormCeiling": 132.0,
+      "stormCooldown": 1.1
+    },
+    {
+      "maxHp": 8400.0,
+      "strikeDamage": 2856.0,
+      "stormCeiling": 132.0,
+      "stormCooldown": 1.1
+    }
+  ],
+  "screenShake": [
+    {
+      "before": 0.0,
+      "add": 8.0,
+      "after": 8.0
+    },
+    {
+      "before": 8.0,
+      "add": 9.0,
+      "after": 14.0
+    },
+    {
+      "before": 13.0,
+      "add": 10.0,
+      "after": 14.0
+    },
+    {
+      "before": 14.0,
+      "add": 5.0,
+      "after": 14.0
+    },
+    {
+      "before": 14.0,
+      "dt": 0.016666666666666666,
+      "afterOneStep": 13.3,
+      "stepsToZero": 20
+    },
+    {
+      "before": 8.0,
+      "dt": 0.016666666666666666,
+      "afterOneStep": 7.3,
+      "stepsToZero": 12
+    },
+    {
+      "before": 0.5,
+      "dt": 0.016666666666666666,
+      "afterOneStep": 0.0,
+      "stepsToZero": 1
+    }
+  ],
+  "hornComposition": [
+    {
+      "endless": false,
+      "elite": false,
+      "queued": 1,
+      "spawned": 1,
+      "swapCap": 1
+    },
+    {
+      "endless": false,
+      "elite": true,
+      "queued": 1,
+      "spawned": 1,
+      "swapCap": 1
+    },
+    {
+      "endless": false,
+      "elite": false,
+      "queued": 4,
+      "spawned": 4,
+      "swapCap": 2
+    },
+    {
+      "endless": false,
+      "elite": true,
+      "queued": 4,
+      "spawned": 4,
+      "swapCap": 2
+    },
+    {
+      "endless": false,
+      "elite": false,
+      "queued": 9,
+      "spawned": 9,
+      "swapCap": 4
+    },
+    {
+      "endless": false,
+      "elite": true,
+      "queued": 9,
+      "spawned": 9,
+      "swapCap": 4
+    },
+    {
+      "endless": false,
+      "elite": false,
+      "queued": 12,
+      "spawned": 12,
+      "swapCap": 6
+    },
+    {
+      "endless": false,
+      "elite": true,
+      "queued": 12,
+      "spawned": 12,
+      "swapCap": 6
+    },
+    {
+      "endless": false,
+      "elite": false,
+      "queued": 25,
+      "spawned": 25,
+      "swapCap": 12
+    },
+    {
+      "endless": false,
+      "elite": true,
+      "queued": 25,
+      "spawned": 25,
+      "swapCap": 12
+    },
+    {
+      "endless": true,
+      "elite": false,
+      "queued": 0,
+      "spawned": 12,
+      "swapCap": 0
+    },
+    {
+      "endless": true,
+      "elite": true,
+      "queued": 0,
+      "spawned": 10,
+      "swapCap": 0,
+      "tierBonus": 3
+    }
+  ],
+  "waveClear": [
+    {
+      "delay": 1.1,
+      "dt": 0.016666666666666666,
+      "firesOnStep": 66,
+      "note": "strictly greater than 1.1"
     }
   ],
   "lichWard": [

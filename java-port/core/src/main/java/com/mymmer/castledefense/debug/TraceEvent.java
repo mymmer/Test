@@ -45,5 +45,20 @@ public enum TraceEvent {
     REGALIA_DETACH,
     REGALIA_RECOVER,
     DROPPED_ITEM_CREATED,
-    DROPPED_ITEM_RECOVERED
+    DROPPED_ITEM_RECOVERED,
+
+    // --- progression and the run directors (Phase 8) -------------------------
+    WAVE_START,
+    WAVE_END,
+    TIER_CHANGED,
+    SPAWN_SCHEDULED,
+    BOSS_SCHEDULED,
+    HORN_USED,
+    GOLD_CHANGED,
+    SCORE_CHANGED,
+    COMBO_CHANGED,
+    WEATHER_CHANGED,
+    STORM_STRIKE,
+    TALENT_AWARDED,
+    ANNOUNCEMENT
 }

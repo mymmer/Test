@@ -2,6 +2,7 @@ package com.mymmer.castledefense.enemy;
 
 import com.mymmer.castledefense.defence.Barricade;
 import com.mymmer.castledefense.defence.Target;
+import com.mymmer.castledefense.entity.EntityList;
 
 /**
  * Detonates violently when killed. Mind the blast.
@@ -57,24 +58,33 @@ public final class Volatile extends Enemy {
      * The blast: everything within {@link #BLAST_RADIUS}, at linear falloff to
      * half damage at the rim, plus the wall and the barricade.
      *
-     * <p>Walks the target list in insertion order and checks each entry live —
+     * <p>Walks the horde in insertion order and checks each entry live —
      * entries killed earlier in this same loop are skipped, which is what stops
      * a chain re-hitting its own links.
+     *
+     * <p><b>A SNAPSHOT, not the live list.</b> Python iterates
+     * {@code list(g.enemies)} and the reason is not decorative: the blast can
+     * kill a <em>boss</em>, and a boss's death purges it and its debris from the
+     * roster on the spot. Walking the live list by index then reads past the end
+     * or skips a link in the chain. Caching only the count is not enough — the
+     * contents move too. Found by a Phase 8 Endless run, where a Volatile
+     * finished off a Troll King mid-blast.
      */
     public void detonate() {
         float dmg = damage() * BLAST_DAMAGE;
 
-        int n = ctx.targetCount();
-        for (int i = 0; i < n; i++) {
-            Target o = ctx.target(i);
-            if (o == this || !o.alive()) {
-                continue;
-            }
-            float dx = o.x() - x;
-            float dy = o.y() - y;
-            float d = (float) Math.sqrt(dx * dx + dy * dy);
-            if (d <= BLAST_RADIUS) {
-                o.takeDamage(dmg * (1f - 0.5f * d / BLAST_RADIUS), "explosive");
+        try (EntityList<Enemy>.Snapshot snap = ctx.horde().beginSnapshot()) {
+            for (int i = 0; i < snap.size(); i++) {
+                Target o = snap.get(i);
+                if (o == this || !o.alive()) {
+                    continue;
+                }
+                float dx = o.x() - x;
+                float dy = o.y() - y;
+                float d = (float) Math.sqrt(dx * dx + dy * dy);
+                if (d <= BLAST_RADIUS) {
+                    o.takeDamage(dmg * (1f - 0.5f * d / BLAST_RADIUS), "explosive");
+                }
             }
         }
 

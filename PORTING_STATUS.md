@@ -10,7 +10,7 @@ Legend: `[ ]` not started · `[~]` in progress · `[x]` ported (compiles, believ
 Nothing is complete merely because it compiles. A row may only reach `[T]` when a named
 test exercises it.
 
-**Phase status: Phases 1, 3, 4, 5, 6 and 7 complete, plus the pre-Phase-8
+**Phase status: Phases 1, 3, 4, 5, 6, 7 and 8 complete, plus the pre-Phase-8
 time-domain hardening. Phase 2 implemented and hardened but NOT fully tested —
 the Android assembly gate is still open because Google's Maven is unreachable
 from the build environment, and stays open until `./gradlew verifyAndroid`
@@ -21,8 +21,11 @@ Enemy`, so a boss walks, takes damage, dies and pays out through contracts that
 were already tested; what it adds is immunity to ordinary grabbing, a
 difficulty-scaled fire clock, and a disruption the player performs by hand.
 
-The whole game loop now exists except the run directors, the shop, the talent
-tree and rendering — Phases 8 to 11.
+Phase 8 adds the run itself: `RunWorld` assembles the field, the fight and the
+pacing, and two directors run the two modes. The game now plays — headless and
+on the desktop backend — with waves, tiers, bosses, gold, score, weather and the
+Challenge Horn. What is left is the shop, the talent tree and rendering —
+Phases 9 to 11.
 
 **A skin cannot change gameplay, and that is now enforced three ways:**
 gameplay packages cannot import `assets` (`ArchitectureTest`);
@@ -450,17 +453,87 @@ Contract: [`SIMULATION.md`](java-port/docs/subsystems/SIMULATION.md),
 - [x] No source comparison operator changed; no `EPSILON` introduced; no
       gameplay constant adjusted
 
-## Phase 8 — Game progression
+## Phase 8 — Game progression and runtime directors
 
-- [ ] Classic wave flow (start/end, bonus, restore towers, wave-clear delay)
-- [ ] Endless tier clock + spawn ramp + alive cap
-- [ ] Endless boss timetable + repeat bosses
-- [ ] Gold, kill payout, crowd multiplier
-- [ ] Score (distance + airtime × combo), best fling, best combo
-- [ ] Challenge Horn (Classic queue, Endless rush, Hard elite pack, once-per-wave/run)
-- [ ] Weather: wind, storm, ceiling lightning strikes
-- [ ] Screen shake budget
-- [ ] Announcements / banners
+Contracts: [`MODES_PROGRESSION.md`](java-port/docs/subsystems/MODES_PROGRESSION.md),
+[`SCORING.md`](java-port/docs/subsystems/SCORING.md),
+[`WEATHER.md`](java-port/docs/subsystems/WEATHER.md).
+
+- [T] `RunSession` — run-level state separated from the world exactly as Phase 1
+      proposed: mode, difficulty, wave/tier, gold, score, combo records, horn,
+      run clock, seed. **Not** the Python `Game` god object: no castle, no
+      roster, no shop, no input, no screen. The Endless clock is
+      `playSteps * FIXED_DT`, derived rather than summed — a summed one reads
+      29.999999999999577 at the 1800th step and puts the whole timetable a step out
+- [T] `RunWorld` — the run assembly and the production implementation of all four
+      context seams (`DefenceContext` → `EnemyContext` → `BossContext`, plus
+      `DirectorContext`). Nothing below it changed to be run for real. Step order
+      transcribed from `main.py`'s `update`, including the three tiers
+- [T] `GameWorld.AlwaysListener` — the tier Python runs *before* its state check.
+      Shake, flashes and banners age on the pause screen; entities do not
+- [T] Classic wave flow — `WaveDirector`: numbered waves, composed queue,
+      `max(0.32, 1.25 - wave*0.032)` interval, 0.8 s first spawn, `MAX_ALIVE` 58,
+      boss entries resolved from the queue with the difficulty headstart and a
+      2.4x breather, wave bonus `80 + wave*22 + wavePurse`, talent point,
+      tower restore, shop handover — `ClassicFlowTest` (17)
+- [T] Classic wave-clear semantics — strictly `> 1.1 s`, reset to zero by
+      anything hostile, and **allies do not hold a wave open**; neither does a
+      mob marked dead but not yet swept. The 66th clear step ends the wave
+- [T] Endless runtime — `EndlessDirector`: tier every 30 s, spawn gap ramping
+      1.70 → 0.38 s over 300 s with ±28% jitter, `MAX_ALIVE` 60, bosses at
+      120/240/360 s then a **random** one every further 120 s counted from 360 s,
+      +1 talent point per minute — `EndlessFlowTest` (18)
+- [T] Long-run schedule tests — 30 s, 60 s, 120 s, 240 s, 360 s, 600 s, 10, 30
+      and 60 minutes, stepped directly. An hour is exactly 3600.000 s, tier 121,
+      60 talent points, 3 scripted + 27 repeat bosses. The whole suite runs in
+      about two seconds
+- [T] Boundary tests — 29.9833/30.0/30.0166 and the same either side of 60 and
+      120, asserted to the step. No epsilons
+- [T] Endless realtime shop — a true freeze: `play_time`, the enemy count, every
+      enemy's x, the spawn timer and the tier ladder are all unchanged after 120
+      frames of shopping, and the cursor lets go rather than holding a mob in
+      mid-air. `RunStateTest`
+- [T] Freeze contract for every state — MENU/PLAYING/SHOP/PAUSED/GAMEOVER/
+      TALENTS/SETTINGS each proved individually
+- [T] Gold, kill payout and the crowd multiplier — including the quirk that the
+      dying mob is counted in its own payout, and the silent Goblin escape.
+      `ScoringTest`
+- [T] Fling score — distance + airtime, combo at 0.75/hit, **both** truncations
+      in the source's order, best fling on the awarded figure, best combo only on
+      a real combo
+- [T] Challenge Horn — `ChallengeHorn`: Classic empties the queue head-for-head,
+      Endless calls in 12, Hard swaps chaff for elites in Classic and fields a
+      10-strong pack in Endless rolled 3 tiers deep. **Once per wave in Classic,
+      once per RUN in Endless** — the quirk, pinned. An empty queue refuses
+      without spending the horn. `ChallengeHornTest` (11)
+- [T] Weather — `Weather`: one gameplay-authoritative wind that projectiles and
+      airborne bodies both consume on the same step, storms, ceiling strikes at a
+      share of maximum health with a per-mob lockout. `WeatherTest` (10)
+- [T] Screen shake — `ScreenShake`: capped at 14, decays at 42/s in the always
+      tier, gameplay contributions only. State, not rendering
+- [T] Announcements — `Announcements`: stable `Id` plus an int and a subject id,
+      never a rendered sentence. Ages in the always tier. `AnnouncementsTest`
+- [T] Talent income — `TalentIncome`, one method wide. Phase 9 owns the tree
+- [T] Trace integration — `WAVE_START`, `WAVE_END`, `TIER_CHANGED`,
+      `SPAWN_SCHEDULED`, `BOSS_SCHEDULED`, `HORN_USED`, `GOLD_CHANGED`,
+      `SCORE_CHANGED`, `COMBO_CHANGED`, `WEATHER_CHANGED`, `STORM_STRIKE`,
+      `TALENT_AWARDED`. Proven observation-only by running a wave with tracing on
+      and off and comparing the run description
+- [T] Reproducible run diagnostics — `RunWorld.describeRun()` carries build state,
+      seed, mode, difficulty, step, simulation time, tier/wave, gold, score,
+      bests, alive/pending counts, active bosses, next spawn, next boss, wind,
+      storm, shake and horn. Built on demand; nothing logs per frame. Locale-
+      stable (`Locale.ROOT`), so a report from any machine reads the same
+- [T] Python↔Java progression fixtures — the generator now emits **425** cases
+      (was 249): wave bonus, spawn interval, tier-at-time, spawn-gap ramp, boss
+      schedule, talent income, crowd gold, kill payout, fling score, wind, storm
+      damage, shake, horn composition and the wave-clear boundary.
+      `ProgressionParityTest`
+- [T] Desktop smoke — `:lwjgl3:run --mode classic|endless --frames N` starts a
+      real run on the real backend and prints the reproducible line. Verified
+      seeded, both modes
+- [x] `--mode` added to the desktop launcher; the seeded run and its diagnostics
+      are the smoke test
 
 ## Phase 9 — Player progression
 

@@ -419,6 +419,22 @@ public abstract class Enemy extends Entity implements Target {
     //  Damage and death
     // ========================================================================
 
+    /**
+     * Seconds before this mob may be struck by ceiling lightning again.
+     *
+     * <p>Owned here rather than by the weather because it is per-mob state that
+     * has to age with the mob, and because Python keeps it on the enemy for the
+     * same reason.
+     */
+    public double stormCooldown() {
+        return stormCd;
+    }
+
+    /** Starts the lightning re-strike lockout. Called by {@code Weather.strike}. */
+    public void startStormCooldown() {
+        stormCd = GameConfig.STORM_COOLDOWN;
+    }
+
     public float maxHp() {
         return maxHp;
     }

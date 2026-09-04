@@ -548,6 +548,15 @@ rather than silently changing the game.
 | **Dragon breath: one extra fireball on Hard** | ~~Python's timers are doubles; the port's are floats.~~ **RESOLVED before Phase 8 — see §14.1.** The port fired 16 fireballs on Hard where Python fires 15. It now fires 15. The cause was the precision of the timer type, and the fix was architectural rather than a balance tweak: the whole time domain moved to `double`. | Fixed, not accepted. `BossParityTest.shippedHardBreathIsFifteen` asserts 15 in the standalone loop *and* in a live Dragon; `floatTimersAreWhyThisRuleExists` keeps the single-precision counts as a regression demonstration. |
 | **A Volatile blast still cannot chain unaided** | Unchanged from Phase 6; re-confirmed. | Recorded above. |
 
+### Newly discovered in Phase 8
+
+| Finding | Detail | Status |
+|---|---|---|
+| **A Volatile detonation could read past the end of the roster** | `Volatile.detonate` cached `targetCount()` and walked the **live** horde by index. Python walks `list(g.enemies)` — a copy — and the reason turns out to be load-bearing: the blast can kill a **boss**, and a boss's death purges it and its debris from the roster on the spot, so the list shrinks mid-loop. Before Phase 8 nothing could remove a horde entry during a detonation, so the defect was latent; the first undefended Endless run found it in seconds. | Fixed: the loop now iterates an `EntityList.Snapshot`, the same way the airborne slam loop already did. Covered by the Endless long-run tests. |
+| **The Endless alive cap does not cap the population** | `ENDLESS_MAX_ALIVE` gates only the director's own trickle. Necromancer summons, Lich raises and the horn all add mobs without consulting it, so a busy field genuinely exceeds 60 — in Python too. A test asserting a hard ceiling would be asserting something the source does not do. | Recorded; `EndlessFlowTest.aliveCap` asserts the real behaviour, which is that the *trickle* stops. |
+| **A summed run clock is a step out at every boundary** | `play_time += dt` over 1800 steps reads 29.999999999999577, which puts the tier ladder, the boss timetable and the talent drip one step late — and the error grows. | Fixed by deriving `playTime()` from a step count, per §14.1's invariant 2b. An hour now reads exactly 3600.0 and awards exactly 60 talent points. |
+| **The Classic and Endless alive caps genuinely differ** | 58 (`enemies.py:2131`) and 60 (`main.py:241`). It reads like a typo and is not; both are preserved. | Recorded, and pinned by a named test. |
+
 ---
 
 ## 14.1 The time-domain rule (pre-Phase 8)

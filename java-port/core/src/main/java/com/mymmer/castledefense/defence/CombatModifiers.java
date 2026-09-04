@@ -151,4 +151,38 @@ public interface CombatModifiers {
     default float stormWindSlow() {
         return 0f;
     }
+
+    // ========================================================================
+    //  Progression-side effects (Phase 8).
+    //
+    //  Same reasoning as the enemy-side block above: one talent tree, one place
+    //  a talent can be forgotten.  Phase 9 implements them; the neutral
+    //  defaults here mean the directors can be written and tested now without
+    //  faking a tree.
+    // ========================================================================
+
+    /** Showman: multiplies every fling score award. */
+    default float scoreMult() {
+        return 1f;
+    }
+
+    /** War Chest: flat gold added to the Classic wave bonus. */
+    default float wavePurse() {
+        return 0f;
+    }
+
+    /** Storm Caller: multiplies the chance a stretch of play is stormy. */
+    default float stormChance() {
+        return 1f;
+    }
+
+    /** Conduit: multiplies ceiling-lightning damage. */
+    default float lightningMult() {
+        return 1f;
+    }
+
+    /** Light Fingers: scales the difficulty's delay between grabs. Time domain. */
+    default double grabCdScale() {
+        return 1d;
+    }
 }

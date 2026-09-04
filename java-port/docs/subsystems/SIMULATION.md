@@ -56,7 +56,9 @@ float    alpha();                     // leftover fraction, for render interpola
 float    accumulatorSeconds();
 long     droppedStepEvents();         // frames where the budget was hit
 long     clampedFrames();             // frames where the delta clamp bit
-interface Stepper { void step(double dt); }
+interface Stepper       { void step(double dt); }        // GameWorld implements it
+interface StepListener  { void onStep(GameWorld, double); }      // tier 3: PLAYING only
+interface AlwaysListener{ void onAlwaysStep(GameWorld, double); } // tier 1: every state
 
 // GameWorld — what a step advances.
 void        step(double dt);                    // called only by Simulation
@@ -185,6 +187,23 @@ Guarded by `TimeDomainTest`.
    state; `gameplayTime()`, entity updates and spawning advance only when
    `state().advancesWorld()`. This is what lets the Endless realtime shop freeze
    the horde mid-fight.
+6b. **Three tiers, not two.** Python's `update` runs some things before its state
+   check, and the port keeps that split explicitly:
+
+   | Tier | Hook | Runs in | What |
+   |---|---|---|---|
+   | 1 | `AlwaysListener` | every state | screen shake, combo/horn/storm flashes, banner countdowns |
+   | 2 | — | every state but none | particles, floating text (Phase 11) |
+   | 3 | `StepListener` | `PLAYING` only | entities, spawning, every gameplay clock |
+
+   A shake started just before a pause keeps unwinding on the pause screen, and a
+   banner posted at the end of a wave is still counting down in the shop. Two
+   hooks rather than one flag, because they are governed by different rules.
+6c. **`RunWorld` is the run assembly.** It implements all four context seams
+   (`DefenceContext` → `EnemyContext` → `BossContext`, plus `DirectorContext`) and
+   owns the step order. `GameWorld` owns the clock, the state and the entity
+   lifecycle; it knows nothing about castles or waves. See
+   [`MODES_PROGRESSION.md`](MODES_PROGRESSION.md).
 7. **Insertion order is semantic.** `EntityList` never swap-removes. Its backing
    `Array` is **ordered**, so even a direct `removeValue` preserves order —
    libGDX swap-removes on an unordered array, which would silently reorder the

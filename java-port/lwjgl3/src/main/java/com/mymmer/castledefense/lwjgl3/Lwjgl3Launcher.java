@@ -9,6 +9,7 @@ import com.badlogic.gdx.graphics.PixmapIO;
 import com.badlogic.gdx.utils.ScreenUtils;
 import com.mymmer.castledefense.CastleDefenseGame;
 import com.mymmer.castledefense.config.GameConfig;
+import com.mymmer.castledefense.game.GameMode;
 
 /**
  * Desktop entry point — the development loop.
@@ -51,7 +52,8 @@ public final class Lwjgl3Launcher {
 
         DesktopPlatformServices platform = new DesktopPlatformServices();
         CastleDefenseGame game = options.frameLimit > 0
-                ? new FrameLimitedGame(options.frameLimit, options.screenshot, platform)
+                ? new FrameLimitedGame(options.frameLimit, options.screenshot,
+                        options.mode, platform)
                 : new CastleDefenseGame(platform);
 
         new Lwjgl3Application(game, config);
@@ -61,12 +63,31 @@ public final class Lwjgl3Launcher {
     private static final class FrameLimitedGame extends CastleDefenseGame {
         private final int limit;
         private final String screenshotPath;
+        private final GameMode mode;
 
-        FrameLimitedGame(int limit, String screenshotPath,
+        FrameLimitedGame(int limit, String screenshotPath, GameMode mode,
                          DesktopPlatformServices platform) {
             super(platform);
             this.limit = limit;
             this.screenshotPath = screenshotPath;
+            this.mode = mode;
+        }
+
+        /**
+         * Starts a run as soon as the world exists, so a smoke run exercises the
+         * game rather than an idle menu.
+         *
+         * <p>{@code --mode classic|endless} plus {@code --frames N} is the
+         * headless-ish smoke the port is verified with: it plays for N frames on
+         * a real backend and prints a line dense enough to reproduce the run.
+         */
+        @Override
+        public void create() {
+            super.create();
+            if (mode != null) {
+                long seed = startRun(mode);
+                System.out.println("[smoke] started " + mode.id() + " on seed " + seed);
+            }
         }
 
         @Override
@@ -74,6 +95,9 @@ public final class Lwjgl3Launcher {
             super.render();
             if (getRenderCount() < limit) {
                 return;
+            }
+            if (mode != null && getRun() != null) {
+                System.out.println("[smoke] " + getRun().describeRun());
             }
             if (screenshotPath != null) {
                 saveScreenshot(screenshotPath);
@@ -113,6 +137,7 @@ public final class Lwjgl3Launcher {
         int frameLimit = 0;
         String screenshot = null;
         boolean vsync = true;
+        GameMode mode = null;
 
         static Options parse(String[] args) {
             Options o = new Options();
@@ -128,6 +153,8 @@ public final class Lwjgl3Launcher {
                     o.frameLimit = Integer.parseInt(args[++i].trim());
                 } else if ("--screenshot".equals(a) && i + 1 < args.length) {
                     o.screenshot = args[++i];
+                } else if ("--mode".equals(a) && i + 1 < args.length) {
+                    o.mode = GameMode.byId(args[++i].trim().toLowerCase(), null);
                 } else if ("--no-vsync".equals(a)) {
                     o.vsync = false;
                 }
