@@ -41,7 +41,7 @@ Every hostile unit, its state machine, its scaling, and what a wave is made of.
 
 ```java
 abstract Enemy extends Entity implements Target
-  void  update(float dt);            // one fixed step
+  void  update(double dt);           // one fixed step, canonical
   void  onGrab(); void onRelease(float vx, float vy);
   void  land(); void slamInto(Enemy other); void resolveFling();
   float applyDamage(float amount, String kind);   // returns what was dealt
@@ -67,7 +67,7 @@ TreasureGoblin escape(), escapeTimer()
 SiegeRam     ramPush()
 
 FriendlySkeleton extends Entity            // NOT a Target
-  void update(float dt); void takeDamage(float amount); Enemy pickTarget();
+  void update(double dt); void takeDamage(float amount); Enemy pickTarget();
   float x(), y(), hp(), maxHp(), damage(), depth(), life(); EnemyState state();
 
 WaveScaling   static hp/damage/speed(int wave); tierIndex(EndgameTier[], int)
@@ -75,7 +75,7 @@ EnemyTable    load(JsonSource); config(EnemyType); tiers(); unlocks();
               create(ctx, type, wave, x, y)
 WaveComposition  build(int wave, Rng); bossForWave(int);
                  unlockedTypes(int); newlyUnlocked(int)
-CrowdSeparation  separate(EnemyContext, float dt)
+CrowdSeparation  separate(EnemyContext, double dt)
 EnemyContext  extends DefenceContext: horde(), createEnemy(), spawnEnemy(),
               allyCount(), ally(int), gameTime(), bounceLevel(), spikes(),
               goldMultiplier(), addGold/addKill/addScore/addThrownDamage/
@@ -84,6 +84,14 @@ EnemyContext  extends DefenceContext: horde(), createEnemy(), spawnEnemy(),
 ```
 
 ## Important invariants
+
+0. **Gameplay time is `double`.** `attackTimer`, `stagger`, `stormCd`, `tornadoHold`, the per-victim slam cooldowns, and every subclass timer (cloak, dash, summon, cast, escape, ally lifetime) are `double` seconds; positions,
+   velocities, angles and drawing state stay `float`. `update`/`think` receive
+   the canonical `double` step and narrow it once, themselves, with
+   `float fdt = (float) dt`. See
+   [`SIMULATION.md`](SIMULATION.md), "Gameplay time is double" — the rule exists
+   because float timers made a Hard Dragon breathe 16 fireballs where Python
+   breathes 15.
 
 1. **`Enemy` implements `Target`; `defence` was not changed to accommodate it.**
    The arrow runs `enemy → defence`, exactly as `enemies.py` imports

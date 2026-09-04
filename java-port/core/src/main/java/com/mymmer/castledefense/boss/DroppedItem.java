@@ -203,18 +203,22 @@ public final class DroppedItem extends Entity {
      * per bounce, arena walls one item-width inside the castle front and the
      * right edge, and a 90 px/s settle threshold.
      */
-    public void update(float dt) {
+    public void update(double dt) {
         if (state == State.HELD) {
             return;
         }
-        bob += dt * 3f;
+        //  A dropped item holds no timer at all: every field below is spatial or
+        //  visual, so the step narrows once, here, and nothing else in the class
+        //  sees a double.
+        float fdt = (float) dt;
+        bob += fdt * 3f;
         if (state != State.FLYING) {
             return;
         }
-        vy += GameConfig.GRAVITY * dt;
-        x += vx * dt;
-        y += vy * dt;
-        spin += vx * dt * 0.02f;
+        vy += GameConfig.GRAVITY * fdt;
+        x += vx * fdt;
+        y += vy * fdt;
+        spin += vx * fdt * 0.02f;
 
         //  keep it on the battlefield, out of the castle
         float left = GameConfig.CASTLE_FRONT + kind.width();

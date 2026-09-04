@@ -1,6 +1,5 @@
 package com.mymmer.castledefense.defence;
 
-import com.badlogic.gdx.utils.FloatArray;
 import com.mymmer.castledefense.config.GameConfig;
 import com.mymmer.castledefense.util.Collisions;
 
@@ -40,7 +39,12 @@ public final class Outpost {
 
     private int level;
     /** One reload timer per crew member, in crew order. */
-    private final FloatArray cooldowns = new FloatArray(8);
+    //  Crew reload timers, one per gun.  A plain double[] rather than a
+    //  libGDX FloatArray: these are time-domain values and libGDX ships no
+    //  DoubleArray.  The crew is capped, so it grows a handful of times per run
+    //  and never inside the step loop.
+    private double[] cooldowns = new double[8];
+    private int crew;
 
     /** Visual only: upgrade flash, decays at 2/s. */
     private float flash;
@@ -50,8 +54,8 @@ public final class Outpost {
     private float prisonerHp;
     private float prisonerMax = GameConfig.PRISONER_HP;
     /** Counts down after a hit; regeneration is locked out while it is above zero. */
-    private float prisonerHit;
-    private float skeletonTimer;
+    private double prisonerHit;
+    private double skeletonTimer;
     /** Visual only. */
     private float trapGlow;
 
@@ -133,13 +137,13 @@ public final class Outpost {
         return base * overdrive() * ctx.modifiers().towerDamage();
     }
 
-    public float gunReload() {
-        return isTurret() ? 0.62f : 0.92f;
+    public double gunReload() {
+        return isTurret() ? 0.62 : 0.92;
     }
 
     /** How many reload timers exist. Never grows past the crew cap. */
     public int crewCount() {
-        return cooldowns.size;
+        return crew;
     }
 
     /**
@@ -150,8 +154,13 @@ public final class Outpost {
      */
     public boolean upgrade() {
         level++;
-        if (cooldowns.size < guns()) {
-            cooldowns.add(ctx.rng().uniform(0f, 0.5f));
+        if (crew < guns()) {
+            if (crew == cooldowns.length) {
+                double[] grown = new double[crew * 2];
+                System.arraycopy(cooldowns, 0, grown, 0, crew);
+                cooldowns = grown;
+            }
+            cooldowns[crew++] = ctx.rng().uniformSeconds(0.0, 0.5);
         }
         flash = 1f;
         return true;
@@ -213,7 +222,7 @@ public final class Outpost {
     }
 
     /** Above zero while the prisoner was recently hit; blocks regeneration. */
-    public float prisonerHit() {
+    public double prisonerHit() {
         return prisonerHit;
     }
 
@@ -223,7 +232,7 @@ public final class Outpost {
     }
 
     /** Seconds until the next skeleton. */
-    public float skeletonTimer() {
+    public double skeletonTimer() {
         return skeletonTimer;
     }
 
@@ -281,20 +290,21 @@ public final class Outpost {
      * checked <em>after</em> the cap, and neither advances while the cap is full —
      * so a player at the ally cap does not bank raises.
      */
-    public void updatePrisoner(float dt) {
+    public void updatePrisoner(double dt) {
         if (prisoner == null) {
             return;
         }
-        prisonerHit = Math.max(0f, prisonerHit - dt);
-        if (prisonerHit <= 0f && prisonerHp < prisonerMax) {
-            prisonerHp = Math.min(prisonerMax, prisonerHp + GameConfig.PRISONER_REGEN * dt);
+        prisonerHit = Math.max(0d, prisonerHit - dt);
+        if (prisonerHit <= 0d && prisonerHp < prisonerMax) {
+            prisonerHp = Math.min(prisonerMax,
+                    prisonerHp + GameConfig.PRISONER_REGEN * (float) dt);
         }
-        trapGlow = Math.max(0f, trapGlow - dt * 0.9f);
+        trapGlow = Math.max(0f, trapGlow - (float) dt * 0.9f);   // visual
 
         AllyFactory allies = ctx.allies();
         int cap = GameConfig.TRAP_SKELETON_CAP + ctx.modifiers().allyCapBonus();
         skeletonTimer -= dt;
-        if (skeletonTimer > 0f || allies.allyCount() >= cap) {
+        if (skeletonTimer > 0d || allies.allyCount() >= cap) {
             return;
         }
         skeletonTimer = GameConfig.TRAP_SKELETON_RATE * ctx.modifiers().allyRate();
@@ -311,24 +321,24 @@ public final class Outpost {
      * <p>The prisoner is updated <b>before</b> the level check, so a captive keeps
      * raising skeletons even at an ungarrisoned outpost.
      */
-    public void update(float dt) {
-        flash = Math.max(0f, flash - dt * 2f);
+    public void update(double dt) {
+        flash = Math.max(0f, flash - (float) dt * 2f);      // visual
         updatePrisoner(dt);
         if (level <= 0) {
             return;
         }
-        for (int i = 0; i < cooldowns.size; i++) {
-            cooldowns.set(i, cooldowns.get(i) - dt);
-            if (cooldowns.get(i) > 0f) {
+        for (int i = 0; i < crew; i++) {
+            cooldowns[i] -= dt;
+            if (cooldowns[i] > 0d) {
                 continue;
             }
             Target target = pickTarget();
             if (target == null) {
                 //  nothing in range: re-check in 0.15 s rather than every step
-                cooldowns.set(i, 0.15f);
+                cooldowns[i] = 0.15;
                 continue;
             }
-            cooldowns.set(i, gunReload());
+            cooldowns[i] = gunReload();
             float gx = gunX(i);
             float gy = gunY(i);
             float speed = isTurret() ? 1000f : 840f;

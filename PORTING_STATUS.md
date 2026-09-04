@@ -10,10 +10,11 @@ Legend: `[ ]` not started · `[~]` in progress · `[x]` ported (compiles, believ
 Nothing is complete merely because it compiles. A row may only reach `[T]` when a named
 test exercises it.
 
-**Phase status: Phases 1, 3, 4, 5, 6 and 7 complete. Phase 2 implemented and
-hardened but NOT fully tested — the Android assembly gate is still open because
-Google's Maven is unreachable from the build environment, and stays open until
-`./gradlew verifyAndroid` succeeds on a machine with the SDK.**
+**Phase status: Phases 1, 3, 4, 5, 6 and 7 complete, plus the pre-Phase-8
+time-domain hardening. Phase 2 implemented and hardened but NOT fully tested —
+the Android assembly gate is still open because Google's Maven is unreachable
+from the build environment, and stays open until `./gradlew verifyAndroid`
+succeeds on a machine with the SDK.**
 
 Phase 7 adds the three bosses and their interactive disruptions. `Boss extends
 Enemy`, so a boss walks, takes damage, dies and pays out through contracts that
@@ -404,6 +405,50 @@ Contract: [`BOSSES.md`](java-port/docs/subsystems/BOSSES.md).
       source
 - [T] `SkinIndependenceTest` — two skins that place the crown artwork over 100 px
       apart produce byte-identical boss simulation over 900 seeded steps
+
+## Pre-Phase 8 — the time domain
+
+Contract: [`SIMULATION.md`](java-port/docs/subsystems/SIMULATION.md),
+§ "Gameplay time is double". Analysis: [`PORT_ANALYSIS.md`](docs/PORT_ANALYSIS.md) §14.1.
+
+**`Gameplay time = double precision. Spatial simulation = float where appropriate.`**
+
+- [T] `step(double dt)` end to end — `Simulation.Stepper`, `GameWorld.step`,
+      `GameWorld.StepListener`, and every `update`/`think` below them. The step
+      is handed to gameplay as `FIXED_DT` itself; a system that integrates space
+      narrows it once, itself, with `float fdt = (float) dt`. `Simulation.DT` is
+      renamed `PHYSICS_DT` so a call site reading one is visibly spatial, and
+      **no production class reads it** — `TimeDomainTest` fails the build if one
+      starts to. One step at two precisions, never two clocks
+- [T] Every authoritative gameplay timer converted — 45 fields across defences,
+      enemies, bosses and the cursor. Drawing state (`hurtFlash`, `recoil`,
+      `aura`, `trapGlow`, `orb`, `smash`, `fuse`, `anim`, `bob`, `spin`) and
+      non-time rates (`regen` HP/s, `breathPower`, `shove` px/s) deliberately
+      stay `float`
+- [T] Configured durations converted — 10 `GameConfig` constants, 13 in
+      `Tuning`, and the duration fields of `EnemyConfig`, `BossConfig`,
+      `TowerConfig` and `DifficultyConfig`. `Json5.seconds`/`optSeconds` parse
+      them, so a duration is visibly a duration at the call site
+- [T] `Rng.uniformSeconds` for randomised durations — Python's `random.uniform`
+      is a double. Draws exactly one `nextLong` like `Rng.uniform`, so the
+      gameplay stream advances identically and a seeded run stays reproducible
+- [T] `Outpost` crew reloads moved from libGDX `FloatArray` to `double[]`
+      (libGDX ships no `DoubleArray`); grows outside the step loop
+- [T] **Dragon Hard breath: Python 15, Java 15.** Was 16. Asserted in the
+      standalone cadence loop *and* against a live Dragon, exactly — no
+      tolerance, because the boundary is no longer precision-dependent.
+      `BossParityTest.shippedHardBreathIsFifteen`
+- [T] The float32 fixture kept as a **regression demonstration** rather than a
+      description of production — `BossParityTest.floatTimersAreWhyThisRuleExists`
+      pins that three of six configurations diverged, in both directions
+- [T] `TimeDomainTest` (8) — behavioural boundary from 50 ms to an hour, an
+      identical repeating cadence over 216,000 steps, an explicitly **named**
+      list of authoritative timer accessors, the configured-duration types, and
+      a source scan for the float step. Named on purpose: a reflective
+      "any float called `*Timer`" rule would flag drawing state and miss
+      `shield` and `reel`
+- [x] No source comparison operator changed; no `EPSILON` introduced; no
+      gameplay constant adjusted
 
 ## Phase 8 — Game progression
 

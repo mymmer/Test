@@ -545,8 +545,78 @@ rather than silently changing the game.
 | Finding | Detail | Status |
 |---|---|---|
 | **The Lich ward ordering is not observable** | Phase 1 recorded "ward × 0.25 → armour" as an ordering that must be preserved because reversing it changes the result. It does not: both steps are pure multiplies and ×0.25 is an *exact power of two*, so the two orders agree bit for bit — verified across 100 float cases and all 18 fixtured ones. The order is still preserved, because it stops being equivalent the moment armour gains a floor, a cap or a flat subtraction. The test says so plainly rather than claiming to detect a difference that does not exist. | Order preserved; the claim corrected. `BossParityTest.wardOrdering` asserts the two agree, and fails if that ever changes. |
-| **Dragon breath: one extra fireball on Hard** | Python's timers are doubles; the port's are floats, like all its gameplay state. For the shipped **Normal** configuration (1.25 s breath, 0.15 s interval) both produce 8 fireballs. For the shipped **Hard** one (`boss_fire_scale` 0.5) Python produces 15 and the port 16 — about 7% more damage in that stream. | Reported, not patched. The cause is the precision of the timer type, so a fix is an architectural decision about gameplay state, not a balance tweak — and §32 of the brief forbids adjusting a constant to move a fixed-step boundary without proving the mismatch first. The mismatch is now proven and measured: `tools/parity/generate_fixtures.py` emits the count at *both* precisions (`shots` and `shotsFloat32`), and `BossParityTest.breathCadence` asserts the port against the single-precision one while `shippedNormalBreathAgreesExactly` pins the case that does agree. |
+| **Dragon breath: one extra fireball on Hard** | ~~Python's timers are doubles; the port's are floats.~~ **RESOLVED before Phase 8 — see §14.1.** The port fired 16 fireballs on Hard where Python fires 15. It now fires 15. The cause was the precision of the timer type, and the fix was architectural rather than a balance tweak: the whole time domain moved to `double`. | Fixed, not accepted. `BossParityTest.shippedHardBreathIsFifteen` asserts 15 in the standalone loop *and* in a live Dragon; `floatTimersAreWhyThisRuleExists` keeps the single-precision counts as a regression demonstration. |
 | **A Volatile blast still cannot chain unaided** | Unchanged from Phase 6; re-confirmed. | Recorded above. |
+
+---
+
+## 14.1 The time-domain rule (pre-Phase 8)
+
+**Gameplay time is `double`. Spatial simulation is `float` where appropriate.**
+
+```
+time domain    -> double     durations, deadlines, cooldowns, intervals,
+                             elapsed and remaining time, schedules
+spatial domain -> float      x/y, velocities, dimensions, angles,
+                             collision geometry, rendering-facing state
+```
+
+### Why
+
+The Dragon's Hard breath was the first *observable* symptom, not the disease.
+`1f/60f` is 0.016666668 — fractionally **longer** than a true sixtieth — so a
+float timer that subtracts it walks away from the truth a little every step, and
+at a comparison boundary that becomes a whole extra event. Measured across the
+six fixtured breath configurations, **three diverged**, and not all in the same
+direction:
+
+| fireScale | breath | interval | Python (double) | float32 | delta |
+|---|---|---|---|---|---|
+| 1.0 | 1.25 | 0.15 | 8 | 8 | — |
+| 1.0 | 2.00 | 0.25 | 8 | 8 | — |
+| 1.0 | 0.50 | 0.15 | 4 | **3** | −1 |
+| **0.5** | **1.25** | **0.15** | **15** | **16** | **+1** (shipped Hard) |
+| 0.5 | 2.00 | 0.25 | 16 | 16 | — |
+| 0.5 | 0.50 | 0.15 | 7 | **6** | −1 |
+
+A divergence that goes both ways cannot be compensated for by adjusting a
+constant. The type was wrong.
+
+### What the rule is not
+
+* **Not integer ticks.** §6 deliberately rejected making every duration a step
+  counter, and that decision stands: the source expresses durations in seconds,
+  many are random or configurable fractions, and `simulationStep` remains useful
+  for tracing and reproducibility without every timer becoming one.
+* **Not epsilons.** Source comparison operators are preserved exactly — `<= 0`
+  stays `<= 0`. No `EPSILON` was introduced to make a parity test green.
+* **Not a global conversion.** Positions, velocities, angles and drawing state
+  stay `float`. So do rates that are not times: `regen` is HP per second,
+  `breathPower` is a damage fraction, `shove` is a velocity.
+* **Not two clocks.** `Simulation.FIXED_DT` (double) and `Simulation.PHYSICS_DT`
+  (float) are the *same* step at two precisions. `step(double dt)` receives the
+  canonical one; a system that integrates space narrows it once, itself, with
+  `float fdt = (float) dt`. No production class reads `PHYSICS_DT` —
+  `TimeDomainTest` fails the build if one starts to.
+
+### What it does not claim
+
+A `double` countdown does not land exactly on the mathematical step, because
+neither `0.15` nor `1.0/60.0` is representable: nine sequential subtractions
+leave 0.15 s a hair above zero and it expires on the tenth. **Python does exactly
+the same**, which is why the fixtures agree. The guarantee is parity with the
+source plus a deterministic, drift-free boundary — not an idealised one.
+
+### Guarded by
+
+`TimeDomainTest` (8 tests): the behavioural boundary at every scale from 50 ms to
+an hour, an identical repeating cadence over 216,000 steps, an explicitly *named*
+list of the authoritative timer accessors, the configured-duration types, and a
+source scan proving nothing in production reaches for the float step. The named
+list is deliberate: a reflective "any float called `*Timer`" rule would flag
+`hurtFlash`, `recoil`, `aura` and `trapGlow` — which are drawing state and are
+meant to be floats — and miss `shield` and `reel`, which are not obviously
+temporal and are meant to be doubles.
 
 ---
 

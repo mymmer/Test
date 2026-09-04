@@ -51,6 +51,30 @@ public final class Json5 {
         return f != null && f.isNumber() ? f.asFloat() : fallback;
     }
 
+    /**
+     * A <b>time-domain</b> number: seconds, as a {@code double}.
+     *
+     * <p>Separate from {@link #number} so that a duration is visibly a duration
+     * at the call site and cannot quietly be parsed into a float. Every
+     * interval, delay, lifetime and cooldown in the data files comes through
+     * here. See {@code SIMULATION.md}, "Gameplay time is double".
+     */
+    public static double seconds(JsonValue v, String name, String where) {
+        require(v, name, where);
+        JsonValue f = v.get(name);
+        if (!f.isNumber()) {
+            throw new DataException(where + ": '" + name + "' must be a number of seconds, got "
+                    + f.type());
+        }
+        return f.asDouble();
+    }
+
+    /** {@link #seconds} with a fallback, for optional durations. */
+    public static double optSeconds(JsonValue v, String name, double fallback) {
+        JsonValue f = v.get(name);
+        return f != null && f.isNumber() ? f.asDouble() : fallback;
+    }
+
     public static boolean bool(JsonValue v, String name, String where) {
         require(v, name, where);
         JsonValue f = v.get(name);

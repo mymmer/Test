@@ -38,7 +38,7 @@ Projectile(DefenceContext ctx, float x, float y, float vx, float vy,
            boolean atPrisoner, long ownerUid);
 static Projectile friendly(ctx, x, y, vx, vy, kind, damage);   // the common case
 
-void  update(float dt);          // one fixed step
+void  update(double dt);         // one fixed step, canonical
 void  explode();                 // detonate now
 float damageFor(Target e);       // counters + crit, resolved per victim
 boolean hasHit(long targetUid);
@@ -52,6 +52,14 @@ ProjectileKind kind();           // id(), radius(), explodesOnGround()
 ```
 
 ## Important invariants
+
+0. **Gameplay time is `double`.** `life` and the `stun` a shot applies are `double` seconds; positions,
+   velocities, angles and drawing state stay `float`. `update`/`think` receive
+   the canonical `double` step and narrow it once, themselves, with
+   `float fdt = (float) dt`. See
+   [`SIMULATION.md`](SIMULATION.md), "Gameplay time is double" — the rule exists
+   because float timers made a Hard Dragon breathe 16 fireballs where Python
+   breathes 15.
 
 1. **Coordinates are Python/pygame space** — y grows *downward*, gravity is
    positive, `GROUND_Y = 620` is below `WALL_TOP = 350`. Every `GameConfig`

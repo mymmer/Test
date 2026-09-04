@@ -19,7 +19,7 @@ class GameWorldTest {
         int steps;
     }
 
-    private static final float DT = Simulation.DT;
+    private static final float DT = Simulation.PHYSICS_DT;
 
     private static GameWorld world() {
         return new GameWorld(new Rng(42L));
@@ -81,7 +81,7 @@ class GameWorldTest {
         w.spawn(probe);
         w.setStepListener(new GameWorld.StepListener() {
             @Override
-            public void onStep(GameWorld world, float dt) {
+            public void onStep(GameWorld world, double dt) {
                 probe.steps++;
             }
         });
@@ -108,7 +108,7 @@ class GameWorldTest {
 
         w.setStepListener(new GameWorld.StepListener() {
             @Override
-            public void onStep(GameWorld world, float dt) {
+            public void onStep(GameWorld world, double dt) {
                 world.kill(a);
                 // still present for the rest of this step, exactly as in Python
                 assertEquals(2, world.entities().size(),

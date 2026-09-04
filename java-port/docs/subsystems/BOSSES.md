@@ -54,14 +54,14 @@ abstract Boss extends Enemy
   boolean applySmack(float amount);               // Dragon
   String describe();                              // dense enough for a bug report
 
-TrollKing  hasCrown(), crownItem(), retrieveCrown(float dt), smash()
+TrollKing  hasCrown(), crownItem(), retrieveCrown(double dt), smash()
 Dragon     breathing(), breathingRemaining(), breathTimer(), clawProgress(),
            reel(), spitFire(float power)
 LichLord   hasStaff(), staffItem(), disarm(), shield(), wardActive(), orb(),
            recoverStaff(), raiseDead(), deathBolt(), currentStandoff()
 
 DroppedItem extends Entity            // NOT an Enemy
-  void  update(float dt), hold(), moveTo(float,float), throwIt(float,float);
+  void  update(double dt), hold(), moveTo(float,float), throwIt(float,float);
   boolean covers(float px, float py);           // gameplay pickup box
   RegaliaKind kind();  State state();  Boss owner();  long ownerUid();
   float x(), y(), vx(), vy(), width(), height(), restY();
@@ -80,6 +80,14 @@ BossContext extends EnemyContext: addDroppedItem, onBossDefeated,
 ```
 
 ## Important invariants
+
+0. **Gameplay time is `double`.** The intro, the regalia guard ladder, `fireDelay`, the Dragon's breath/shot/reel timers and the Lich's summon, bolt, phase, ward and disarm timers are `double` seconds; positions,
+   velocities, angles and drawing state stay `float`. `update`/`think` receive
+   the canonical `double` step and narrow it once, themselves, with
+   `float fdt = (float) dt`. See
+   [`SIMULATION.md`](SIMULATION.md), "Gameplay time is double" — the rule exists
+   because float timers made a Hard Dragon breathe 16 fireballs where Python
+   breathes 15.
 
 1. **A boss is an `Enemy`.** It walks, takes damage, dies and pays out through
    the same contracts, so everything already tested about payout, targeting and

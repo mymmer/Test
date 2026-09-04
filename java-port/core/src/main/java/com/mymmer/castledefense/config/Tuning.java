@@ -8,28 +8,34 @@ package com.mymmer.castledefense.config;
  * deliberately gathers them in one editable block ("Tweak freely; nothing
  * outside this block needs to change to re-time the bosses or the spawn rate").
  * That property is worth preserving.
+ *
+ * <p><b>Time-domain values here are {@code double}.</b> Every one of them is a
+ * duration, an interval or a deadline that a gameplay clock is compared
+ * against, and the Endless timetable in particular is compared against a clock
+ * that runs for an hour. See {@code SIMULATION.md}, "Gameplay time is double".
+ * Radii, speeds and damage stay {@code float} — they are spatial.
  */
 public final class Tuning {
 
     // --- Endless: spawn and tier timetable ----------------------------------
     /** Seconds between tier steps. */
-    public static final float ENDLESS_TIER_SECONDS = 30f;
+    public static final double ENDLESS_TIER_SECONDS = 30.0;
     /** Gap between spawns at the very start of a run. */
-    public static final float ENDLESS_SPAWN_START = 1.70f;
+    public static final double ENDLESS_SPAWN_START = 1.70;
     /** Hard floor on that gap, however long the run lasts. */
-    public static final float ENDLESS_SPAWN_MIN = 0.38f;
+    public static final double ENDLESS_SPAWN_MIN = 0.38;
     /** Seconds taken to ramp from START down to MIN. */
-    public static final float ENDLESS_SPAWN_RAMP = 300f;
+    public static final double ENDLESS_SPAWN_RAMP = 300.0;
     /** Randomness applied to each gap, as a fraction either way. */
-    public static final float ENDLESS_SPAWN_JITTER = 0.28f;
+    public static final double ENDLESS_SPAWN_JITTER = 0.28;
     /** Spawning pauses above this many live mobs. */
     public static final int ENDLESS_MAX_ALIVE = 60;
 
     // --- Endless: boss timetable --------------------------------------------
     /** Scripted arrivals, in seconds since the run began. */
-    public static final float[] ENDLESS_BOSS_TIMES = {120f, 240f, 360f};
+    public static final double[] ENDLESS_BOSS_TIMES = {120.0, 240.0, 360.0};
     /** After the scripted three, one random boss every this many seconds. */
-    public static final float ENDLESS_BOSS_REPEAT = 120f;
+    public static final double ENDLESS_BOSS_REPEAT = 120.0;
 
     // --- Challenge Horn -----------------------------------------------------
     /** Mobs the horn calls in at once in Endless. */
@@ -45,26 +51,26 @@ public final class Tuning {
     /** Classic: points per wave cleared. */
     public static final int TALENT_POINTS_PER_WAVE = 1;
     /** Endless: seconds survived per point. */
-    public static final float TALENT_SECONDS_PER_POINT = 60f;
+    public static final double TALENT_SECONDS_PER_POINT = 60.0;
     /** Aero-Mastery headwind slow, as a fraction. */
     public static final float STORM_WIND_SLOW = 0.30f;
     /** |wind| / WIND_MAX that counts as a "high" headwind. */
     public static final float HEADWIND_THRESHOLD = 0.45f;
     /** Each rank of Light Fingers cuts the grab delay by this much. */
-    public static final float GRAB_CD_PER_RANK = 0.20f;
+    public static final double GRAB_CD_PER_RANK = 0.20;
 
     // --- Active skills ------------------------------------------------------
     public static final float LIGHTNING_RADIUS = 155f;
     public static final float LIGHTNING_DAMAGE = 0.85f;
-    public static final float LIGHTNING_COOLDOWN = 14f;
+    public static final double LIGHTNING_COOLDOWN = 14.0;
     public static final int METEOR_COUNT = 16;
     public static final float METEOR_RADIUS = 96f;
     public static final float METEOR_DAMAGE = 130f;
-    public static final float METEOR_COOLDOWN = 26f;
-    public static final float FIRE_ZONE_TIME = 6f;
+    public static final double METEOR_COOLDOWN = 26.0;
+    public static final double FIRE_ZONE_TIME = 6.0;
     public static final float FIRE_ZONE_DPS = 48f;
-    public static final float TORNADO_COOLDOWN = 30f;
-    public static final float TORNADO_LIFE = 6f;
+    public static final double TORNADO_COOLDOWN = 30.0;
+    public static final double TORNADO_LIFE = 6.0;
     public static final float TORNADO_SPEED = 120f;
     public static final float TORNADO_RADIUS = 130f;
     public static final float TORNADO_LIFT = 620f;

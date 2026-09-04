@@ -58,9 +58,9 @@ public final class DifficultyTable {
                             "headstart", where),
                     positive(Json5.number(d, "speed", where), "speed", where),
                     positive(Json5.number(d, "hpCurve", where), "hpCurve", where),
-                    positive(Json5.number(d, "bossFire", where), "bossFire", where),
+                    positiveSeconds(Json5.seconds(d, "bossFire", where), "bossFire", where),
                     Json5.bool(d, "eliteHorn", where),
-                    Json5.inRange(Json5.number(d, "grabCd", where), 0f, 5f,
+                    inRangeSeconds(Json5.seconds(d, "grabCd", where), 0.0, 5.0,
                             "grabCd", where),
                     Json5.optString(d, "blurb", "")));
         }
@@ -71,6 +71,24 @@ public final class DifficultyTable {
     private static float positive(float v, String name, String where) {
         if (!(v > 0f)) {
             throw new DataException(where + ": '" + name + "' must be greater than 0, got " + v);
+        }
+        return v;
+    }
+
+    /** The time-domain counterpart of {@link #positive}. */
+    private static double positiveSeconds(double v, String name, String where) {
+        if (!(v > 0d)) {
+            throw new DataException(where + ": '" + name + "' must be greater than 0, got " + v);
+        }
+        return v;
+    }
+
+    /** The time-domain counterpart of {@code Json5.inRange}. */
+    private static double inRangeSeconds(double v, double lo, double hi,
+                                         String name, String where) {
+        if (!(v >= lo) || !(v <= hi) || Double.isNaN(v)) {
+            throw new DataException(where + ": '" + name + "' must be between " + lo
+                    + " and " + hi + ", got " + v);
         }
         return v;
     }

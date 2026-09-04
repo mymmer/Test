@@ -47,9 +47,10 @@ public final class CrowdSeparation {
      *
      * @param dt unused, and kept only because Python's signature has it — the
      *           pass is a positional constraint solve, not an integration, so it
-     *           produces the same result at any timestep
+     *           produces the same result at any timestep. It is the canonical
+     *           double step like every other {@code dt} in the step chain.
      */
-    public void separate(EnemyContext ctx, float dt) {
+    public void separate(EnemyContext ctx, double dt) {
         ground.clear();
         int total = ctx.targetCount();
         for (int i = 0; i < total; i++) {

@@ -271,7 +271,7 @@ class StructuresTest {
             assertFalse(w.outpost.isTurret(), "level " + i);
         }
         float bowDamage = w.outpost.gunDamage();
-        float bowReload = w.outpost.gunReload();
+        double bowReload = w.outpost.gunReload();
         assertEquals(7.5f, bowDamage, 0.01f);
         assertEquals(0.92f, bowReload, 0.001f);
 

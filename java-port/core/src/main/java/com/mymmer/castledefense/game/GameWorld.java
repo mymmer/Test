@@ -64,9 +64,15 @@ public final class GameWorld implements Simulation.Stepper {
 
     private StepListener stepListener;
 
-    /** Hook for systems that must run inside a step. Phase 5+ attaches real ones. */
+    /**
+     * Hook for systems that must run inside a step.
+     *
+     * <p>{@code dt} is the canonical {@code double} step. A system that
+     * integrates positions narrows it once, itself, with
+     * {@code float fdt = (float) dt}.
+     */
     public interface StepListener {
-        void onStep(GameWorld world, float dt);
+        void onStep(GameWorld world, double dt);
     }
 
     public GameWorld(Rng rng) {
@@ -89,10 +95,10 @@ public final class GameWorld implements Simulation.Stepper {
      * between (they arrive in Phase 11).
      */
     @Override
-    public void step(float dt) {
+    public void step(double dt) {
         steps++;
         if (trace.isEnabled()) {
-            trace.event(TraceEvent.SIMULATION_STEP, steps, 0L, dt, 0f, state.name());
+            trace.event(TraceEvent.SIMULATION_STEP, steps, 0L, (float) dt, 0f, state.name());
         }
 
         if (!state.advancesWorld()) {

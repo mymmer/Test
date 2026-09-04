@@ -36,7 +36,7 @@ class DefenceTableTest {
 
         TowerConfig bow = t.tower(TowerType.BOWMAN);
         assertEquals(430f, bow.range, 0f);
-        assertEquals(0.50f, bow.cooldown, 0f);
+        assertEquals(0.50, bow.cooldown, 0d);
         assertEquals(11f, bow.damage, 0f);
         assertEquals(70f, bow.maxHp, 0f);
         assertEquals(1.9f, bow.airRangeMult, 0f);
@@ -51,7 +51,7 @@ class DefenceTableTest {
 
         TowerConfig bal = t.tower(TowerType.BALLISTA);
         assertEquals(640f, bal.range, 0f);
-        assertEquals(2.5f, bal.cooldown, 0f);
+        assertEquals(2.5, bal.cooldown, 0d);
         assertEquals(62f, bal.damage, 0f);
         assertEquals(120f, bal.maxHp, 0f);
         assertEquals(1.5f, bal.airRangeMult, 0f);
@@ -65,7 +65,7 @@ class DefenceTableTest {
 
         TowerConfig can = t.tower(TowerType.CANNON);
         assertEquals(600f, can.range, 0f);
-        assertEquals(3.1f, can.cooldown, 0f);
+        assertEquals(3.1, can.cooldown, 0d);
         assertEquals(40f, can.damage, 0f);
         assertEquals(86f, can.splash, 0f);
         assertEquals(140f, can.maxHp, 0f);
@@ -80,7 +80,7 @@ class DefenceTableTest {
         //  shared across all three in Python's DefenseTower base class
         for (TowerType type : TowerType.values()) {
             assertEquals(0.05f, t.tower(type).regen, 0f, type.id());
-            assertEquals(9.0f, t.tower(type).rebuildTime, 0f, type.id());
+            assertEquals(9.0, t.tower(type).rebuildTime, 0d, type.id());
         }
     }
 

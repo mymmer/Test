@@ -25,7 +25,7 @@ import org.junit.jupiter.api.Test;
  */
 class BossLifecycleTest {
 
-    private static final float DT = TestBossWorld.DT;
+    private static final double DT = TestBossWorld.DT;
 
     /** A hostile projectile attributed to a uid, as a boss's own would be. */
     private static Projectile shotBy(TestBossWorld w, long ownerUid) {
@@ -338,7 +338,7 @@ class BossLifecycleTest {
                 "they genuinely start in step, as in Python");
 
         //  battering one pushes its next breath out; the other is untouched
-        float before = second.breathTimer();
+        double before = second.breathTimer();
         first.applySmack(GameConfig.CLAW_SMACK_DISTANCE);
         assertTrue(first.breathTimer() >= 2f);
         assertEquals(before, second.breathTimer(), 1e-6f,

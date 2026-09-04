@@ -15,10 +15,17 @@ import com.mymmer.castledefense.util.Collisions;
  *
  * <p>Not one attack: a <b>sustained stream</b> of {@link BossConfig#breathTime}
  * seconds, spitting a fireball every {@link BossConfig#breathShotInterval}, each
- * for a fraction of a full hit. Both timers count down in
- * <em>simulation</em> seconds on the fixed 1/60 step — never render frames, never
- * wall-clock, never an animation callback. At the shipped 1.25 s / 0.15 s that is
- * nine fireballs per breath, and it is nine on every device.
+ * for a fraction of a full hit.
+ *
+ * <p>Both timers count down in <b>double</b> simulation seconds on the fixed
+ * 1/60 step — never render frames, never wall-clock, never an animation
+ * callback, and never a float. That last one is not fastidiousness: with float
+ * timers the shipped Hard breath (1.25 s at a 0.075 s interval, the difficulty
+ * halving the gap) produced <b>sixteen</b> fireballs where the Python source
+ * produces fifteen, because a float step of 0.016666668 is fractionally longer
+ * than a sixtieth and eighty-odd subtractions of it move the boundary. Eight
+ * fireballs on Normal, fifteen on Hard, on every device. See
+ * {@code SIMULATION.md}, "Gameplay time is double".
  *
  * <h2>The claws are not regalia, and share the regalia guard anyway</h2>
  *
@@ -31,31 +38,31 @@ import com.mymmer.castledefense.util.Collisions;
  */
 public final class Dragon extends Boss {
 
-    private float breathTimer;
+    private double breathTimer;
     /** Seconds of breath left in the current stream. Zero when not breathing. */
-    private float breathing;
-    private float shotTimer;
+    private double breathing;
+    private double shotTimer;
 
     /** Drag distance accumulated toward the next claw disruption, 0..1. */
     private float clawProgress;
     /** Seconds of reeling left after a successful battering. */
-    private float reel;
+    private double reel;
 
     public Dragon(BossContext ctx, EnemyConfig config, BossConfig boss,
                   int wave, Float x, Float y) {
         super(ctx, config, boss, wave, x, y);
-        this.breathTimer = fireDelay(4f);
+        this.breathTimer = fireDelay(4.0);
     }
 
     public boolean breathing() {
-        return breathing > 0f;
+        return breathing > 0d;
     }
 
-    public float breathingRemaining() {
+    public double breathingRemaining() {
         return breathing;
     }
 
-    public float breathTimer() {
+    public double breathTimer() {
         return breathTimer;
     }
 
@@ -63,7 +70,7 @@ public final class Dragon extends Boss {
         return clawProgress;
     }
 
-    public float reel() {
+    public double reel() {
         return reel;
     }
 
@@ -80,7 +87,7 @@ public final class Dragon extends Boss {
      */
     @Override
     protected boolean hasRegalia() {
-        return reel <= 0f;
+        return reel <= 0d;
     }
 
     /**
@@ -95,7 +102,7 @@ public final class Dragon extends Boss {
      */
     @Override
     public boolean applySmack(float amount) {
-        if (!isAlive() || regaliaCd() > 0f || reel > 0f) {
+        if (!isAlive() || regaliaCd() > 0d || reel > 0d) {
             return false;
         }
         clawProgress += amount / GameConfig.CLAW_SMACK_DISTANCE;
@@ -107,8 +114,8 @@ public final class Dragon extends Boss {
         //  and grows the same guard, even though no regalia is involved.
         countDisruption();
         reel = GameConfig.CLAW_STAGGER;
-        breathing = 0f;                     // breath is cut off mid-stream
-        breathTimer = Math.max(breathTimer, 2f);
+        breathing = 0d;                     // breath is cut off mid-stream
+        breathTimer = Math.max(breathTimer, 2d);
         setX(x() + 120f);                   // driven back off the wall
         guardRegalia();
         bossCtx.trace().event(TraceEvent.BOSS_DISRUPTION, bossCtx.step(), uid(),
@@ -117,23 +124,24 @@ public final class Dragon extends Boss {
     }
 
     @Override
-    protected void think(float dt) {
-        anim += dt * 6f;
-        bob += dt * 2.2f;
+    protected void think(double dt) {
+        float fdt = (float) dt;             // flight, bob and animation
+        anim += fdt * 6f;
+        bob += fdt * 2.2f;
 
-        if (reel > 0f) {
+        if (reel > 0d) {
             //  knocked off its attack run: climbing and shaking it off
             reel -= dt;
             setState(EnemyState.ATTACK);
-            setY(y() + Collisions.clamp((flyY - 60f) - y(), -170f * dt, 170f * dt));
+            setY(y() + Collisions.clamp((flyY - 60f) - y(), -170f * fdt, 170f * fdt));
             return;
         }
 
         float targetY = flyY + (float) Math.sin(bob) * 26f;
-        setY(y() + Collisions.clamp(targetY - y(), -180f * dt, 180f * dt));
+        setY(y() + Collisions.clamp(targetY - y(), -180f * fdt, 180f * fdt));
 
         if (x() > boss.standoffX) {
-            setX(x() - speed * dt);
+            setX(x() - speed * fdt);
             setVxEstimate(-speed);
             setState(EnemyState.WALK);
             return;
@@ -143,10 +151,10 @@ public final class Dragon extends Boss {
 
         //  A sustained stream on a real timer.  While breathing, nothing else
         //  happens -- the breath timer does not even tick.
-        if (breathing > 0f) {
+        if (breathing > 0d) {
             breathing -= dt;
             shotTimer -= dt;
-            if (shotTimer <= 0f) {
+            if (shotTimer <= 0d) {
                 shotTimer = fireDelay(boss.breathShotInterval);
                 spitFire(boss.breathPower);
             }
@@ -154,11 +162,11 @@ public final class Dragon extends Boss {
         }
 
         breathTimer -= dt;
-        if (breathTimer <= 0f) {
-            breathTimer = fireDelay(bossCtx.rng().uniform(
+        if (breathTimer <= 0d) {
+            breathTimer = fireDelay(bossCtx.rng().uniformSeconds(
                     boss.breathIntervalMin, boss.breathIntervalMax));
             breathing = boss.breathTime;
-            shotTimer = 0f;             // the first fireball leaves immediately
+            shotTimer = 0d;             // the first fireball leaves immediately
         }
     }
 

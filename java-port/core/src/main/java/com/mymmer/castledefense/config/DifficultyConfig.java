@@ -29,14 +29,14 @@ public final class DifficultyConfig {
     private final float headstart;
     private final float speed;
     private final float hpCurve;
-    private final float bossFire;
+    private final double bossFire;
     private final boolean eliteHorn;
-    private final float grabCd;
+    private final double grabCd;
     private final String blurb;
 
     public DifficultyConfig(String id, String label, float scale, float gold,
                             float headstart, float speed, float hpCurve,
-                            float bossFire, boolean eliteHorn, float grabCd,
+                            double bossFire, boolean eliteHorn, double grabCd,
                             String blurb) {
         this.id = id;
         this.label = label;
@@ -79,7 +79,7 @@ public final class DifficultyConfig {
         return hpCurve;
     }
 
-    public float bossFire() {
+    public double bossFire() {
         return bossFire;
     }
 
@@ -87,7 +87,7 @@ public final class DifficultyConfig {
         return eliteHorn;
     }
 
-    public float grabCd() {
+    public double grabCd() {
         return grabCd;
     }
 

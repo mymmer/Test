@@ -20,7 +20,7 @@ import org.junit.jupiter.api.Test;
  */
 class BossMechanicsTest {
 
-    private static final float DT = TestBossWorld.DT;
+    private static final double DT = TestBossWorld.DT;
 
     // ========================================================================
     //  Generic boss invariants
@@ -136,14 +136,14 @@ class BossMechanicsTest {
         //  DETACHED and the guard is applied when it is RECOVERED, so by the time
         //  a guard exists the count is already 1.  A boss's FIRST guard is
         //  9.6 s, never 6.0 -- there is no state in which it is 6.0.
-        float[] expected = new float[5];
+        double[] expected = new double[5];
         for (int i = 0; i < expected.length; i++) {
             expected[i] = GameConfig.REGALIA_COOLDOWN
-                    * (1f + GameConfig.REGALIA_CD_GROWTH * (i + 1));
+                    * (1d + GameConfig.REGALIA_CD_GROWTH * (i + 1));
         }
-        assertEquals(9.6f, expected[0], 1e-3f, "first: 9.6 s");
-        assertEquals(13.2f, expected[1], 1e-3f, "second: 13.2 s");
-        assertEquals(16.8f, expected[2], 1e-3f, "third: 16.8 s");
+        assertEquals(9.6, expected[0], 1e-9, "first: 9.6 s");
+        assertEquals(13.2, expected[1], 1e-9, "second: 13.2 s");
+        assertEquals(16.8, expected[2], 1e-9, "third: 16.8 s");
 
         //  drive the sequence: detach, recover, detach, recover...
         for (int n = 0; n < 4; n++) {
@@ -407,7 +407,7 @@ class BossMechanicsTest {
         assertTrue(fired >= 5, "a sustained stream, not one shot: " + fired);
 
         //  the stream lasts about breathTime, on the fixed step
-        float expectedSteps = w.bosses.config(BossType.DRAGON).breathTime / DT;
+        double expectedSteps = w.bosses.config(BossType.DRAGON).breathTime / DT;
         assertEquals(expectedSteps, steps, 2f, "measured in simulation steps");
     }
 

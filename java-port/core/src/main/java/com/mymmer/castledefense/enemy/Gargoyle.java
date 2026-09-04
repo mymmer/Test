@@ -18,8 +18,8 @@ public final class Gargoyle extends Enemy {
     }
 
     @Override
-    protected void think(float dt) {
-        anim += dt * 12f;
+    protected void think(double dt) {
+        anim += (float) dt * 12f;
         super.think(dt);
     }
 }

@@ -56,10 +56,10 @@ float    alpha();                     // leftover fraction, for render interpola
 float    accumulatorSeconds();
 long     droppedStepEvents();         // frames where the budget was hit
 long     clampedFrames();             // frames where the delta clamp bit
-interface Stepper { void step(float dt); }
+interface Stepper { void step(double dt); }
 
 // GameWorld — what a step advances.
-void        step(float dt);                     // called only by Simulation
+void        step(double dt);                    // called only by Simulation
 void        setStepListener(StepListener l);    // where gameplay systems attach
 double      simulationTime();                   // advances in every state
 double      gameplayTime();                     // advances only while unfrozen
@@ -88,25 +88,84 @@ Array<T> unsafeItems();             // escape hatch, tests and bulk render only
 long uid();  boolean isAlive();  void markDead();   // revive() is protected
 ```
 
+## Gameplay time is double
+
+**The one cross-cutting rule of this subsystem:**
+
+```
+time domain    -> double     durations, deadlines, cooldowns, intervals,
+                             elapsed and remaining time, schedules
+spatial domain -> float      x/y, velocities, dimensions, angles,
+                             collision geometry, rendering-facing state
+```
+
+`step(double dt)` receives the canonical step. A timer subtracts it as it comes.
+A system that integrates space narrows it **once, itself**, at the top of the
+method:
+
+```java
+public void update(double dt) {
+    float fdt = (float) dt;         // spatial only
+    cooldown -= dt;                 // time domain: never fdt
+    x += vx * fdt;                  // spatial domain
+}
+```
+
+**Why.** `1f/60f` is 0.016666668 — fractionally *longer* than a true sixtieth —
+so a float timer subtracting it drifts, and at a comparison boundary that becomes
+a whole extra event. The shipped Hard Dragon breath fired **16** fireballs where
+the Python source fires 15. Three of the six fixtured breath configurations
+diverged, in *both* directions, which is why no constant could have compensated.
+
+**What this rule is not:**
+
+* **Not integer ticks.** Durations stay seconds — many are random or
+  configurable fractions — they are simply *double* seconds. The integer
+  `stepCount` remains the canonical clock and trace id.
+* **Not epsilons.** Source comparison operators are preserved exactly: `<= 0`
+  stays `<= 0`. No `EPSILON` was added to make a parity test pass.
+* **Not a global conversion.** Rates that are not times stay float: `regen` is
+  HP per second, `breathPower` is a damage fraction, `shove` is a velocity.
+  So does drawing state: `hurtFlash`, `recoil`, `aura`, `trapGlow`, `orb`,
+  `smash`, `fuse`, `anim`, `bob`, `spin`.
+* **Not two clocks.** See invariant 1.
+
+**What it does not claim.** A double countdown does not land exactly on the
+mathematical step — neither `0.15` nor `1.0/60.0` is representable, so nine
+sequential subtractions leave 0.15 s a hair above zero and it expires on the
+tenth. **Python does the same.** The guarantee is parity with the source plus a
+deterministic, drift-free boundary, not an idealised one.
+
+**Reading a duration from data:** `Json5.seconds` / `Json5.optSeconds`, which
+return `double`. **Drawing a random duration:** `Rng.uniformSeconds`, which draws
+one `nextLong` exactly as `Rng.uniform` does, so the gameplay stream advances
+identically and a seeded run stays reproducible.
+
+Guarded by `TimeDomainTest`.
+
 ## Important invariants
 
-1. **One step, two representations.** `Simulation.FIXED_DT ==
+1. **One step, two precisions — not two clocks.** `Simulation.FIXED_DT ==
    GameConfig.SIMULATION_STEP == 1.0/60.0` (double, canonical) and
-   `Simulation.DT == GameConfig.SIMULATION_STEP_F == (float) FIXED_DT` (gameplay).
-   Nothing else defines a timestep; `step(dt)` always receives exactly `DT`.
-2. **The canonical step is a `double`; the gameplay step is a `float`.**
-   `FIXED_DT = 1.0/60.0` is used by the accumulator, the step comparison and the
-   clock. `DT = (float) FIXED_DT` is what `step(dt)` receives, because positions,
-   velocities and decay are float maths. The rule: **multiply by `DT`, never sum
-   it.** `1f/60f` is 0.016666668…, not a sixtieth, so summing it drifts ~188 µs
-   over an hour — `canonicalClockBeatsFloatAccumulation` demonstrates exactly
-   that and pins the difference.
+   `Simulation.PHYSICS_DT == GameConfig.SIMULATION_STEP_F == (float) FIXED_DT`
+   (spatial). They name the *same* step and nothing advances them independently.
+   Nothing else defines a timestep; `step(dt)` always receives exactly
+   `FIXED_DT`.
+2. **The step reaches gameplay as a `double`.** The accumulator, the step
+   comparison, the clock and every gameplay timer use `FIXED_DT`.
+   `PHYSICS_DT` exists for float maths, and **no production class reads it** —
+   each narrows the `dt` it was handed, where the narrowing is visible.
+   `TimeDomainTest.productionNeverReadsTheFloatStepConstant` fails the build if
+   one starts to. The rule for the float step remains: **multiply by it, never
+   sum it.** Summing `1f/60f` drifts ~188 µs over an hour —
+   `canonicalClockBeatsFloatAccumulation` pins the difference.
 2b. **`timeSeconds()` is `stepCount * FIXED_DT`, computed fresh.** Not a running
    total, so it cannot drift: 60 steps are 1.0 s, 3600 are 60.0 s, 216 000 are
    3600.0 s, to double precision. Step ids in traces are the integer step count
    itself. `secondsForSteps` / `stepsForSeconds` exist so later long-lived clocks
    (Endless timetable, boss phases) convert the same way instead of summing their
-   own float. This does **not** make gameplay integer ticks: physics stays float.
+   own float. This does **not** make gameplay integer ticks: durations stay
+   double seconds and spatial integration stays float.
 2c. **Exact assertions where the port controls the input, tolerance where the
    platform supplies it.** A step count is an integer we chose, so N steps must be
    exactly N/60 s and the tests assert that to 1e-12. A frame delta such as

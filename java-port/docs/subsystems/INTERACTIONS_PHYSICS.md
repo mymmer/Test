@@ -54,7 +54,7 @@ reporting 60 produce the same motion.
 CursorInteraction(EnemyContext ctx, PointerVelocity velocity)
   implements WorldInteractionHandler
   boolean onWorldPress(Pointer);  void onWorldDrag/onWorldRelease/onWorldCancel(Pointer);
-  void  update(float dt, boolean pointerDown, float worldX, float worldY);
+  void  update(double dt, boolean pointerDown, float worldX, float worldY);
   void  setGrabLevel(int), setMultiLevel(int), setGrabCooldown(float);
   float grabCapacity(), grabCooldown(), grabCdRemaining();
   Enemy grabbed(), stripping();  DefenceTower charging();
@@ -66,6 +66,14 @@ interface PointerVelocity { void velocityFor(int pointerId, float[] out); }   //
 ```
 
 ## Important invariants
+
+0. **Gameplay time is `double`.** The grab cooldown and the configured grab delay are `double` seconds; positions,
+   velocities, angles and drawing state stay `float`. `update`/`think` receive
+   the canonical `double` step and narrow it once, themselves, with
+   `float fdt = (float) dt`. See
+   [`SIMULATION.md`](SIMULATION.md), "Gameplay time is double" — the rule exists
+   because float timers made a Hard Dragon breathe 16 fireballs where Python
+   breathes 15.
 
 1. **Desktop and mobile must produce identical results for identical world-space
    paths.** Everything below `GameInput` works in world units.

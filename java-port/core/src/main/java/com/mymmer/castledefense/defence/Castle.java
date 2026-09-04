@@ -286,7 +286,7 @@ public final class Castle {
      * <b>half</b> damage and are measured from their mid-height, and a stunning
      * blast stuns them for the longer of the two durations.
      */
-    public void splashHit(float x, float y, float radius, float damage, float stun) {
+    public void splashHit(float x, float y, float radius, float damage, double stun) {
         float gap = Math.max(0f, x - frontX);
         if (gap <= radius) {
             takeDamage(damage * (1f - 0.5f * gap / Math.max(1f, radius)));
@@ -312,7 +312,7 @@ public final class Castle {
      * because the choice is made over the castle's own list, and the RNG draw is
      * from the seeded gameplay stream so a replay smashes the same tower.
      */
-    public DefenceTower smashRandomTower(float damage, float stun) {
+    public DefenceTower smashRandomTower(float damage, double stun) {
         int live = 0;
         for (int i = 0; i < towers.size; i++) {
             if (!towers.get(i).disabled()) {
@@ -346,8 +346,8 @@ public final class Castle {
 
     // --- step ---------------------------------------------------------------
 
-    public void update(float dt) {
-        flash = Math.max(0f, flash - dt * 5f);
+    public void update(double dt) {
+        flash = Math.max(0f, flash - (float) dt * 5f);      // visual
         for (int i = 0; i < towers.size; i++) {
             towers.get(i).update(dt);
         }

@@ -56,7 +56,7 @@ final class TestWorld implements DefenceContext {
     }
 
     /** One simulation step, in the order the real game loop uses. */
-    void step(float dt) {
+    void step(double dt) {
         step++;
         castle.update(dt);
         outpost.update(dt);
@@ -70,7 +70,7 @@ final class TestWorld implements DefenceContext {
         projectiles.sweep();
     }
 
-    void steps(int n, float dt) {
+    void steps(int n, double dt) {
         for (int i = 0; i < n; i++) {
             step(dt);
         }

@@ -98,9 +98,29 @@ public final class Rng {
 
     // --- conveniences that read like the Python they replace -----------------
 
-    /** Python {@code random.uniform(a, b)}. */
+    /** Python {@code random.uniform(a, b)}, for spatial values. */
     public float uniform(float a, float b) {
         return a + game.nextFloat() * (b - a);
+    }
+
+    /**
+     * Python {@code random.uniform(a, b)} for a <b>time-domain</b> value.
+     *
+     * <p>Randomised durations are everywhere in the source — a Troll King's
+     * leap interval, a Lich's bolt gap, a tower's initial cooldown jitter, the
+     * Endless spawn gap — and Python produces every one of them as a double.
+     * Drawing them through {@link #uniform} would round each to a float before
+     * it was ever stored, which is the same class of error as accumulating a
+     * float step.
+     *
+     * <p>Costs the same as {@link #uniform}: {@code RandomXS128} draws exactly
+     * one {@code long} for {@code nextFloat()} and for {@code nextDouble()}
+     * alike, so the gameplay stream advances by the same amount and a seeded
+     * run stays reproducible. Only the value differs, and it differs toward the
+     * source.
+     */
+    public double uniformSeconds(double a, double b) {
+        return a + game.nextDouble() * (b - a);
     }
 
     /** Python {@code random.random() < chance}. */

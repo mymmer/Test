@@ -40,7 +40,7 @@ public interface BossContext extends EnemyContext {
      * once per boss at construction, so changing difficulty mid-run cannot
      * retune a boss already on the field. Python {@code game.boss_fire_scale}.
      */
-    float bossFireScale();
+    double bossFireScale();
 
     /** Builds a boss without the caller knowing its class. */
     Boss createBoss(BossType type, int wave, Float x, Float y);

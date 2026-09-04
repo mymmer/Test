@@ -19,7 +19,7 @@ public final class TowerConfig {
     /** Display name. Becomes a localisation key in Phase 10. */
     public final String name;
     public final float range;
-    public final float cooldown;
+    public final double cooldown;
     public final float damage;
     public final float splash;
     public final boolean hitsAir;
@@ -35,17 +35,17 @@ public final class TowerConfig {
     /** Fraction of max HP repaired per second. */
     public final float regen;
     /** Seconds a downed tower takes to come back. */
-    public final float rebuildTime;
+    public final double rebuildTime;
     /** Projectile speed for the ordinary shot. */
     public final float projectileSpeed;
     public final ProjectileKind projectile;
     /** Projectile speed for a hand-fired overcharge shot, before the multiplier. */
     public final float overchargeSpeed;
 
-    TowerConfig(TowerType type, String name, float range, float cooldown, float damage,
+    TowerConfig(TowerType type, String name, float range, double cooldown, float damage,
                 float splash, boolean hitsAir, float maxHp, float width, float height,
                 float bonusVsAir, float bonusVsHeavy, float airRangeMult,
-                boolean overchargeable, float regen, float rebuildTime,
+                boolean overchargeable, float regen, double rebuildTime,
                 float projectileSpeed, ProjectileKind projectile, float overchargeSpeed) {
         this.type = type;
         this.name = name;

@@ -19,8 +19,8 @@ public interface CombatModifiers {
     };
 
     /** Reload multiplier, {@code 1 - min(0.45, rate)}. Lower is faster. */
-    default float towerRate() {
-        return 1f;
+    default double towerRate() {
+        return 1d;
     }
 
     /** Damage multiplier, {@code 1 + power}. */
@@ -44,8 +44,8 @@ public interface CombatModifiers {
     }
 
     /** Overcharge cooldown multiplier, {@code 1 - min(0.5, overcharge)}. */
-    default float overchargeCd() {
-        return 1f;
+    default double overchargeCd() {
+        return 1d;
     }
 
     /** Barricade self-repair per second, as a fraction of max HP. */
@@ -64,8 +64,8 @@ public interface CombatModifiers {
     }
 
     /** Rebuild-time multiplier, {@code 1 - min(0.6, rebuild)}. */
-    default float rebuildMult() {
-        return 1f;
+    default double rebuildMult() {
+        return 1d;
     }
 
     /** Incoming castle damage multiplier, {@code 1 - min(0.4, thorns)}. */
@@ -79,8 +79,8 @@ public interface CombatModifiers {
     }
 
     /** Ally raise-interval multiplier. Lower is faster. */
-    default float allyRate() {
-        return 1f;
+    default double allyRate() {
+        return 1d;
     }
 
     // ========================================================================
@@ -118,8 +118,8 @@ public interface CombatModifiers {
     }
 
     /** Extra seconds before an ally crumbles. */
-    default float allyLife() {
-        return 0f;
+    default double allyLife() {
+        return 0d;
     }
 
     /** Undead Sentinels: allies chase anything, in any direction. */

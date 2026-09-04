@@ -85,7 +85,7 @@ interface DefenceContext  { int targetCount(); Target target(int i);
 
 // Towers
 abstract DefenceTower  (Bowman, Ballista, Cannon)
-  void update(float dt);  Target pickTarget();  float reachTo(Target), damageVs(Target);
+  void update(double dt);  Target pickTarget();  float reachTo(Target), damageVs(Target);
   void takeDamage(float), applyStun(float), restore();  int upgrade();
   boolean canOvercharge();  boolean overchargeFire(float aimX, float aimY, float power);
   boolean contains(float px, float py);         // pygame rect semantics
@@ -99,16 +99,16 @@ boolean upgradeWall(), visualCapped();   String tierLabel();   CastleTier tier()
 float repair(), repair(float), hp(), maxHp(), frontX(), keepRight(), flash();
 DefenceTower addTower(TowerType), towerAt(float x, float y), smashRandomTower(float, float);
 void  takeDamage(float), splashHit(float x, float y, float r, float dmg, float stun),
-      restoreTowers(), update(float dt);
+      restoreTowers(), update(double dt);
 Array<TowerSlot> freeSlots();  Array<DefenceTower> towers();
 
 // Barricade / SpikeWalls / Outpost
-Barricade:  boolean alive(), buy();  void takeDamage(float), update(float);
+Barricade:  boolean alive(), buy();  void takeDamage(float), update(double);
             float x(), topY(), hp(), maxHp();  int level();   static float WIDTH
 SpikeWalls: boolean upgrade();  void bite(Target), setLevel(int);  float damage();  int level()
 Outpost:    boolean upgrade(), isTurret(), hasPrisoner(), canTrap(Trappable), trap(Trappable);
             int level(), guns(), crewCount();  float overdrive(), gunDamage(), gunReload();
-            Target pickTarget();  void hurtPrisoner(float), updatePrisoner(float), update(float);
+            Target pickTarget();  void hurtPrisoner(float), updatePrisoner(double), update(double);
             boolean bodyContains(float, float), trapAreaContains(float, float);
             float aimPointX(), aimPointY(), prisonerHp(), prisonerMax(), prisonerHit();
 
@@ -118,6 +118,14 @@ DefenceTable.load(JsonSource) → tower(TowerType), tier(int), slot(int),
 ```
 
 ## Important invariants
+
+0. **Gameplay time is `double`.** Tower reload, cooldown, rebuild, stun and overcharge lockout, and the Outpost's crew reloads, raise timer and prisoner regen lockout are `double` seconds; positions,
+   velocities, angles and drawing state stay `float`. `update`/`think` receive
+   the canonical `double` step and narrow it once, themselves, with
+   `float fdt = (float) dt`. See
+   [`SIMULATION.md`](SIMULATION.md), "Gameplay time is double" — the rule exists
+   because float timers made a Hard Dragon breathe 16 fireballs where Python
+   breathes 15.
 
 1. **Targeting is a parity implementation.** A linear scan of every target in
    list order; **lowest score wins and ties go to the earlier entry** (the

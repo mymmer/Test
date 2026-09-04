@@ -32,11 +32,11 @@ public final class Necromancer extends Enemy implements Trappable {
 
     /** How far from the castle front he halts, before jitter. */
     public static final float STANDOFF = 400f;
-    public static final float SUMMON_RATE = 3.4f;
+    public static final double SUMMON_RATE = 3.4;
     public static final int MAX_MINIONS = 4;
 
-    private float summonTimer = 2f;
-    private float castTimer;
+    private double summonTimer = 2.0;
+    private double castTimer;
     private final float standoffX;
     /** Live minions only; pruned each step so dead ones are not pinned. */
     private final Array<Enemy> minions = new Array<>(false, MAX_MINIONS);
@@ -45,7 +45,7 @@ public final class Necromancer extends Enemy implements Trappable {
 
     public Necromancer(EnemyContext ctx, EnemyConfig config, int wave, Float x, Float y) {
         super(ctx, config, wave, x, y);
-        this.castTimer = ctx.rng().uniform(1.5f, 3f);
+        this.castTimer = ctx.rng().uniformSeconds(1.5, 3.0);
         this.standoffX = GameConfig.CASTLE_FRONT + STANDOFF + ctx.rng().uniform(-40f, 60f);
     }
 
@@ -83,12 +83,13 @@ public final class Necromancer extends Enemy implements Trappable {
     }
 
     @Override
-    protected void think(float dt) {
+    protected void think(double dt) {
         //  Deliberately does NOT call super: he has no interest in the
         //  barricade, the castle front or the blocked queue.  He walks to his
         //  line and then stands there casting.
-        anim += dt * 3f;
-        glow = Math.max(0f, glow - dt * 2f);
+        float fdt = (float) dt;
+        anim += fdt * 3f;
+        glow = Math.max(0f, glow - fdt * 2f);
         for (int i = minions.size - 1; i >= 0; i--) {
             if (!minions.get(i).alive()) {
                 minions.removeIndex(i);
@@ -97,7 +98,7 @@ public final class Necromancer extends Enemy implements Trappable {
 
         float standoff = currentStandoff();
         if (x > standoff) {
-            x -= speed * dt;
+            x -= speed * fdt;
             setVxEstimate(-speed);
             setState(EnemyState.WALK);
             return;
@@ -105,13 +106,13 @@ public final class Necromancer extends Enemy implements Trappable {
         setState(EnemyState.ATTACK);
 
         summonTimer -= dt;
-        if (summonTimer <= 0f && minions.size < MAX_MINIONS) {
+        if (summonTimer <= 0d && minions.size < MAX_MINIONS) {
             summonTimer = SUMMON_RATE;
             summon();
         }
 
         castTimer -= dt;
-        if (castTimer <= 0f) {
+        if (castTimer <= 0d) {
             //  Halted at the Outpost rather than the wall means he is here for
             //  the prisoner and nothing else, so every bolt goes into the cage.
             //  Otherwise it is a coin weighted 65% toward the cage.
@@ -120,7 +121,7 @@ public final class Necromancer extends Enemy implements Trappable {
                 castTimer = GameConfig.RIVAL_BOLT_RATE;
                 castAtPrisoner();
             } else {
-                castTimer = ctx.rng().uniform(2.6f, 4f);
+                castTimer = ctx.rng().uniformSeconds(2.6, 4.0);
                 castBolt();
             }
         }

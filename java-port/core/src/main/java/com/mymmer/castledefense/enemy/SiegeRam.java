@@ -40,8 +40,8 @@ public final class SiegeRam extends Enemy {
     }
 
     @Override
-    protected void think(float dt) {
-        ramPush = Math.max(0f, ramPush - dt * 3f);
+    protected void think(double dt) {
+        ramPush = Math.max(0f, ramPush - (float) dt * 3f);
         super.think(dt);
     }
 }

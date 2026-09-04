@@ -34,13 +34,13 @@ import com.mymmer.castledefense.enemy.EnemyType;
  */
 public final class LichLord extends Boss {
 
-    private float summonTimer = 3f;
-    private float boltTimer;
-    private float phaseTimer;
+    private double summonTimer = 3.0;
+    private double boltTimer;
+    private double phaseTimer;
     /** Seconds of bone ward left. */
-    private float shield;
+    private double shield;
     /** Seconds of disarm left. */
-    private float disarm;
+    private double disarm;
     /** Visual only: the staff orb flare. */
     private float orb;
 
@@ -53,7 +53,7 @@ public final class LichLord extends Boss {
     public LichLord(BossContext ctx, EnemyConfig config, BossConfig boss,
                     int wave, Float x, Float y) {
         super(ctx, config, boss, wave, x, y);
-        this.boltTimer = fireDelay(2f);
+        this.boltTimer = fireDelay(2.0);
     }
 
     public boolean hasStaff() {
@@ -65,18 +65,18 @@ public final class LichLord extends Boss {
     }
 
     /** Seconds of disarm left. Zero when armed. */
-    public float disarm() {
+    public double disarm() {
         return disarm;
     }
 
     /** Seconds of bone ward left. Zero when unwarded. */
-    public float shield() {
+    public double shield() {
         return shield;
     }
 
     /** True while the ward is up. Phase 11 draws it; nothing here does. */
     public boolean wardActive() {
-        return shield > 0f;
+        return shield > 0d;
     }
 
     /** Visual only. */
@@ -98,7 +98,7 @@ public final class LichLord extends Boss {
      */
     @Override
     public float applyDamage(float amount, String kind) {
-        if (shield > 0f) {
+        if (shield > 0d) {
             amount *= boss.wardDamageMultiplier;
         }
         return super.applyDamage(amount, kind);
@@ -123,7 +123,7 @@ public final class LichLord extends Boss {
         hasStaff = false;
         countDisruption();
         disarm = GameConfig.STAFF_DISARM_TIME;
-        shield = 0f;                    // the ward drops with the staff
+        shield = 0d;                    // the ward drops with the staff
         staffItem = new DroppedItem(bossCtx, this, RegaliaKind.STAFF, anchor[0], anchor[1]);
         bossCtx.addDroppedItem(staffItem);
         bossCtx.trace().event(TraceEvent.REGALIA_DETACH, bossCtx.step(), uid(),
@@ -151,23 +151,24 @@ public final class LichLord extends Boss {
     }
 
     @Override
-    protected void think(float dt) {
-        anim += dt * 2f;
-        orb = Math.max(0f, orb - dt * 2f);
-        shield = Math.max(0f, shield - dt);
+    protected void think(double dt) {
+        float fdt = (float) dt;         // animation and the walk
+        anim += fdt * 2f;
+        orb = Math.max(0f, orb - fdt * 2f);         // visual
+        shield = Math.max(0d, shield - dt);
 
         //  disarmed: no bolts, no summons, no ward -- just standing there
-        if (disarm > 0f) {
+        if (disarm > 0d) {
             disarm -= dt;
             setState(EnemyState.ATTACK);
-            if (disarm <= 0f) {
+            if (disarm <= 0d) {
                 recoverStaff();
             }
             return;
         }
 
         if (x() > currentStandoff()) {
-            setX(x() - speed * dt);
+            setX(x() - speed * fdt);
             setVxEstimate(-speed);
             setState(EnemyState.WALK);
             return;
@@ -175,24 +176,25 @@ public final class LichLord extends Boss {
         setState(EnemyState.ATTACK);
 
         summonTimer -= dt;
-        if (summonTimer <= 0f) {
+        if (summonTimer <= 0d) {
             summonTimer = Math.max(boss.summonIntervalFloor,
                     boss.summonIntervalBase - wave * boss.summonIntervalPerWave);
             raiseDead();
         }
 
         boltTimer -= dt;
-        if (boltTimer <= 0f) {
-            boltTimer = fireDelay(bossCtx.rng().uniform(1.2f, 2f));
+        if (boltTimer <= 0d) {
+            boltTimer = fireDelay(bossCtx.rng().uniformSeconds(1.2, 2.0));
             deathBolt();
         }
 
         phaseTimer -= dt;
-        if (phaseTimer <= 0f) {
-            phaseTimer = bossCtx.rng().uniform(boss.wardIntervalMin, boss.wardIntervalMax);
+        if (phaseTimer <= 0d) {
+            phaseTimer = bossCtx.rng().uniformSeconds(boss.wardIntervalMin,
+                    boss.wardIntervalMax);
             shield = boss.wardDuration;
             bossCtx.trace().event(TraceEvent.BOSS_STATE_CHANGE, bossCtx.step(), uid(),
-                    shield, 0f, "bone-ward");
+                    (float) shield, 0f, "bone-ward");
         }
     }
 

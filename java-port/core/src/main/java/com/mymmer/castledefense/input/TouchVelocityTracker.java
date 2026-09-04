@@ -35,7 +35,7 @@ import com.mymmer.castledefense.config.GameConfig;
 public final class TouchVelocityTracker {
 
     /** How far back the release looks, in seconds. Python: 0.09. */
-    public static final float LOOKBACK_SECONDS = GameConfig.THROW_SAMPLE_WINDOW;
+    public static final double LOOKBACK_SECONDS = GameConfig.THROW_SAMPLE_WINDOW;
 
     /** Speed cap in world units per second. Python: 2600. */
     public static final float SPEED_CLAMP = GameConfig.THROW_SPEED_CLAMP;
@@ -44,7 +44,7 @@ public final class TouchVelocityTracker {
      * History kept, in seconds — comfortably more than the lookback so the
      * window is always covered even if a couple of events are dropped.
      */
-    public static final float HISTORY_SECONDS = 0.20f;
+    public static final double HISTORY_SECONDS = 0.20;
 
     /**
      * Ring capacity. Sized for a 480 Hz reporting rate over the history window,
@@ -53,7 +53,7 @@ public final class TouchVelocityTracker {
      */
     private static final int CAPACITY = 96;
 
-    private final float[] times = new float[CAPACITY];
+    private final double[] times = new double[CAPACITY];
     private final float[] xs = new float[CAPACITY];
     private final float[] ys = new float[CAPACITY];
 
@@ -73,7 +73,7 @@ public final class TouchVelocityTracker {
      * @param worldX      world-space x, never a screen pixel
      * @param worldY      world-space y
      */
-    public void sample(float timeSeconds, float worldX, float worldY) {
+    public void sample(double timeSeconds, float worldX, float worldY) {
         times[head] = timeSeconds;
         xs[head] = worldX;
         ys[head] = worldY;
@@ -85,7 +85,7 @@ public final class TouchVelocityTracker {
     }
 
     /** Forgets samples older than the history window. */
-    private void trim(float now) {
+    private void trim(double now) {
         while (count > 2) {
             int oldest = oldestIndex();
             if (now - times[oldest] <= HISTORY_SECONDS) {
@@ -108,9 +108,9 @@ public final class TouchVelocityTracker {
     }
 
     /** Seconds spanned by the retained history. */
-    public float historySpan() {
+    public double historySpan() {
         if (count < 2) {
-            return 0f;
+            return 0d;
         }
         return times[newestIndex()] - times[oldestIndex()];
     }
@@ -132,7 +132,7 @@ public final class TouchVelocityTracker {
             return;
         }
         int newest = newestIndex();
-        float t1 = times[newest];
+        double t1 = times[newest];
 
         int oldest = oldestIndex();
         int chosen = oldest;
@@ -146,9 +146,10 @@ public final class TouchVelocityTracker {
         if (chosen == newest) {
             return;             // every sample is the same instant
         }
-        float dt = Math.max(1e-3f, t1 - times[chosen]);
-        float vx = (xs[newest] - xs[chosen]) / dt;
-        float vy = (ys[newest] - ys[chosen]) / dt;
+        //  the span is a time; the quotient is a velocity, and spatial again
+        double span = Math.max(1e-3d, t1 - times[chosen]);
+        float vx = (float) ((xs[newest] - xs[chosen]) / span);
+        float vy = (float) ((ys[newest] - ys[chosen]) / span);
         out[0] = clampSpeed(vx);
         out[1] = clampSpeed(vy);
     }

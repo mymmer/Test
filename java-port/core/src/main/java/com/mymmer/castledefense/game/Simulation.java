@@ -35,12 +35,21 @@ import com.mymmer.castledefense.config.GameConfig;
  * <table>
  *   <tr><th>Constant</th><th>Type</th><th>Used for</th></tr>
  *   <tr><td>{@link #FIXED_DT}</td><td>{@code double}</td>
- *       <td><b>Canonical timing.</b> The accumulator, the step comparison, and
- *       {@link #timeSeconds()}. Never approximate.</td></tr>
- *   <tr><td>{@link #DT}</td><td>{@code float}</td>
- *       <td><b>Gameplay arithmetic.</b> The value handed to {@code step(dt)}:
- *       positions, velocities, per-step decay. Multiplied by, never summed.</td></tr>
+ *       <td><b>The time domain.</b> The accumulator, the step comparison,
+ *       {@link #timeSeconds()}, and every gameplay clock: cooldowns, reloads,
+ *       durations, deadlines, schedules. This is what {@code step(dt)}
+ *       receives. Never approximate it.</td></tr>
+ *   <tr><td>{@link #PHYSICS_DT}</td><td>{@code float}</td>
+ *       <td><b>The spatial domain.</b> Positions, velocities, angles, per-step
+ *       decay of visual state. Obtained at a call site as
+ *       {@code float fdt = (float) dt}, or read from here where no {@code dt}
+ *       is in scope. Multiplied by, never summed.</td></tr>
  * </table>
+ *
+ * <p>Both name <b>one</b> step. There is no second clock and nothing advances
+ * them independently; {@code PHYSICS_DT} is {@code (float) FIXED_DT} and exists
+ * so spatial maths stays in floats without float rounding leaking into a
+ * timer. See {@code SIMULATION.md}, "Gameplay time is double".
  *
  * <p>So the authoritative clock is {@code stepCount * FIXED_DT} — an exact
  * integer times an exact double — and not a running float total. 60 steps are
@@ -48,10 +57,12 @@ import com.mymmer.castledefense.config.GameConfig;
  * precision, however long the session runs. Trace step ids are the integer
  * {@code stepCount} itself, so they are exact by construction.
  *
- * <p>This does <b>not</b> mean gameplay must become integer ticks. A projectile
- * still integrates in floats with {@code DT}; only the clock that says <em>when</em>
- * is canonical. Later long-lived clocks (Endless timetable, boss phases) should
- * read {@link #timeSeconds()} or a step count rather than summing their own float.
+ * <p>This does <b>not</b> mean gameplay must become integer ticks. Durations
+ * stay seconds, because the source expresses them that way and many of them are
+ * random or configurable fractions; they are simply <em>double</em> seconds. A
+ * projectile still integrates its position in floats. Long-lived clocks (the
+ * Endless timetable, boss phases) read {@link #timeSeconds()} or a step count
+ * rather than summing a float of their own.
  *
  * <p>One thing this cannot fix: a frame delta arriving from the platform is a
  * float and is approximate. Feeding {@code 1/144f} repeatedly may yield 59 or 60
@@ -89,12 +100,14 @@ public final class Simulation {
     public static final double FIXED_DT = GameConfig.SIMULATION_STEP;
 
     /**
-     * The same step as a float, for gameplay maths.
+     * The same step as a float, for <b>spatial</b> maths only.
      *
-     * <p>This is what {@code step(dt)} receives. It is safe to multiply by and
-     * unsafe to accumulate — accumulate {@link #FIXED_DT} or count steps.
+     * <p>Safe to multiply a position or a velocity by; never safe to subtract
+     * from a timer. A system that needs it inside a step should write
+     * {@code float fdt = (float) dt} rather than reaching for this constant, so
+     * that the widening is visible where it happens.
      */
-    public static final float DT = GameConfig.SIMULATION_STEP_F;
+    public static final float PHYSICS_DT = GameConfig.SIMULATION_STEP_F;
 
     /** Catch-up steps allowed in a single rendered frame. */
     public static final int MAX_STEPS = GameConfig.MAX_SIMULATION_STEPS_PER_FRAME;
@@ -102,9 +115,15 @@ public final class Simulation {
     /** Longest frame delta that may enter the accumulator, in seconds. */
     public static final float MAX_FRAME_DELTA = GameConfig.MAX_FRAME_DELTA;
 
-    /** What one step does. Implemented by {@link GameWorld}. */
+    /**
+     * What one step does. Implemented by {@link GameWorld}.
+     *
+     * <p>{@code dt} is a {@code double} and is always exactly {@link #FIXED_DT}.
+     * Timers subtract it as it comes; spatial integration narrows it once, at
+     * the top of the method that needs it.
+     */
     public interface Stepper {
-        void step(float dt);
+        void step(double dt);
     }
 
     private final Stepper stepper;
@@ -142,11 +161,13 @@ public final class Simulation {
         accumulator += frameDelta;
 
         int steps = 0;
-        //  FIXED_DT here, DT in the callback: the clock is exact, the physics
-        //  is float.  Subtracting the float step instead would put its
-        //  0.016666668 approximation straight back into the canonical timing.
+        //  FIXED_DT both here and in the callback: the clock is exact and so is
+        //  every gameplay timer downstream.  Handing the float step to step()
+        //  instead would put its 0.016666668 approximation straight back into
+        //  the timing -- which is exactly the bug that made a Hard Dragon
+        //  breathe sixteen fireballs where Python breathes fifteen.
         while (accumulator >= FIXED_DT && steps < MAX_STEPS) {
-            stepper.step(DT);
+            stepper.step(FIXED_DT);
             accumulator -= FIXED_DT;
             stepCount++;
             steps++;

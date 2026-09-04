@@ -232,7 +232,7 @@ class CastleTest {
         while (!t.disabled()) {
             t.takeDamage(t.maxHp());
         }
-        float rebuild = t.rebuildRemaining();
+        double rebuild = t.rebuildRemaining();
         w.castle.splashHit(t.x(), t.y() - t.height() / 2f, 60f, 40f, 2f);
         assertEquals(0f, t.stun(), 0f, "rubble cannot be stunned");
         assertEquals(rebuild, t.rebuildRemaining(), 0f);

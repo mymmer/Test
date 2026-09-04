@@ -185,7 +185,7 @@ class OverchargeTest {
         TestWorld w = new TestWorld();
         w.modifiers = new CombatModifiers() {
             @Override
-            public float overchargeCd() {
+            public double overchargeCd() {
                 return 0.5f;
             }
         };

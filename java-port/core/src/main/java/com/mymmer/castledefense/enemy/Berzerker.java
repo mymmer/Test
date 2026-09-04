@@ -38,7 +38,7 @@ public final class Berzerker extends Enemy {
     }
 
     @Override
-    protected void think(float dt) {
+    protected void think(double dt) {
         float old = speed;
         speed = config.baseSpeed * WaveScaling.speed(wave) * rage();
         super.think(dt);

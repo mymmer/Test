@@ -42,7 +42,7 @@ public abstract class Boss extends Enemy {
     protected final BossContext bossCtx;
 
     /** Seconds of arrival animation. Visual state; nothing gates on it yet. */
-    private float intro;
+    private double intro;
     /** Visual only: the hit glow, decaying at 3/s. */
     private float aura;
 
@@ -53,10 +53,10 @@ public abstract class Boss extends Enemy {
      * Captured once at construction, so a difficulty change mid-run cannot
      * retune a boss already on the field.
      */
-    private final float fireScale;
+    private final double fireScale;
 
     /** Seconds until the regalia can be disrupted again. */
-    private float regaliaCd;
+    private double regaliaCd;
     /** How many times this boss has been disrupted. Drives the guard growth. */
     private int regaliaTaken;
 
@@ -87,7 +87,7 @@ public abstract class Boss extends Enemy {
     }
 
     /** Visual only. */
-    public float intro() {
+    public double intro() {
         return intro;
     }
 
@@ -96,18 +96,25 @@ public abstract class Boss extends Enemy {
         return aura;
     }
 
-    /** Scales a reload time by the difficulty's boss fire rate. */
-    public float fireDelay(float seconds) {
+    /**
+     * Scales a reload time by the difficulty's boss fire rate.
+     *
+     * <p>Time in, time out: {@code double} at both ends. Hard's 0.5 turns the
+     * Dragon's 0.15 s shot interval into 0.075 s, and doing that in floats is
+     * precisely what made a Hard breath fire sixteen fireballs where Python
+     * fires fifteen.
+     */
+    public double fireDelay(double seconds) {
         return seconds * fireScale;
     }
 
-    public float fireScale() {
+    public double fireScale() {
         return fireScale;
     }
 
     // --- the disruption guard -----------------------------------------------
 
-    public float regaliaCd() {
+    public double regaliaCd() {
         return regaliaCd;
     }
 
@@ -126,14 +133,14 @@ public abstract class Boss extends Enemy {
      */
     public void guardRegalia() {
         regaliaCd = GameConfig.REGALIA_COOLDOWN
-                * (1f + GameConfig.REGALIA_CD_GROWTH * regaliaTaken);
+                * (1d + GameConfig.REGALIA_CD_GROWTH * regaliaTaken);
     }
 
     /** Counts one successful disruption. Call <em>before</em> {@link #guardRegalia}. */
     protected void countDisruption() {
         regaliaTaken++;
         bossCtx.trace().event(TraceEvent.BOSS_DISRUPTION, bossCtx.step(), uid(),
-                regaliaTaken, regaliaCd, boss.type.id());
+                regaliaTaken, (float) regaliaCd, boss.type.id());
     }
 
     /**
@@ -163,7 +170,7 @@ public abstract class Boss extends Enemy {
      * subclass says its item is not there to be taken.
      */
     public boolean regaliaCovers(float px, float py) {
-        if (!isAlive() || regaliaCd > 0f || !hasRegalia()) {
+        if (!isAlive() || regaliaCd > 0d || !hasRegalia()) {
             return false;
         }
         if (!regaliaAnchorInto(anchorOut)) {
@@ -219,10 +226,10 @@ public abstract class Boss extends Enemy {
     }
 
     @Override
-    public void update(float dt) {
-        aura = Math.max(0f, aura - dt * 3f);
-        intro = Math.max(0f, intro - dt);
-        regaliaCd = Math.max(0f, regaliaCd - dt);
+    public void update(double dt) {
+        aura = Math.max(0f, aura - (float) dt * 3f);       // visual
+        intro = Math.max(0d, intro - dt);
+        regaliaCd = Math.max(0d, regaliaCd - dt);
         super.update(dt);
     }
 

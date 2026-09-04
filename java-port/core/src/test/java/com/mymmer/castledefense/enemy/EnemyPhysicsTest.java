@@ -24,7 +24,7 @@ import org.junit.jupiter.api.Test;
  */
 class EnemyPhysicsTest {
 
-    private static final float DT = TestEnemyWorld.DT;
+    private static final double DT = TestEnemyWorld.DT;
 
     /** Drops a mob from a known velocity onto the ground and returns it. */
     private static Enemy dropWith(TestEnemyWorld w, EnemyType type, float vx, float vy) {

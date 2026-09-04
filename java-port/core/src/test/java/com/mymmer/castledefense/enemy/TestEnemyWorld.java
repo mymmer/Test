@@ -28,7 +28,7 @@ import com.mymmer.castledefense.util.Rng;
 public final class TestEnemyWorld implements EnemyContext {
 
     public static final long SEED = 20260906L;
-    public static final float DT = Simulation.DT;
+    public static final double DT = Simulation.FIXED_DT;
 
     public final Rng rng;
     public final EnemyTable enemies;
@@ -149,7 +149,7 @@ public final class TestEnemyWorld implements EnemyContext {
     // --- stepping -----------------------------------------------------------
 
     /** One step, in the order the real game loop uses. */
-    public void step(float dt) {
+    public void step(double dt) {
         step++;
         gameTime += dt;
         castle.update(dt);
@@ -182,7 +182,7 @@ public final class TestEnemyWorld implements EnemyContext {
         horde.sweep();
     }
 
-    public void steps(int n, float dt) {
+    public void steps(int n, double dt) {
         for (int i = 0; i < n; i++) {
             step(dt);
         }

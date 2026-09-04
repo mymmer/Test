@@ -100,26 +100,26 @@ public final class GameConfig {
     public static final float SLAM_DMG_SCALE = 0.10f;
 
     /** Normal-mode delay between grabs; the difficulty table overrides it. */
-    public static final float GRAB_COOLDOWN = 0.25f;
+    public static final double GRAB_COOLDOWN = 0.25;
 
     /** Cursor velocity sampling: look back this far, and clamp to this speed. */
-    public static final float THROW_SAMPLE_WINDOW = 0.09f;
+    public static final double THROW_SAMPLE_WINDOW = 0.09;
     public static final float THROW_SPEED_CLAMP = 2600f;
 
     // --- boss regalia -------------------------------------------------------
     public static final float REGALIA_MAX_THROW_CROWN = 2300f;
     public static final float REGALIA_MAX_THROW_STAFF = 780f;
     public static final float CROWN_RETRIEVE_SPEED = 1.7f;
-    public static final float STAFF_DISARM_TIME = 5f;
-    public static final float REGALIA_COOLDOWN = 6f;
-    public static final float REGALIA_CD_GROWTH = 0.6f;
+    public static final double STAFF_DISARM_TIME = 5.0;
+    public static final double REGALIA_COOLDOWN = 6.0;
+    public static final double REGALIA_CD_GROWTH = 0.6;
 
     // --- bounce upgrade -----------------------------------------------------
     public static final int BOUNCE_MAX_LEVEL = 5;
     public static final float[] BOUNCE_RESTITUTION =
             {0.32f, 0.46f, 0.56f, 0.64f, 0.71f, 0.78f};
     public static final float BOUNCE_DMG_BONUS = 0.22f;
-    public static final float BOUNCE_STAGGER = 0.34f;
+    public static final double BOUNCE_STAGGER = 0.34;
 
     // --- weather ------------------------------------------------------------
     public static final float WIND_MAX = 260f;
@@ -127,11 +127,11 @@ public final class GameConfig {
     public static final float STORM_CHANCE = 0.3f;
     public static final float STORM_CEILING = 132f;
     public static final float STORM_DAMAGE = 0.34f;
-    public static final float STORM_COOLDOWN = 1.1f;
+    public static final double STORM_COOLDOWN = 1.1;
 
     // --- dragon claws -------------------------------------------------------
     public static final float CLAW_SMACK_DISTANCE = 360f;
-    public static final float CLAW_STAGGER = 3.2f;
+    public static final double CLAW_STAGGER = 3.2;
 
     // --- cursor strength ----------------------------------------------------
     public static final int GRAB_MAX_LEVEL = 4;
@@ -152,7 +152,7 @@ public final class GameConfig {
     public static final float OVERCHARGE_DAMAGE = 2.5f;
     public static final float OVERCHARGE_SPLASH = 1.7f;
     public static final float OVERCHARGE_SPEED = 1.45f;
-    public static final float OVERCHARGE_COOLDOWN = 5f;
+    public static final double OVERCHARGE_COOLDOWN = 5.0;
 
     // --- world structures ---------------------------------------------------
     public static final float OUTPOST_X = 1015f;
@@ -167,11 +167,11 @@ public final class GameConfig {
     public static final float SPIKE_DAMAGE = 15f;
 
     // --- the Necromancer betrayal -------------------------------------------
-    public static final float TRAP_SKELETON_RATE = 7.2f;
+    public static final double TRAP_SKELETON_RATE = 7.2;
     public static final int TRAP_SKELETON_CAP = 6;
     public static final float PRISONER_HP = 260f;
     public static final float PRISONER_REGEN = 3f;
-    public static final float RIVAL_BOLT_RATE = 2.6f;
+    public static final double RIVAL_BOLT_RATE = 2.6;
     public static final float RIVAL_BOLT_DAMAGE = 34f;
     public static final float ALLY_ENGAGE_RANGE = 40f;
     public static final float ALLY_HOLD_X = WORLD_WIDTH - 90f;

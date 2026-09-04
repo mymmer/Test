@@ -17,7 +17,7 @@ import org.junit.jupiter.api.Test;
  */
 class EnemySpeedTest {
 
-    private static final float DT = TestEnemyWorld.DT;
+    private static final double DT = TestEnemyWorld.DT;
 
     /** How far a mob moves left in one step, which is what speed actually means. */
     private static float stepDistance(TestEnemyWorld w, Enemy e) {

@@ -33,24 +33,24 @@ public final class Assassin extends Enemy {
     /** Speed multiplier while the dash is running. */
     public static final float DASH_BOOST = 3.6f;
     /** How long one dash lasts. */
-    public static final float DASH_TIME = 0.38f;
+    public static final double DASH_TIME = 0.38;
 
     private boolean cloaked;
-    private float cloakTimer;
-    private float dashTimer;
-    private float dashing;
+    private double cloakTimer;
+    private double dashTimer;
+    private double dashing;
 
     public Assassin(EnemyContext ctx, EnemyConfig config, int wave, Float x, Float y) {
         super(ctx, config, wave, x, y);
-        this.cloakTimer = ctx.rng().uniform(1.2f, 2.6f);
-        this.dashTimer = ctx.rng().uniform(1.8f, 3.4f);
+        this.cloakTimer = ctx.rng().uniformSeconds(1.2, 2.6);
+        this.dashTimer = ctx.rng().uniformSeconds(1.8, 3.4);
     }
 
     public boolean cloaked() {
         return cloaked;
     }
 
-    public float dashing() {
+    public double dashing() {
         return dashing;
     }
 
@@ -61,24 +61,24 @@ public final class Assassin extends Enemy {
     }
 
     @Override
-    protected void think(float dt) {
-        anim += dt * speed * 0.07f;
+    protected void think(double dt) {
+        anim += (float) dt * speed * 0.07f;
 
         cloakTimer -= dt;
-        if (cloakTimer <= 0f) {
+        if (cloakTimer <= 0d) {
             cloaked = !cloaked;
-            cloakTimer = cloaked ? ctx.rng().uniform(1.6f, 2.8f)
-                    : ctx.rng().uniform(1.4f, 2.4f);
+            cloakTimer = cloaked ? ctx.rng().uniformSeconds(1.6, 2.8)
+                    : ctx.rng().uniformSeconds(1.4, 2.4);
         }
 
         dashTimer -= dt;
-        if (dashTimer <= 0f && dashing <= 0f) {
-            dashTimer = ctx.rng().uniform(2.4f, 4.2f);
+        if (dashTimer <= 0d && dashing <= 0d) {
+            dashTimer = ctx.rng().uniformSeconds(2.4, 4.2);
             dashing = DASH_TIME;
         }
 
         float boost = 1f;
-        if (dashing > 0f) {
+        if (dashing > 0d) {
             dashing -= dt;
             boost = DASH_BOOST;
         }

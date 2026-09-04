@@ -18,12 +18,13 @@ class SimulationTest {
         final FloatArray deltas = new FloatArray();
 
         @Override
-        public void step(float dt) {
-            deltas.add(dt);
+        public void step(double dt) {
+            deltas.add((float) dt);
         }
     }
 
-    private static final float DT = Simulation.DT;
+    /** The frame delta fed to {@link Simulation#advance}, which is a float. */
+    private static final float DT = Simulation.PHYSICS_DT;
 
     @Test
     @DisplayName("exactly one DT runs exactly one step")
@@ -192,20 +193,42 @@ class SimulationTest {
     }
 
     @Test
-    @DisplayName("gameplay still receives a float step, and it is the canonical one")
-    void gameplayStepIsTheFloatOfTheCanonicalOne() {
-        //  Gameplay maths stays in floats on purpose (positions, velocities,
-        //  decay); only the clock is a double.  The float handed to step() must
-        //  be exactly the float nearest the canonical step -- not a separately
-        //  written literal that could drift away from it in a later edit.
-        assertEquals((float) Simulation.FIXED_DT, Simulation.DT, 0f);
+    @DisplayName("gameplay receives the canonical double step, not the float one")
+    void gameplayStepIsTheCanonicalDouble() {
+        //  The whole point of the time-domain rule: step() is handed FIXED_DT
+        //  itself, so a timer that subtracts it subtracts an exact sixtieth.
+        //  PHYSICS_DT still exists for spatial maths and must stay exactly the
+        //  float nearest the canonical step -- not a separately written literal
+        //  that could drift away from it in a later edit.
+        assertEquals((float) Simulation.FIXED_DT, Simulation.PHYSICS_DT, 0f);
         assertEquals(1.0 / 60.0, Simulation.FIXED_DT, 0.0);
 
         Recorder r = new Recorder();
         Simulation sim = new Simulation(r);
         sim.advance(DT);
         assertEquals(1, r.deltas.size);
-        assertEquals(Simulation.DT, r.deltas.get(0), 0f, "step() gets the float step");
+        assertEquals(Simulation.PHYSICS_DT, r.deltas.get(0), 0f,
+                "step() is handed the canonical step, whose float value is PHYSICS_DT");
+    }
+
+    @Test
+    @DisplayName("the float step is fractionally LONGER than a sixtieth, which is the bug")
+    void theFloatStepIsNotASixtieth() {
+        //  This is the whole reason the time domain is a double.  Subtracting
+        //  PHYSICS_DT from a timer 75 times loses more than subtracting
+        //  FIXED_DT 75 times, and at a boundary that is one extra fireball.
+        assertTrue(Simulation.PHYSICS_DT > Simulation.FIXED_DT,
+                "1f/60f is above a true sixtieth");
+
+        double exact = 0d;
+        float sloppy = 0f;
+        for (int i = 0; i < 3600; i++) {
+            exact += Simulation.FIXED_DT;
+            sloppy += Simulation.PHYSICS_DT;
+        }
+        assertEquals(60.0, exact, 1e-9, "a minute of canonical steps is a minute");
+        assertTrue(Math.abs(sloppy - 60f) > 1e-4f,
+                "a minute of float steps has visibly drifted");
     }
 
     @Test

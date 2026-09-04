@@ -39,9 +39,9 @@ public final class FriendlySkeleton extends Entity {
     public static final float BASE_HP = 18.4f;
     public static final float BASE_SPEED = 78f;
     public static final float BASE_DAMAGE = 13f;
-    public static final float ATTACK_RATE = 0.85f;
+    public static final double ATTACK_RATE = 0.85;
     /** Seconds before it crumbles on its own. */
-    public static final float BASE_LIFE = 60f;
+    public static final double BASE_LIFE = 60.0;
 
     private final EnemyContext ctx;
 
@@ -54,8 +54,8 @@ public final class FriendlySkeleton extends Entity {
     private float x;
     private float y;
     private EnemyState state = EnemyState.WALK;
-    private float attackTimer;
-    private float life;
+    private double attackTimer;
+    private double life;
     private Enemy target;
 
     // visual only
@@ -76,7 +76,7 @@ public final class FriendlySkeleton extends Entity {
         this.depth = ctx.rng().uniform(-14f, 14f);
         this.x = x;
         this.y = y != null ? y : groundY();
-        this.attackTimer = ctx.rng().uniform(0f, 0.3f);
+        this.attackTimer = ctx.rng().uniformSeconds(0.0, 0.3);
         this.anim = ctx.rng().uniform(0f, 6f);
         this.life = BASE_LIFE + ctx.modifiers().allyLife();
         ctx.trace().event(TraceEvent.ENTITY_SPAWN, ctx.step(), uid(), x, this.y, "ally");
@@ -128,7 +128,7 @@ public final class FriendlySkeleton extends Entity {
         return state;
     }
 
-    public float life() {
+    public double life() {
         return life;
     }
 
@@ -194,18 +194,19 @@ public final class FriendlySkeleton extends Entity {
     }
 
     /** One fixed simulation step. */
-    public void update(float dt) {
+    public void update(double dt) {
         if (!isAlive()) {
             return;
         }
-        hurtFlash = Math.max(0f, hurtFlash - dt * 4f);
+        float fdt = (float) dt;                 // spatial / visual only
+        hurtFlash = Math.max(0f, hurtFlash - fdt * 4f);
         life -= dt;
-        if (life <= 0f) {
+        if (life <= 0d) {
             markDead();
             ctx.trace().event(TraceEvent.ENTITY_DEATH, ctx.step(), uid(), x, y, "ally-expired");
             return;
         }
-        anim += dt * 8f;
+        anim += fdt * 8f;
 
         if (target != null && !target.alive()) {
             target = null;
@@ -218,7 +219,7 @@ public final class FriendlySkeleton extends Entity {
         if (tgt != null && Math.abs(tgt.x() - x) <= GameConfig.ALLY_ENGAGE_RANGE) {
             state = EnemyState.ATTACK;
             attackTimer -= dt;
-            if (attackTimer <= 0f) {
+            if (attackTimer <= 0d) {
                 attackTimer = ATTACK_RATE;
                 tgt.applyDamage(damage, "melee");
             }
@@ -228,10 +229,10 @@ public final class FriendlySkeleton extends Entity {
         if (tgt != null && ctx.modifiers().allySentinels()) {
             //  Undead Sentinels: run it down, whichever way it is
             state = EnemyState.WALK;
-            x += Math.copySign(speed * dt, tgt.x() - x);
+            x += Math.copySign(speed * fdt, tgt.x() - x);
         } else if (x < GameConfig.ALLY_HOLD_X) {
             state = EnemyState.WALK;
-            x += speed * dt;            // marching the wrong way, on purpose
+            x += speed * fdt;           // marching the wrong way, on purpose
         } else {
             //  far enough out: hold this line and meet whatever arrives
             state = EnemyState.HOLD;

@@ -44,17 +44,17 @@ public abstract class DefenceTower extends Entity {
 
     // --- gameplay-authoritative --------------------------------------------
     private float damage;
-    private float reload;
+    private double reload;
     private float range;
     private float splash;
-    private float cooldown;
+    private double cooldown;
     private float hp;
     private float maxHp;
     private boolean disabled;
-    private float rebuild;
-    private float stun;
+    private double rebuild;
+    private double stun;
     private int level = 1;
-    private float overchargeCd;
+    private double overchargeCd;
 
     // --- visual-only --------------------------------------------------------
     private float aim = -0.35f;
@@ -83,7 +83,7 @@ public abstract class DefenceTower extends Entity {
         //  Python: random.uniform(0, 0.4).  Staggers the volley so towers bought
         //  together do not fire in lockstep -- and it comes from the seeded
         //  gameplay stream, so a seeded run reproduces the same stagger.
-        this.cooldown = ctx.rng().uniform(0f, 0.4f);
+        this.cooldown = ctx.rng().uniformSeconds(0.0, 0.4);
     }
 
     // --- identity and geometry ---------------------------------------------
@@ -146,7 +146,7 @@ public abstract class DefenceTower extends Entity {
         return damage;
     }
 
-    public float reload() {
+    public double reload() {
         return reload;
     }
 
@@ -158,12 +158,12 @@ public abstract class DefenceTower extends Entity {
         return splash;
     }
 
-    public float cooldown() {
+    public double cooldown() {
         return cooldown;
     }
 
     /** Test/boss hook: forces the reload timer. Python assigns {@code t.cooldown}. */
-    public void setCooldown(float seconds) {
+    public void setCooldown(double seconds) {
         this.cooldown = seconds;
     }
 
@@ -191,17 +191,17 @@ public abstract class DefenceTower extends Entity {
         return disabled;
     }
 
-    public float rebuildRemaining() {
+    public double rebuildRemaining() {
         return rebuild;
     }
 
-    public float stun() {
+    public double stun() {
         return stun;
     }
 
     /** Bosses and splash blasts stun a tower; the longer stun wins. */
-    public void applyStun(float seconds) {
-        if (seconds > 0f) {
+    public void applyStun(double seconds) {
+        if (seconds > 0d) {
             stun = Math.max(stun, seconds);
         }
     }
@@ -210,12 +210,12 @@ public abstract class DefenceTower extends Entity {
         return level;
     }
 
-    public float overchargeCd() {
+    public double overchargeCd() {
         return overchargeCd;
     }
 
     /** Test hook mirroring Python's direct assignment of {@code overcharge_cd}. */
-    public void setOverchargeCd(float seconds) {
+    public void setOverchargeCd(double seconds) {
         this.overchargeCd = seconds;
     }
 
@@ -369,13 +369,13 @@ public abstract class DefenceTower extends Entity {
      * or fire — it only counts down its rebuild, and comes back at <b>half</b>
      * health, not full.
      */
-    public void update(float dt) {
-        recoil = Math.max(0f, recoil - dt * 5f);
-        overchargeCd = Math.max(0f, overchargeCd - dt);
+    public void update(double dt) {
+        recoil = Math.max(0f, recoil - (float) dt * 5f);   // visual
+        overchargeCd = Math.max(0d, overchargeCd - dt);
 
         if (disabled) {
             rebuild -= dt;
-            if (rebuild <= 0f) {
+            if (rebuild <= 0d) {
                 disabled = false;
                 hp = maxHp * 0.5f;
                 ctx.trace().event(TraceEvent.TOWER_REBUILT, ctx.step(), uid(),
@@ -384,9 +384,9 @@ public abstract class DefenceTower extends Entity {
             return;
         }
 
-        hp = Math.min(maxHp, hp + maxHp * config.regen * dt);
+        hp = Math.min(maxHp, hp + maxHp * config.regen * (float) dt);
 
-        if (stun > 0f) {
+        if (stun > 0d) {
             stun -= dt;
             return;
         }
@@ -397,7 +397,7 @@ public abstract class DefenceTower extends Entity {
             float want = (float) Math.atan2(target.y() - muzzleY(), target.x() - muzzleX());
             aim = Collisions.lerp(aim, want, 0.25f);
         }
-        if (cooldown <= 0f && target != null) {
+        if (cooldown <= 0d && target != null) {
             cooldown = reload * ctx.modifiers().towerRate();
             recoil = 1f;
             ctx.trace().event(TraceEvent.TOWER_FIRE, ctx.step(), uid(),
@@ -414,7 +414,7 @@ public abstract class DefenceTower extends Entity {
     public int upgrade() {
         level++;
         damage *= 1.35f;
-        reload *= 0.90f;
+        reload *= 0.90;
         range *= 1.04f;
         if (splash != 0f) {
             splash *= 1.08f;
@@ -436,7 +436,7 @@ public abstract class DefenceTower extends Entity {
      * works on desktop and on a phone.
      */
     public boolean canOvercharge() {
-        return config.overchargeable && !disabled && stun <= 0f && overchargeCd <= 0f;
+        return config.overchargeable && !disabled && stun <= 0d && overchargeCd <= 0d;
     }
 
     /**

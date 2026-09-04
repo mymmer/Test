@@ -80,34 +80,34 @@ public final class BossTable {
                     positive(Json5.number(b, "baseHp", where), "baseHp", where),
                     positive(Json5.number(b, "baseSpeed", where), "baseSpeed", where),
                     positive(Json5.number(b, "baseDamage", where), "baseDamage", where),
-                    positive(Json5.number(b, "attackRate", where), "attackRate", where),
+                    positiveSeconds(Json5.seconds(b, "attackRate", where), "attackRate", where),
                     (int) nonNegative(Json5.number(b, "gold", where), "gold", where),
                     Json5.inRange(Json5.optNumber(b, "armor", 0f), 0f, 1f, "armor", where),
                     positive(Json5.number(b, "mass", where), "mass", where),
                     width, height,
                     Json5.optBool(b, "flying", false),
                     Json5.optNumber(b, "flyY", 250f),
-                    nonNegative(Json5.optNumber(b, "introTime", 1.6f), "introTime", where),
+                    nonNegativeSeconds(Json5.optSeconds(b, "introTime", 1.6), "introTime", where),
                     anchor, halfW, halfH,
                     Json5.optNumber(b, "regaliaBoxOffsetY", 0f),
                     Json5.optNumber(b, "leapDistance", 0f),
                     Json5.optNumber(b, "leapMinRange", 0f),
-                    Json5.optNumber(b, "leapIntervalMin", 0f),
-                    Json5.optNumber(b, "leapIntervalMax", 0f),
-                    Json5.optNumber(b, "breathTime", 0f),
-                    Json5.optNumber(b, "breathShotInterval", 0f),
+                    Json5.optSeconds(b, "leapIntervalMin", 0.0),
+                    Json5.optSeconds(b, "leapIntervalMax", 0.0),
+                    Json5.optSeconds(b, "breathTime", 0.0),
+                    Json5.optSeconds(b, "breathShotInterval", 0.0),
                     Json5.optNumber(b, "breathPower", 0f),
-                    Json5.optNumber(b, "breathIntervalMin", 0f),
-                    Json5.optNumber(b, "breathIntervalMax", 0f),
+                    Json5.optSeconds(b, "breathIntervalMin", 0.0),
+                    Json5.optSeconds(b, "breathIntervalMax", 0.0),
                     Json5.optNumber(b, "standoffX", GameConfig.CASTLE_FRONT + 400f),
                     Json5.inRange(Json5.optNumber(b, "wardDamageMultiplier", 1f),
                             0f, 1f, "wardDamageMultiplier", where),
-                    Json5.optNumber(b, "wardDuration", 0f),
-                    Json5.optNumber(b, "wardIntervalMin", 0f),
-                    Json5.optNumber(b, "wardIntervalMax", 0f),
-                    Json5.optNumber(b, "summonIntervalBase", 0f),
-                    Json5.optNumber(b, "summonIntervalFloor", 0f),
-                    Json5.optNumber(b, "summonIntervalPerWave", 0f),
+                    Json5.optSeconds(b, "wardDuration", 0.0),
+                    Json5.optSeconds(b, "wardIntervalMin", 0.0),
+                    Json5.optSeconds(b, "wardIntervalMax", 0.0),
+                    Json5.optSeconds(b, "summonIntervalBase", 0.0),
+                    Json5.optSeconds(b, "summonIntervalFloor", 0.0),
+                    Json5.optSeconds(b, "summonIntervalPerWave", 0.0),
                     Json5.optInt(b, "summonBaseCount", 0),
                     Json5.optInt(b, "summonMaxBonus", 0));
 
@@ -233,6 +233,22 @@ public final class BossTable {
 
     private static float nonNegative(float v, String name, String where) {
         if (!(v >= 0f)) {
+            throw new DataException(where + ": " + name + " must not be negative, was " + v);
+        }
+        return v;
+    }
+
+    /** Time-domain counterpart of {@link #positive}. */
+    private static double positiveSeconds(double v, String name, String where) {
+        if (!(v > 0d)) {
+            throw new DataException(where + ": " + name + " must be > 0, was " + v);
+        }
+        return v;
+    }
+
+    /** Time-domain counterpart of {@link #nonNegative}. */
+    private static double nonNegativeSeconds(double v, String name, String where) {
+        if (!(v >= 0d)) {
             throw new DataException(where + ": " + name + " must not be negative, was " + v);
         }
         return v;

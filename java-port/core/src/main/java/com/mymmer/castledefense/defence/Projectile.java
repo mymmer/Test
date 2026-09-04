@@ -46,14 +46,14 @@ public final class Projectile extends Entity {
     private float damage;
     private float splash;
     private int pierce;
-    private final float stun;
+    private final double stun;
     private final boolean hostile;
     private final boolean atPrisoner;
     private final long ownerUid;
     private final float bonusAir;
     private final float bonusHeavy;
     private final float critChance;
-    private float life;
+    private double life;
 
     /**
      * Who this shot has already hit, by uid.
@@ -79,7 +79,7 @@ public final class Projectile extends Entity {
     public Projectile(DefenceContext ctx, float x, float y, float vx, float vy,
                       ProjectileKind kind, float damage,
                       float splash, int pierce, float grav, boolean hostile,
-                      float life, float stun,
+                      double life, double stun,
                       float bonusAir, float bonusHeavy,
                       boolean atPrisoner, long ownerUid) {
         if (ctx == null) {
@@ -151,11 +151,11 @@ public final class Projectile extends Entity {
         return pierce;
     }
 
-    public float stun() {
+    public double stun() {
         return stun;
     }
 
-    public float life() {
+    public double life() {
         return life;
     }
 
@@ -269,18 +269,19 @@ public final class Projectile extends Entity {
      * gravity, integrate, age, then the bounds test, then the ground test, then
      * the collision resolution.
      */
-    public void update(float dt) {
-        vx += ctx.wind() * GameConfig.WIND_PROJECTILE * dt;
-        vy += grav * dt;
-        x += vx * dt;
-        y += vy * dt;
+    public void update(double dt) {
+        float fdt = (float) dt;                 // the flight is spatial
+        vx += ctx.wind() * GameConfig.WIND_PROJECTILE * fdt;
+        vy += grav * fdt;
+        x += vx * fdt;
+        y += vy * fdt;
         life -= dt;
 
-        if (life <= 0f || x < -120f || x > GameConfig.WORLD_WIDTH + 220f
+        if (life <= 0d || x < -120f || x > GameConfig.WORLD_WIDTH + 220f
                 || y > GameConfig.WORLD_HEIGHT + 200f || y < -600f) {
             //  A splash shot that simply ran out of time still detonates; one
             //  that flew off the map does not.
-            if (splash > 0f && life <= 0f) {
+            if (splash > 0f && life <= 0d) {
                 explode();
             } else {
                 markDead();

@@ -68,8 +68,8 @@ public final class CursorInteraction
     private com.mymmer.castledefense.entity.EntityList<DroppedItem> items;
 
     /** Seconds until another grab is allowed. Difficulty sets the base. */
-    private float grabCd;
-    private float grabCooldown = GameConfig.GRAB_COOLDOWN;
+    private double grabCd;
+    private double grabCooldown = GameConfig.GRAB_COOLDOWN;
 
     private Enemy grabbed;
     /** Extra mobs dragged along by Magnetic Gloves, with their offsets. */
@@ -138,15 +138,15 @@ public final class CursorInteraction
     }
 
     /** The difficulty's delay between grabs, after the Light Fingers talent. */
-    public void setGrabCooldown(float seconds) {
-        this.grabCooldown = Math.max(0f, seconds);
+    public void setGrabCooldown(double seconds) {
+        this.grabCooldown = Math.max(0d, seconds);
     }
 
-    public float grabCooldown() {
+    public double grabCooldown() {
         return grabCooldown;
     }
 
-    public float grabCdRemaining() {
+    public double grabCdRemaining() {
         return grabCd;
     }
 
@@ -206,7 +206,7 @@ public final class CursorInteraction
 
     @Override
     public boolean onWorldPress(Pointer pointer) {
-        if (grabCd > 0f || busy()) {
+        if (grabCd > 0d || busy()) {
             return false;
         }
         float px = pointer.worldX();
@@ -401,8 +401,8 @@ public final class CursorInteraction
      * <p>Called from the world step with the pointer's current world position,
      * so all of this advances on the fixed clock rather than on input events.
      */
-    public void update(float dt, boolean pointerDown, float px, float py) {
-        grabCd = Math.max(0f, grabCd - dt);
+    public void update(double dt, boolean pointerDown, float px, float py) {
+        grabCd = Math.max(0d, grabCd - dt);
 
         if (charging != null) {
             if (!charging.canOvercharge()) {

@@ -40,7 +40,7 @@ public final class EnemyConfig {
     public final float baseHp;
     public final float baseSpeed;
     public final float baseDamage;
-    public final float attackRate;
+    public final double attackRate;
     public final int gold;
     /** Fraction of projectile damage ignored, 0..1. */
     public final float armor;
@@ -66,7 +66,7 @@ public final class EnemyConfig {
     public final int armorLayers;
 
     EnemyConfig(EnemyType type, String name, String description,
-                float baseHp, float baseSpeed, float baseDamage, float attackRate,
+                float baseHp, float baseSpeed, float baseDamage, double attackRate,
                 int gold, float armor, float mass,
                 float width, float height, float flyY,
                 boolean flying, boolean grabbable, boolean trappable,
@@ -101,7 +101,7 @@ public final class EnemyConfig {
      * the one documented exception.
      */
     private EnemyConfig(String typeId, String name, String description,
-                        float baseHp, float baseSpeed, float baseDamage, float attackRate,
+                        float baseHp, float baseSpeed, float baseDamage, double attackRate,
                         int gold, float armor, float mass,
                         float width, float height, float flyY, boolean flying) {
         this.type = null;
@@ -139,7 +139,7 @@ public final class EnemyConfig {
      */
     public static EnemyConfig forBoss(String bossId, String name, String description,
                                       float baseHp, float baseSpeed, float baseDamage,
-                                      float attackRate, int gold, float armor, float mass,
+                                      double attackRate, int gold, float armor, float mass,
                                       float width, float height, float flyY,
                                       boolean flying) {
         if (bossId == null || bossId.isEmpty()) {

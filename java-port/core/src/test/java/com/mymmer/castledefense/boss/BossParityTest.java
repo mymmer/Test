@@ -49,12 +49,16 @@ class BossParityTest {
     @DisplayName("the boss constants match the Python ones")
     void constants() {
         JsonValue c = fx.get("constants");
-        assertEquals(GameConfig.REGALIA_COOLDOWN, c.getFloat("REGALIA_COOLDOWN"), 0f);
-        assertEquals(GameConfig.REGALIA_CD_GROWTH, c.getFloat("REGALIA_CD_GROWTH"), 0f);
+        //  The time-domain constants are read as doubles on BOTH sides: the
+        //  Python source states 0.6, and a float round trip would turn that into
+        //  0.6000000238418579 and quietly pass a looser assertion.
+        assertEquals(GameConfig.REGALIA_COOLDOWN, c.getDouble("REGALIA_COOLDOWN"), 0d);
+        assertEquals(GameConfig.REGALIA_CD_GROWTH, c.getDouble("REGALIA_CD_GROWTH"), 0d);
+        assertEquals(GameConfig.STAFF_DISARM_TIME, c.getDouble("STAFF_DISARM_TIME"), 0d);
+        assertEquals(GameConfig.CLAW_STAGGER, c.getDouble("CLAW_STAGGER"), 0d);
+        //  ...and the spatial ones stay floats.
         assertEquals(GameConfig.CROWN_RETRIEVE_SPEED, c.getFloat("CROWN_RETRIEVE_SPEED"), 0f);
-        assertEquals(GameConfig.STAFF_DISARM_TIME, c.getFloat("STAFF_DISARM_TIME"), 0f);
         assertEquals(GameConfig.CLAW_SMACK_DISTANCE, c.getFloat("CLAW_SMACK_DISTANCE"), 0f);
-        assertEquals(GameConfig.CLAW_STAGGER, c.getFloat("CLAW_STAGGER"), 0f);
         assertEquals(GameConfig.WALL_TOP, c.getFloat("WALL_TOP"), 0f);
     }
 
@@ -72,12 +76,12 @@ class BossParityTest {
                 assertTrue(troll.hasCrown());
                 troll.detachRegalia();
                 troll.crownItem().markDead();
-                troll.retrieveCrown(Simulation.DT);
+                troll.retrieveCrown(Simulation.FIXED_DT);
                 //  clear the guard so the next detach is allowed
-                int windDown = (int) (troll.regaliaCd() / Simulation.DT) + 2;
+                int windDown = (int) (troll.regaliaCd() / Simulation.FIXED_DT) + 2;
                 if (i < taken - 1) {
                     for (int s = 0; s < windDown; s++) {
-                        troll.update(Simulation.DT);
+                        troll.update(Simulation.FIXED_DT);
                     }
                 }
             }
@@ -95,118 +99,143 @@ class BossParityTest {
             close(c.getDouble("retrieveSpeedMult"), GameConfig.CROWN_RETRIEVE_SPEED,
                     "CROWN_RETRIEVE_SPEED");
             close(c.getDouble("stepDistance"),
-                    speed * GameConfig.CROWN_RETRIEVE_SPEED * Simulation.DT,
+                    speed * GameConfig.CROWN_RETRIEVE_SPEED * Simulation.PHYSICS_DT,
                     "one retrieval step at speed " + speed);
         }
     }
 
     @Test
-    @DisplayName("the Dragon's breath cadence matches Python at single precision")
+    @DisplayName("the Dragon's breath cadence matches Python exactly, at every configuration")
     void breathCadence() {
         //  ------------------------------------------------------------------
-        //  A REAL, MEASURED PRECISION BOUNDARY -- reported, not papered over.
-        //
-        //  Python's timers are doubles; the port's are floats, like all its
-        //  gameplay state.  The fixture therefore carries BOTH counts: `shots`
-        //  from Python's own arithmetic, and `shotsFloat32` from the identical
-        //  loop re-run in single precision, which is what Java necessarily
-        //  computes.  Java is asserted against shotsFloat32.
-        //
-        //  They agree for the shipped Normal configuration.  They differ by one
-        //  for the shipped HARD one (fireScale 0.5): Python fires 15 fireballs
-        //  per breath, Java 16.  That is a genuine port difference, recorded in
-        //  PORT_ANALYSIS.md section 14.  It is NOT fixed by tweaking a constant:
-        //  the cause is the precision of the timer type, and changing that is an
-        //  architectural decision, not a balance patch.
+        //  PRODUCTION BEHAVIOUR.  The Dragon's timers are doubles, like every
+        //  gameplay clock in the port, so this loop -- the same one as
+        //  Dragon.think -- is asserted against Python's OWN count, `shots`.
+        //  Not against `shotsFloat32`, which is now only a historical record of
+        //  what the float implementation used to do.  See
+        //  floatTimersAreWhyThisRuleExists() below.
         //  ------------------------------------------------------------------
+        for (JsonValue c = fx.get("dragonBreath").child; c != null; c = c.next) {
+            double breathTime = c.getDouble("breathTime");
+            double interval = c.getDouble("shotInterval");
+            double fireScale = c.getDouble("fireScale");
+
+            double breathing = breathTime;
+            double shotTimer = 0d;
+            double scaled = interval * fireScale;
+            int shots = 0;
+            int guard = 0;
+            while (breathing > 0d && guard < 100000) {
+                guard++;
+                breathing -= Simulation.FIXED_DT;
+                shotTimer -= Simulation.FIXED_DT;
+                if (shotTimer <= 0d) {
+                    shotTimer = scaled;
+                    shots++;
+                }
+            }
+            assertEquals(c.getInt("shots"), shots,
+                    "breath " + breathTime + "s at " + interval + "s x" + fireScale);
+        }
+    }
+
+    @Test
+    @DisplayName("the shipped Hard breath is fifteen fireballs, as in Python")
+    void shippedHardBreathIsFifteen() {
+        //  THE case this whole timing rule was built for.  On Hard the
+        //  difficulty halves the shot interval to 0.075 s, and 0.075 is a
+        //  boundary: nine subtractions of an exact sixtieth land on it, nine
+        //  subtractions of 1f/60f overshoot.  Python fires fifteen.  The port
+        //  used to fire sixteen; it now fires fifteen.
+        boolean checked = false;
+        for (JsonValue c = fx.get("dragonBreath").child; c != null; c = c.next) {
+            if (!c.getBoolean("shipped")) {
+                continue;
+            }
+            if (c.getDouble("fireScale") == 0.5d) {
+                assertEquals(15, c.getInt("shots"), "Python fires fifteen on Hard");
+                assertEquals(16, c.getInt("shotsFloat32"),
+                        "and a float implementation fired sixteen -- the bug");
+                assertEquals(15, liveBreathCount(0.5d), "and the live Dragon now fires fifteen");
+                checked = true;
+            } else if (c.getDouble("fireScale") == 1d) {
+                assertEquals(8, c.getInt("shots"), "Normal is eight fireballs");
+                assertEquals(8, liveBreathCount(1d), "and the live Dragon fires eight");
+            }
+        }
+        assertTrue(checked, "the fixture should cover the shipped Hard breath");
+    }
+
+    @Test
+    @DisplayName("float timers are why the rule exists: three of six cases diverge")
+    void floatTimersAreWhyThisRuleExists() {
+        //  Kept deliberately.  It does NOT describe production any more -- it
+        //  reproduces what the float implementation computed, and proves the
+        //  divergence was real, went BOTH ways, and was not a single unlucky
+        //  case that could have been tuned away.
         int divergent = 0;
         for (JsonValue c = fx.get("dragonBreath").child; c != null; c = c.next) {
-            float breathTime = c.getFloat("breathTime");
-            float interval = c.getFloat("shotInterval");
-            float fireScale = c.getFloat("fireScale");
-
-            //  The same loop as Dragon.think, run standalone so the assertion is
-            //  about the cadence rather than the surrounding state machine.
-            float breathing = breathTime;
+            float breathing = c.getFloat("breathTime");
             float shotTimer = 0f;
-            float scaled = interval * fireScale;
+            float scaled = c.getFloat("shotInterval") * c.getFloat("fireScale");
             int shots = 0;
             int guard = 0;
             while (breathing > 0f && guard < 100000) {
                 guard++;
-                breathing -= Simulation.DT;
-                shotTimer -= Simulation.DT;
+                breathing -= Simulation.PHYSICS_DT;
+                shotTimer -= Simulation.PHYSICS_DT;
                 if (shotTimer <= 0f) {
                     shotTimer = scaled;
                     shots++;
                 }
             }
             assertEquals(c.getInt("shotsFloat32"), shots,
-                    "breath " + breathTime + "s at " + interval + "s x" + fireScale
-                            + " (single precision)");
-            if (c.getInt("shots") != c.getInt("shotsFloat32")) {
+                    "the historical single-precision count must still reproduce");
+            if (c.getInt("shots") != shots) {
                 divergent++;
             }
         }
-        assertTrue(divergent > 0,
-                "the fixture is expected to contain at least one boundary case "
-                        + "where the precisions differ; if it no longer does, the "
-                        + "finding in PORT_ANALYSIS section 14 needs revisiting");
+        assertEquals(3, divergent,
+                "three of the six fixtured configurations diverged under float timers");
     }
 
-    @Test
-    @DisplayName("the shipped Normal breath has no precision divergence at all")
-    void shippedNormalBreathAgreesExactly() {
-        //  The case that actually ships on Normal: Python and the port produce
-        //  the same eight fireballs.  Pinned separately so a future tuning change
-        //  that moved it into the divergent set would fail loudly here.
-        boolean checked = false;
-        for (JsonValue c = fx.get("dragonBreath").child; c != null; c = c.next) {
-            if (c.getBoolean("shipped") && c.getFloat("fireScale") == 1f) {
-                assertEquals(c.getInt("shots"), c.getInt("shotsFloat32"),
-                        "the shipped Normal breath must agree in both precisions");
-                assertEquals(8, c.getInt("shots"), "and it is eight fireballs");
-                checked = true;
-            }
-        }
-        assertTrue(checked, "the fixture should cover the shipped breath");
-    }
-
-    @Test
-    @DisplayName("the Dragon's live breath fires the fixtured number of times")
-    void breathCadenceInTheRealDragon() {
-        //  The standalone loop above proves the arithmetic; this proves the
-        //  Dragon actually runs it, by counting real trace events.
+    /** Runs a real Dragon through one whole breath and counts the fireballs. */
+    private int liveBreathCount(double fireScale) {
         TestBossWorld w = new TestBossWorld();
+        w.bossFireScale = fireScale;
         com.mymmer.castledefense.debug.RecordingSimulationTrace trace =
                 new com.mymmer.castledefense.debug.RecordingSimulationTrace(4096);
         Dragon dragon = (Dragon) w.summon(BossType.DRAGON,
                 w.bosses.config(BossType.DRAGON).standoffX);
-
-        for (int i = 0; i < 60 * 20 && !dragon.breathing(); i++) {
-            w.step(Simulation.DT);
-        }
-        assertTrue(dragon.breathing());
-
+        //  Trace from before the breath starts, so the first fireball -- which
+        //  leaves on the same step the breath begins -- is counted too.
         trace.setEnabled(true);
         w.world.trace = trace;
+        for (int i = 0; i < 60 * 20 && !dragon.breathing(); i++) {
+            w.step(Simulation.FIXED_DT);
+        }
+        assertTrue(dragon.breathing(), "the Dragon should have started breathing");
         while (dragon.breathing()) {
-            w.step(Simulation.DT);
+            w.step(Simulation.FIXED_DT);
         }
-        int fired = trace.countOf(com.mymmer.castledefense.debug.TraceEvent.BOSS_ATTACK);
+        return trace.countOf(com.mymmer.castledefense.debug.TraceEvent.BOSS_ATTACK);
+    }
 
-        int expected = -1;
+    @Test
+    @DisplayName("the live Dragon runs the cadence the fixture predicts, exactly")
+    void breathCadenceInTheRealDragon() {
+        //  The standalone loops above prove the arithmetic; this proves the
+        //  Dragon actually runs it, by counting real trace events -- and it is
+        //  an EXACT count now, not a tolerance, because the boundary is no
+        //  longer precision-dependent.
         for (JsonValue c = fx.get("dragonBreath").child; c != null; c = c.next) {
-            if (c.getFloat("breathTime") == w.bosses.config(BossType.DRAGON).breathTime
-                    && c.getFloat("fireScale") == 1f) {
-                expected = c.getInt("shotsFloat32");
+            if (!c.getBoolean("shipped")) {
+                continue;
             }
+            double fireScale = c.getDouble("fireScale");
+            assertEquals(c.getInt("shots"), liveBreathCount(fireScale),
+                    "live Dragon at fireScale " + fireScale);
         }
-        assertTrue(expected > 0, "the fixture should cover the shipped breath");
-        //  One fireball can already have left before tracing was switched on, so
-        //  the live count is allowed to be one short of the standalone total.
-        assertTrue(fired == expected || fired == expected - 1,
-                "expected " + expected + " (or one fewer), got " + fired);
     }
 
     @Test
@@ -274,9 +303,9 @@ class BossParityTest {
             float vy = -300f;
             boolean grounded = false;
             for (int i = 0; i < steps; i++) {
-                vy += GameConfig.GRAVITY * Simulation.DT;
-                x += vx * Simulation.DT;
-                y += vy * Simulation.DT;
+                vy += GameConfig.GRAVITY * Simulation.PHYSICS_DT;
+                x += vx * Simulation.PHYSICS_DT;
+                y += vy * Simulation.PHYSICS_DT;
                 float left = GameConfig.CASTLE_FRONT + kind.width();
                 float right = GameConfig.WORLD_WIDTH - kind.width();
                 if (x < left) {
@@ -332,7 +361,7 @@ class BossParityTest {
         var cfg = w.bosses.config(BossType.LICH_LORD);
         for (JsonValue c = fx.get("lichSummon").child; c != null; c = c.next) {
             int wave = c.getInt("wave");
-            float interval = Math.max(cfg.summonIntervalFloor,
+            double interval = Math.max(cfg.summonIntervalFloor,
                     cfg.summonIntervalBase - wave * cfg.summonIntervalPerWave);
             int count = cfg.summonBaseCount + Math.min(cfg.summonMaxBonus, wave / 8);
             close(c.getDouble("interval"), interval, "summon interval at wave " + wave);

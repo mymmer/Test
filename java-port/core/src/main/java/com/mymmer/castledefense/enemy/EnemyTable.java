@@ -107,7 +107,7 @@ public final class EnemyTable {
                     positive(Json5.number(e, "baseHp", where), "baseHp", where),
                     positive(Json5.number(e, "baseSpeed", where), "baseSpeed", where),
                     nonNegative(Json5.number(e, "baseDamage", where), "baseDamage", where),
-                    positive(Json5.number(e, "attackRate", where), "attackRate", where),
+                    positiveSeconds(Json5.seconds(e, "attackRate", where), "attackRate", where),
                     nonNegativeInt(Json5.optInt(e, "gold", 0), "gold", where),
                     armor,
                     positive(Json5.number(e, "mass", where), "mass", where),
@@ -278,6 +278,14 @@ public final class EnemyTable {
 
     private static float positive(float v, String name, String where) {
         if (!(v > 0f)) {
+            throw new DataException(where + ": " + name + " must be > 0, was " + v);
+        }
+        return v;
+    }
+
+    /** Time-domain counterpart of {@link #positive}. */
+    private static double positiveSeconds(double v, String name, String where) {
+        if (!(v > 0d)) {
             throw new DataException(where + ": " + name + " must be > 0, was " + v);
         }
         return v;

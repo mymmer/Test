@@ -18,7 +18,7 @@ import org.junit.jupiter.api.Test;
 /** The state machine, the crowd, death, and each unit's own behaviour. */
 class EnemyBehaviourTest {
 
-    private static final float DT = TestEnemyWorld.DT;
+    private static final double DT = TestEnemyWorld.DT;
 
     // ========================================================================
     //  The state machine

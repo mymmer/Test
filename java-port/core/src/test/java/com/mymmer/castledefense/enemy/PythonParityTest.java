@@ -173,11 +173,11 @@ class PythonParityTest {
             float vx = 400f;
             float vy = -600f;
             for (int i = 0; i < steps; i++) {
-                vy += GameConfig.GRAVITY * Simulation.DT;
-                vx += wind * Simulation.DT;
-                vx -= vx * GameConfig.AIR_DRAG * Simulation.DT;
-                x += vx * Simulation.DT;
-                y += vy * Simulation.DT;
+                vy += GameConfig.GRAVITY * Simulation.PHYSICS_DT;
+                vx += wind * Simulation.PHYSICS_DT;
+                vx -= vx * GameConfig.AIR_DRAG * Simulation.PHYSICS_DT;
+                x += vx * Simulation.PHYSICS_DT;
+                y += vy * Simulation.PHYSICS_DT;
             }
             String at = steps + " steps, wind " + wind;
             close(c.getDouble("x"), x, "x after " + at);
@@ -257,8 +257,8 @@ class PythonParityTest {
             for (JsonValue t = c.get("trail").child; t != null; t = t.next) {
                 int untilStep = t.getInt("step");
                 while (at < untilStep) {
-                    x -= sh * Simulation.DT;
-                    sh *= Math.max(0f, 1f - GameConfig.SHOVE_DECAY * Simulation.DT);
+                    x -= sh * Simulation.PHYSICS_DT;
+                    sh *= Math.max(0f, 1f - GameConfig.SHOVE_DECAY * Simulation.PHYSICS_DT);
                     if (sh < 8f) {
                         sh = 0f;
                     }

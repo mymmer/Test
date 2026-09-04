@@ -104,11 +104,12 @@ public final class Barricade {
      * it from the game loop right after calling {@code barricade.update}. Same
      * order, same result, one fewer thing for the game loop to remember.
      */
-    public void update(float dt) {
-        flash = Math.max(0f, flash - dt * 3f);
+    public void update(double dt) {
+        float fdt = (float) dt;
+        flash = Math.max(0f, flash - fdt * 3f);            // visual
         float regen = ctx.modifiers().barricadeRegen();
         if (regen > 0f && alive()) {
-            hp = Math.min(maxHp, hp + maxHp * regen * dt);
+            hp = Math.min(maxHp, hp + maxHp * regen * fdt);
         }
     }
 

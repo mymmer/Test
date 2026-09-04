@@ -91,8 +91,8 @@ public final class Volatile extends Enemy {
     }
 
     @Override
-    protected void think(float dt) {
-        fuse += dt * 7f;
+    protected void think(double dt) {
+        fuse += (float) dt * 7f;
         super.think(dt);
     }
 }

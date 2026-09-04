@@ -22,7 +22,7 @@ import com.mymmer.castledefense.util.Collisions;
  */
 public final class TrollKing extends Boss {
 
-    private float leapTimer;
+    private double leapTimer;
     /** Visual only: the smash recoil, decaying at 2.5/s. */
     private float smash;
 
@@ -33,7 +33,7 @@ public final class TrollKing extends Boss {
     public TrollKing(BossContext ctx, EnemyConfig config, BossConfig boss,
                      int wave, Float x, Float y) {
         super(ctx, config, boss, wave, x, y);
-        this.leapTimer = ctx.rng().uniform(boss.leapIntervalMin, boss.leapIntervalMax);
+        this.leapTimer = ctx.rng().uniformSeconds(boss.leapIntervalMin, boss.leapIntervalMax);
     }
 
     public boolean hasCrown() {
@@ -91,7 +91,7 @@ public final class TrollKing extends Boss {
      * puts it back on and guards it. That branch is what stops a destroyed crown
      * leaving him walking for ever.
      */
-    public void retrieveCrown(float dt) {
+    public void retrieveCrown(double dt) {
         setState(EnemyState.RETRIEVE);
         DroppedItem crown = crownItem;
         if (crown == null || !crown.isAlive()) {
@@ -102,9 +102,10 @@ public final class TrollKing extends Boss {
                     x(), y(), "crown-vanished");
             return;
         }
-        anim += dt * speed * 0.06f;
+        float fdt = (float) dt;
+        anim += fdt * speed * 0.06f;
         float dx = crown.x() - x();
-        float step = speed * GameConfig.CROWN_RETRIEVE_SPEED * dt;
+        float step = speed * GameConfig.CROWN_RETRIEVE_SPEED * fdt;
         if (Math.abs(dx) > 6f) {
             setX(x() + Collisions.clamp(dx, -step, step));
             setVxEstimate(Math.copySign(speed * GameConfig.CROWN_RETRIEVE_SPEED, dx));
@@ -122,15 +123,15 @@ public final class TrollKing extends Boss {
     }
 
     @Override
-    protected void think(float dt) {
-        smash = Math.max(0f, smash - dt * 2.5f);
+    protected void think(double dt) {
+        smash = Math.max(0f, smash - (float) dt * 2.5f);   // visual
         if (!hasCrown) {
             retrieveCrown(dt);          // no attacking until he is crowned
             return;
         }
         leapTimer -= dt;
-        if (leapTimer <= 0f && x() > GameConfig.CASTLE_FRONT + boss.leapMinRange) {
-            leapTimer = bossCtx.rng().uniform(boss.leapIntervalMin, boss.leapIntervalMax);
+        if (leapTimer <= 0d && x() > GameConfig.CASTLE_FRONT + boss.leapMinRange) {
+            leapTimer = bossCtx.rng().uniformSeconds(boss.leapIntervalMin, boss.leapIntervalMax);
             setX(x() - boss.leapDistance);
         }
         super.think(dt);

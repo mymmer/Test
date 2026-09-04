@@ -68,8 +68,8 @@ public final class DefenceTable {
             if (kind == null) {
                 throw new DataException(where + ": unknown projectile type '" + kindId + "'");
             }
-            float cooldown = Json5.number(t, "cooldown", where);
-            if (cooldown <= 0f) {
+            double cooldown = Json5.seconds(t, "cooldown", where);
+            if (cooldown <= 0d) {
                 throw new DataException(where + ": cooldown must be > 0, was " + cooldown);
             }
             float range = Json5.number(t, "range", where);
@@ -114,7 +114,7 @@ public final class DefenceTable {
                     atLeastOne(Json5.optNumber(t, "airRangeMult", 1f), "airRangeMult", where),
                     overchargeable,
                     Json5.inRange(Json5.number(t, "regen", where), 0f, 1f, "regen", where),
-                    positive(Json5.number(t, "rebuildTime", where), "rebuildTime", where),
+                    positiveSeconds(Json5.seconds(t, "rebuildTime", where), "rebuildTime", where),
                     speed,
                     kind,
                     overchargeSpeed));
@@ -239,6 +239,14 @@ public final class DefenceTable {
 
     private static float positive(float value, String name, String where) {
         if (!(value > 0f)) {
+            throw new DataException(where + ": " + name + " must be > 0, was " + value);
+        }
+        return value;
+    }
+
+    /** Time-domain counterpart of {@link #positive}. */
+    private static double positiveSeconds(double value, String name, String where) {
+        if (!(value > 0d)) {
             throw new DataException(where + ": " + name + " must be > 0, was " + value);
         }
         return value;

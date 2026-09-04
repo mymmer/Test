@@ -22,9 +22,9 @@ import com.mymmer.castledefense.config.GameConfig;
 public final class TreasureGoblin extends Enemy {
 
     /** Seconds before it is gone, whatever happens. */
-    public static final float ESCAPE_TIME = 11f;
+    public static final double ESCAPE_TIME = 11.0;
 
-    private float escapeTimer = ESCAPE_TIME;
+    private double escapeTimer = ESCAPE_TIME;
     /** Visual only: the hopping run. */
     private float hop;
 
@@ -35,7 +35,7 @@ public final class TreasureGoblin extends Enemy {
         this.hop = ctx.rng().uniform(0f, 6.28f);
     }
 
-    public float escapeTimer() {
+    public double escapeTimer() {
         return escapeTimer;
     }
 
@@ -45,17 +45,18 @@ public final class TreasureGoblin extends Enemy {
     }
 
     @Override
-    protected void think(float dt) {
+    protected void think(double dt) {
         //  Deliberately does NOT call super: it shares none of the base's
         //  behaviour -- no ally check, no barricade, no castle approach, no
         //  blocked queueing, and no talent slow.  It only runs.
-        anim += dt * speed * 0.09f;
-        hop += dt * 11f;
+        float fdt = (float) dt;
+        anim += fdt * speed * 0.09f;
+        hop += fdt * 11f;
         setState(EnemyState.WALK);
-        x += speed * dt;
+        x += speed * fdt;
         setVxEstimate(speed);
         escapeTimer -= dt;
-        if (escapeTimer <= 0f || x > GameConfig.WORLD_WIDTH + 90f) {
+        if (escapeTimer <= 0d || x > GameConfig.WORLD_WIDTH + 90f) {
             escape();
         }
     }

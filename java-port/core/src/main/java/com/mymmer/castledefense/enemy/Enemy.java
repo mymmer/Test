@@ -81,8 +81,8 @@ public abstract class Enemy extends Entity implements Target {
 
     // --- state --------------------------------------------------------------
     private EnemyState state = EnemyState.WALK;
-    protected float attackTimer;
-    private float stagger;
+    protected double attackTimer;
+    private double stagger;
     private float shove;
     private boolean blocked;
     private boolean trapped;
@@ -101,8 +101,8 @@ public abstract class Enemy extends Entity implements Target {
     private float flingPeak;
     private int bounceCount;
     /** Seconds of tornado lift still acting. Weather is Phase 11. */
-    protected float tornadoHold;
-    protected float stormCd;
+    protected double tornadoHold;
+    protected double stormCd;
 
     // --- visual-only --------------------------------------------------------
     /** Animation phase. Advanced by think(); nothing gameplay reads it. */
@@ -664,7 +664,7 @@ public abstract class Enemy extends Entity implements Target {
             other.vx = vx * 0.4f;
             other.vy = Math.min(-140f, vy * 0.5f);
             other.slamCooldown.clear();
-            other.slamCooldown.put(uid(), 0.4f);
+            other.slamCooldown.put(uid(), 0.4);
         }
         vx *= 0.55f;
         vy *= 0.55f;
@@ -674,11 +674,17 @@ public abstract class Enemy extends Entity implements Target {
     //  Update
     // ========================================================================
 
-    /** One fixed simulation step. {@code dt} is always {@code Simulation.DT}. */
-    public void update(float dt) {
-        hurtFlash = Math.max(0f, hurtFlash - dt * 4f);
-        stagger = Math.max(0f, stagger - dt);
-        stormCd = Math.max(0f, stormCd - dt);
+    /**
+     * One fixed simulation step. {@code dt} is always {@code Simulation.FIXED_DT}.
+     *
+     * <p>It arrives as a {@code double} and every timer below subtracts it as it
+     * comes. The one float here is the hurt flash, which is drawing state.
+     */
+    public void update(double dt) {
+        float fdt = (float) dt;                 // spatial / visual only
+        hurtFlash = Math.max(0f, hurtFlash - fdt * 4f);
+        stagger = Math.max(0d, stagger - dt);
+        stormCd = Math.max(0d, stormCd - dt);
         slamCooldown.tick(dt);
 
         if (state == EnemyState.GRABBED) {
@@ -693,7 +699,7 @@ public abstract class Enemy extends Entity implements Target {
 
         vxEstimate = 0f;
         vyEstimate = 0f;
-        if (stagger > 0f) {
+        if (stagger > 0d) {
             return;         // still picking itself up
         }
         think(dt);
@@ -706,19 +712,20 @@ public abstract class Enemy extends Entity implements Target {
      * drag, wind, and hand-written arena walls. Introducing Box2D would replace
      * every number in here with one of its own.
      */
-    private void updateAir(float dt) {
-        if (tornadoHold > 0f) {
+    private void updateAir(double dt) {
+        float fdt = (float) dt;                 // the integration is spatial
+        if (tornadoHold > 0d) {
             //  held in a vortex: the funnel carries its own weight
-            tornadoHold = Math.max(0f, tornadoHold - dt);
-            vy += GameConfig.GRAVITY * 0.12f * dt;
+            tornadoHold = Math.max(0d, tornadoHold - dt);
+            vy += GameConfig.GRAVITY * 0.12f * fdt;
         } else {
-            vy += GameConfig.GRAVITY * dt;
+            vy += GameConfig.GRAVITY * fdt;
         }
-        vx += ctx.wind() * ctx.modifiers().windMult() * dt;
-        vx -= vx * GameConfig.AIR_DRAG * dt;
-        x += vx * dt;
-        y += vy * dt;
-        spin += vx * dt * 0.012f;
+        vx += ctx.wind() * ctx.modifiers().windMult() * fdt;
+        vx -= vx * GameConfig.AIR_DRAG * fdt;
+        x += vx * fdt;
+        y += vy * fdt;
+        spin += vx * fdt * 0.012f;
         flingPeak = Math.min(flingPeak, y);
         if (ctx.storm() && y < GameConfig.STORM_CEILING) {
             ctx.strikeLightning(this);
@@ -770,7 +777,7 @@ public abstract class Enemy extends Entity implements Target {
                     continue;
                 }
                 if (overlaps(o)) {
-                    slamCooldown.put(o.uid(), 0.35f);
+                    slamCooldown.put(o.uid(), 0.35);
                     slamInto(o);
                     if (!isAlive()) {
                         return;
@@ -794,23 +801,24 @@ public abstract class Enemy extends Entity implements Target {
      * them compose. The divide-back does not restore the exact original bits;
      * that imprecision exists in the source too and is not corrected here.
      */
-    protected void think(float dt) {
+    protected void think(double dt) {
+        float fdt = (float) dt;         // movement, animation and the bob
         float slow = ctx.enemySlow(this);
         if (slow < 1f) {
             speed *= slow;              // restored at the end of this method
         }
         if (shove > 0f) {               // carried momentum from the player's shove
-            x -= shove * dt;
-            shove *= Math.max(0f, 1f - GameConfig.SHOVE_DECAY * dt);
+            x -= shove * fdt;
+            shove *= Math.max(0f, 1f - GameConfig.SHOVE_DECAY * fdt);
             if (shove < 8f) {
                 shove = 0f;
             }
         }
-        anim += dt * speed * 0.06f;
+        anim += fdt * speed * 0.06f;
         if (flying) {
-            bob += dt * 3f;
+            bob += fdt * 3f;
             float targetY = flyY + (float) Math.sin(bob) * 18f;
-            y += Collisions.clamp(targetY - y, -160f * dt, 160f * dt);
+            y += Collisions.clamp(targetY - y, -160f * fdt, 160f * fdt);
         }
 
         //  a friendly skeleton in the way has to be dealt with first
@@ -819,7 +827,7 @@ public abstract class Enemy extends Entity implements Target {
             if (ally != null) {
                 setState(EnemyState.ATTACK);
                 attackTimer -= dt;
-                if (attackTimer <= 0f) {
+                if (attackTimer <= 0d) {
                     attackTimer = config.attackRate;
                     ally.takeDamage(Math.max(1f, damage * 0.8f));
                 }
@@ -836,7 +844,7 @@ public abstract class Enemy extends Entity implements Target {
             setState(EnemyState.ATTACK);
             x = bar.x() + Barricade.WIDTH / 2f + w / 2f;
             attackTimer -= dt;
-            if (attackTimer <= 0f) {
+            if (attackTimer <= 0d) {
                 attackTimer = config.attackRate;
                 bar.takeDamage(damage * (config.heavy ? 2.5f : 1f));
             }
@@ -848,18 +856,18 @@ public abstract class Enemy extends Entity implements Target {
             setState(EnemyState.ATTACK);
             x = ctx.castle().frontX() + w / 2f;
             attackTimer -= dt;
-            if (attackTimer <= 0f) {
+            if (attackTimer <= 0d) {
                 attackTimer = config.attackRate;
                 attackCastle();
             }
         } else if (blocked) {
             //  wait your turn: only the front rank gets to swing at the wall
             setState(EnemyState.WALK);
-            x -= speed * 0.12f * dt;
+            x -= speed * 0.12f * fdt;
             vxEstimate = -speed * 0.12f;
         } else {
             setState(EnemyState.WALK);
-            x -= speed * dt;
+            x -= speed * fdt;
             vxEstimate = -speed;
         }
         restoreSpeed(slow);
@@ -946,7 +954,7 @@ public abstract class Enemy extends Entity implements Target {
         return speed;
     }
 
-    public float stagger() {
+    public double stagger() {
         return stagger;
     }
 

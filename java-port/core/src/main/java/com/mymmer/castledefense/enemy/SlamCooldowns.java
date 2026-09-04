@@ -8,6 +8,10 @@ package com.mymmer.castledefense.enemy;
  * others at once, so the scan is shorter than a hash and it allocates nothing
  * per tick — and this runs inside the airborne update, once per pair, per step.
  *
+ * <p>The remaining times are <b>doubles</b>: they are a time-domain value, and
+ * one that is subtracted from once per step per pair. See {@code SIMULATION.md},
+ * "Gameplay time is double".
+ *
  * <p><b>Why uid and not the object.</b> The Python source added explicit uids
  * precisely for this: CPython recycles {@code id()} values, so a freshly spawned
  * mob could inherit a dead one's cooldown and be immune to a slam it never took.
@@ -18,11 +22,11 @@ package com.mymmer.castledefense.enemy;
 final class SlamCooldowns {
 
     private long[] uids = new long[8];
-    private float[] remaining = new float[8];
+    private double[] remaining = new double[8];
     private int size;
 
     /** Sets or refreshes a cooldown against one victim. */
-    void put(long uid, float seconds) {
+    void put(long uid, double seconds) {
         for (int i = 0; i < size; i++) {
             if (uids[i] == uid) {
                 remaining[i] = seconds;
@@ -31,7 +35,7 @@ final class SlamCooldowns {
         }
         if (size == uids.length) {
             long[] u = new long[size * 2];
-            float[] r = new float[size * 2];
+            double[] r = new double[size * 2];
             System.arraycopy(uids, 0, u, 0, size);
             System.arraycopy(remaining, 0, r, 0, size);
             uids = u;
@@ -58,11 +62,11 @@ final class SlamCooldowns {
      * survivors are compacted forward, which keeps the same "expired entries are
      * gone this step" semantics without allocating a key list.
      */
-    void tick(float dt) {
+    void tick(double dt) {
         int out = 0;
         for (int i = 0; i < size; i++) {
-            float left = remaining[i] - dt;
-            if (left > 0f) {
+            double left = remaining[i] - dt;
+            if (left > 0d) {
                 uids[out] = uids[i];
                 remaining[out] = left;
                 out++;

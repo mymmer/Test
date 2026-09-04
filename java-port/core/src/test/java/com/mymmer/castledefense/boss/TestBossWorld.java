@@ -22,7 +22,7 @@ import com.mymmer.castledefense.input.TestPointers;
  */
 public final class TestBossWorld implements BossContext {
 
-    public static final float DT = TestEnemyWorld.DT;
+    public static final double DT = TestEnemyWorld.DT;
 
     public final TestEnemyWorld world;
     public final BossTable bosses;
@@ -30,7 +30,7 @@ public final class TestBossWorld implements BossContext {
     public final EntityList<DroppedItem> items = new EntityList<>();
     public final CursorInteraction cursor;
 
-    public float bossFireScale = 1f;
+    public double bossFireScale = 1d;
     public int bossDefeatedCount;
     public final Array<Boss> defeated = new Array<>();
 
@@ -75,7 +75,7 @@ public final class TestBossWorld implements BossContext {
 
     // --- stepping -----------------------------------------------------------
 
-    public void step(float dt) {
+    public void step(double dt) {
         world.step(dt);
         for (int i = 0; i < items.size(); i++) {
             DroppedItem it = items.get(i);
@@ -87,7 +87,7 @@ public final class TestBossWorld implements BossContext {
         registry.purgeDead(world.horde, world.projectiles, items);
     }
 
-    public void steps(int n, float dt) {
+    public void steps(int n, double dt) {
         for (int i = 0; i < n; i++) {
             step(dt);
         }
@@ -195,7 +195,7 @@ public final class TestBossWorld implements BossContext {
     }
 
     @Override
-    public float bossFireScale() {
+    public double bossFireScale() {
         return bossFireScale;
     }
 

@@ -29,7 +29,7 @@ public final class BossConfig {
     public final float baseHp;
     public final float baseSpeed;
     public final float baseDamage;
-    public final float attackRate;
+    public final double attackRate;
     public final int gold;
     public final float armor;
     public final float mass;
@@ -39,7 +39,7 @@ public final class BossConfig {
     public final float flyY;
 
     /** Seconds of intro before the boss is fully engaged. */
-    public final float introTime;
+    public final double introTime;
 
     /**
      * Where the interactive regalia sits, normalised to the gameplay box.
@@ -61,43 +61,43 @@ public final class BossConfig {
     /** Troll King: how far from the castle he must be to leap, and how far he goes. */
     public final float leapDistance;
     public final float leapMinRange;
-    public final float leapIntervalMin;
-    public final float leapIntervalMax;
+    public final double leapIntervalMin;
+    public final double leapIntervalMax;
 
     /** Dragon: seconds of sustained breath, and the gap between its fireballs. */
-    public final float breathTime;
-    public final float breathShotInterval;
+    public final double breathTime;
+    public final double breathShotInterval;
     /** Each breath bolt as a fraction of a full hit. */
     public final float breathPower;
-    public final float breathIntervalMin;
-    public final float breathIntervalMax;
+    public final double breathIntervalMin;
+    public final double breathIntervalMax;
     public final float standoffX;
 
     /** Lich Lord: ward strength and duration, and the summon cadence. */
     public final float wardDamageMultiplier;
-    public final float wardDuration;
-    public final float wardIntervalMin;
-    public final float wardIntervalMax;
-    public final float summonIntervalBase;
-    public final float summonIntervalFloor;
-    public final float summonIntervalPerWave;
+    public final double wardDuration;
+    public final double wardIntervalMin;
+    public final double wardIntervalMax;
+    public final double summonIntervalBase;
+    public final double summonIntervalFloor;
+    public final double summonIntervalPerWave;
     public final int summonBaseCount;
     public final int summonMaxBonus;
 
     BossConfig(BossType type, String name, String description, String hint,
-               float baseHp, float baseSpeed, float baseDamage, float attackRate,
+               float baseHp, float baseSpeed, float baseDamage, double attackRate,
                int gold, float armor, float mass, float width, float height,
-               boolean flying, float flyY, float introTime,
+               boolean flying, float flyY, double introTime,
                GameplayAnchor regaliaAnchor, float regaliaHalfWidth,
                float regaliaHalfHeight, float regaliaBoxOffsetY,
                float leapDistance, float leapMinRange,
-               float leapIntervalMin, float leapIntervalMax,
-               float breathTime, float breathShotInterval, float breathPower,
-               float breathIntervalMin, float breathIntervalMax, float standoffX,
-               float wardDamageMultiplier, float wardDuration,
-               float wardIntervalMin, float wardIntervalMax,
-               float summonIntervalBase, float summonIntervalFloor,
-               float summonIntervalPerWave, int summonBaseCount, int summonMaxBonus) {
+               double leapIntervalMin, double leapIntervalMax,
+               double breathTime, double breathShotInterval, float breathPower,
+               double breathIntervalMin, double breathIntervalMax, float standoffX,
+               float wardDamageMultiplier, double wardDuration,
+               double wardIntervalMin, double wardIntervalMax,
+               double summonIntervalBase, double summonIntervalFloor,
+               double summonIntervalPerWave, int summonBaseCount, int summonMaxBonus) {
         this.type = type;
         this.name = name;
         this.description = description;

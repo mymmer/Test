@@ -71,7 +71,7 @@ class TowerLifecycleTest {
         TestWorld w = new TestWorld();
         w.modifiers = new CombatModifiers() {
             @Override
-            public float rebuildMult() {
+            public double rebuildMult() {
                 return 0.5f;
             }
         };
@@ -148,7 +148,7 @@ class TowerLifecycleTest {
         TestWorld w = new TestWorld();
         DefenceTower t = w.table.createTower(w, TowerType.CANNON, 248f, 354f);
         float d = t.damage();
-        float r = t.reload();
+        double r = t.reload();
         float range = t.range();
         float splash = t.splash();
         float hp = t.maxHp();
@@ -178,7 +178,7 @@ class TowerLifecycleTest {
         TestWorld w = new TestWorld();
         w.modifiers = new CombatModifiers() {
             @Override
-            public float towerRate() {
+            public double towerRate() {
                 return 0.5f;
             }
         };
@@ -193,19 +193,19 @@ class TowerLifecycleTest {
     @Test
     @DisplayName("the initial cooldown jitter comes from the seeded stream")
     void seededCooldownJitter() {
-        float a = w(4242L);
-        float b = w(4242L);
-        float c = w(99L);
-        assertEquals(a, b, 0f, "same seed, same stagger");
-        assertNotEquals(a, c);
-        assertTrue(a >= 0f && a <= 0.4f, "and it is within Python's 0..0.4 window");
+        double a = w(4242L);
+        double b = w(4242L);
+        double c = w(99L);
+        assertEquals(a, b, 0d, "same seed, same stagger");
+        assertTrue(a != c, "a different seed staggers differently");
+        assertTrue(a >= 0d && a <= 0.4d, "and it is within Python's 0..0.4 window");
     }
 
     private static void assertNotEquals(float a, float b) {
         assertFalse(a == b, "expected different values, both were " + a);
     }
 
-    private static float w(long seed) {
+    private static double w(long seed) {
         TestWorld world = new TestWorld(seed);
         return world.table.createTower(world, TowerType.BOWMAN, 248f, 354f).cooldown();
     }
@@ -234,7 +234,7 @@ class TowerLifecycleTest {
         while (!t.disabled()) {
             t.takeDamage(t.maxHp());
         }
-        float rebuild = t.rebuildRemaining();
+        double rebuild = t.rebuildRemaining();
         t.takeDamage(9999f);
         assertEquals(rebuild, t.rebuildRemaining(), 0f,
                 "hitting rubble must not restart the countdown");
