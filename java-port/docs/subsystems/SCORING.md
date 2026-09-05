@@ -16,9 +16,10 @@ All of it is `Scoring` (pure functions) plus the totals in `RunSession`.
 
 ## Does not own
 
-* **Spending.** Phase 9.
+* **Spending.** The [shop](SHOP.md).
 * **The talent values** the formulas multiply by — `CombatModifiers` supplies
-  them and returns neutral defaults until Phase 9 implements the tree.
+  them, and from Phase 9 the thing behind that interface is the real
+  `TalentTree`. See [`TALENTS.md`](TALENTS.md).
 * **The floating text** that shows a payout. Phase 11.
 
 ## Gold

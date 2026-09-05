@@ -20,16 +20,21 @@ summed. See [`SIMULATION.md`](SIMULATION.md), "Gameplay time is double".
 * The economy and scoring formulas (`Scoring`).
 * The banner queue (`Announcements`) and the shake budget (`ScreenShake`).
 * Weather (`Weather`) — see [`WEATHER.md`](WEATHER.md).
-* When a talent point is earned (`TalentIncome`). **Not** what it buys.
+* When a talent point is earned (`TalentIncome`). **Not** what it buys — from
+  Phase 9 the sink is the real `TalentTree`, and the director still only ever
+  says "award".
 * The run assembly and the step order (`RunWorld`, in `game`).
 
 ## Does not own
 
 * **Entities.** A director spawns through a seam and never touches a mob again.
-* **The shop.** Phase 9 spends gold; the session only holds it. `RunWorld`
-  exposes the state transition (`openRealtimeShop`, `resumeFromShop`,
-  `startNextWave`) and nothing that draws.
-* **The talent tree.** Phase 9. `TalentIncome` is a one-method sink.
+* **The shop.** [`SHOP.md`](SHOP.md). The session only holds the purse;
+  `RunWorld` exposes the state transitions (`openRealtimeShop`,
+  `resumeFromShop`, `startNextWave`) and nothing that draws.
+* **The talent tree.** [`TALENTS.md`](TALENTS.md). `TalentIncome` is a
+  one-method sink and stays one.
+* **Active skills.** [`SKILLS.md`](SKILLS.md). A boss defeat unlocks a slot and
+  pays a bounty; the panel owns the rest.
 * **Rendering.** The shake is a number, the banners are ids. Phase 10/11 consume
   them.
 * **Wall-clock time.** Nothing here reads a frame delta or a system clock.
@@ -148,7 +153,6 @@ nothing in this subsystem touches it.
 
 ## Deliberately deferred
 
-* The shop itself, the talent tree, active skills — Phase 9.
 * Banner layout, the HUD, boss bars — Phase 10.
 * Particles, weather visuals, the shake compositor — Phase 11.
 * Per-domain RNG streams — only if a measured need appears, and never for

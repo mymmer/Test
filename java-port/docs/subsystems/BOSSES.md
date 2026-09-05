@@ -81,6 +81,12 @@ BossContext extends EnemyContext: addDroppedItem, onBossDefeated,
 
 ## Important invariants
 
+0c. **`CombatModifiers` is the talent tree now.** From Phase 9 the object behind
+   `ctx.modifiers()` is `TalentTree`, and its values are computed live from the
+   current ranks — so a talent bought mid-run is in effect on the next step here
+   with no cache to invalidate. Nothing in this package names `TalentTree`, and
+   nothing may: see [`TALENTS.md`](TALENTS.md).
+
 0b. **Scheduling goes through `BossRegistry`, never a `currentBoss`.** Both
    directors summon by `BossType` through `DirectorContext.summonBoss`, which
    purges dead bosses first (as `summon_boss` does) and registers the new one.

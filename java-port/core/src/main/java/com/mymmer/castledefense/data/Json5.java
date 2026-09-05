@@ -69,6 +69,24 @@ public final class Json5 {
         return f.asDouble();
     }
 
+    /**
+     * A number that must round-trip to the source's value <b>exactly</b>.
+     *
+     * <p>Not a duration — {@link #seconds} says that — but a balance constant a
+     * parity fixture compares against Python. {@code 0.06} parsed as a float is
+     * 0.05999999865889549, which no double fixture will ever match, so anything
+     * a fixture checks is read through here.
+     */
+    public static double exact(JsonValue v, String name, String where) {
+        require(v, name, where);
+        JsonValue f = v.get(name);
+        if (!f.isNumber()) {
+            throw new DataException(where + ": '" + name + "' must be a number, got "
+                    + f.type());
+        }
+        return f.asDouble();
+    }
+
     /** {@link #seconds} with a fallback, for optional durations. */
     public static double optSeconds(JsonValue v, String name, double fallback) {
         JsonValue f = v.get(name);

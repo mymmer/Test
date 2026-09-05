@@ -120,7 +120,7 @@ public class CastleDefenseGame extends ApplicationAdapter {
         //  rather than crashing inside a step.
         if (startupFailure == null) {
             run = new RunWorld(world, services.enemies(), services.defences(),
-                    services.bosses(), com.mymmer.castledefense.defence.CombatModifiers.NONE,
+                    services.bosses(), services.talents(), services.shop(),
                     input::releaseVelocity);
             inputRouter.setWorldHandler(run.cursor());
         }

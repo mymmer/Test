@@ -42,6 +42,23 @@
     "CLAW_SMACK_DISTANCE": 360.0,
     "CLAW_STAGGER": 3.2,
     "WALL_TOP": 350.0,
+    "GRAB_CD_PER_RANK": 0.2,
+    "STORM_WIND_SLOW": 0.3,
+    "LIGHTNING_RADIUS": 155.0,
+    "LIGHTNING_DAMAGE": 0.85,
+    "LIGHTNING_COOLDOWN": 14.0,
+    "METEOR_COUNT": 16.0,
+    "METEOR_RADIUS": 96.0,
+    "METEOR_DAMAGE": 130.0,
+    "METEOR_COOLDOWN": 26.0,
+    "FIRE_ZONE_TIME": 6.0,
+    "FIRE_ZONE_DPS": 48.0,
+    "TORNADO_COOLDOWN": 30.0,
+    "TORNADO_LIFE": 6.0,
+    "TORNADO_SPEED": 120.0,
+    "TORNADO_RADIUS": 130.0,
+    "TORNADO_LIFT": 620.0,
+    "TORNADO_SWIRL": 6.5,
     "POP_GOLD_FREE": 4.0,
     "POP_GOLD_STEP": 0.055,
     "POP_GOLD_CAP": 3.0,
@@ -3080,6 +3097,2254 @@
       "dt": 0.016666666666666666,
       "firesOnStep": 66,
       "note": "strictly greater than 1.1"
+    }
+  ],
+  "talentDefs": [
+    {
+      "id": "rate",
+      "branch": "offense",
+      "tier": 0,
+      "maxRank": 5,
+      "perRank": 0.06
+    },
+    {
+      "id": "power",
+      "branch": "offense",
+      "tier": 0,
+      "maxRank": 5,
+      "perRank": 0.08
+    },
+    {
+      "id": "crit",
+      "branch": "offense",
+      "tier": 2,
+      "maxRank": 5,
+      "perRank": 0.05
+    },
+    {
+      "id": "pierce",
+      "branch": "offense",
+      "tier": 4,
+      "maxRank": 3,
+      "perRank": 1.0
+    },
+    {
+      "id": "splash",
+      "branch": "offense",
+      "tier": 6,
+      "maxRank": 4,
+      "perRank": 0.1
+    },
+    {
+      "id": "overcharge",
+      "branch": "offense",
+      "tier": 9,
+      "maxRank": 3,
+      "perRank": 0.18
+    },
+    {
+      "id": "maxhp",
+      "branch": "defense",
+      "tier": 0,
+      "maxRank": 5,
+      "perRank": 0.1
+    },
+    {
+      "id": "regen",
+      "branch": "defense",
+      "tier": 0,
+      "maxRank": 4,
+      "perRank": 0.012
+    },
+    {
+      "id": "spikedot",
+      "branch": "defense",
+      "tier": 2,
+      "maxRank": 4,
+      "perRank": 0.9
+    },
+    {
+      "id": "towerhp",
+      "branch": "defense",
+      "tier": 3,
+      "maxRank": 4,
+      "perRank": 0.18
+    },
+    {
+      "id": "rebuild",
+      "branch": "defense",
+      "tier": 5,
+      "maxRank": 3,
+      "perRank": 0.2
+    },
+    {
+      "id": "thorns",
+      "branch": "defense",
+      "tier": 8,
+      "maxRank": 3,
+      "perRank": 0.07
+    },
+    {
+      "id": "greed",
+      "branch": "utility",
+      "tier": 0,
+      "maxRank": 5,
+      "perRank": 0.12
+    },
+    {
+      "id": "lighthands",
+      "branch": "utility",
+      "tier": 0,
+      "maxRank": 4,
+      "perRank": 0.14
+    },
+    {
+      "id": "haggle",
+      "branch": "utility",
+      "tier": 2,
+      "maxRank": 4,
+      "perRank": 0.06
+    },
+    {
+      "id": "purse",
+      "branch": "utility",
+      "tier": 3,
+      "maxRank": 4,
+      "perRank": 40.0
+    },
+    {
+      "id": "lightfingers",
+      "branch": "utility",
+      "tier": 3,
+      "maxRank": 4,
+      "perRank": 0.2
+    },
+    {
+      "id": "showman",
+      "branch": "utility",
+      "tier": 5,
+      "maxRank": 4,
+      "perRank": 0.15
+    },
+    {
+      "id": "scavenge",
+      "branch": "utility",
+      "tier": 7,
+      "maxRank": 3,
+      "perRank": 0.1
+    },
+    {
+      "id": "sentinels",
+      "branch": "utility",
+      "tier": 5,
+      "maxRank": 1,
+      "perRank": 1.0
+    },
+    {
+      "id": "stormwinds",
+      "branch": "aero",
+      "tier": 0,
+      "maxRank": 1,
+      "perRank": 0.3
+    },
+    {
+      "id": "throwarm",
+      "branch": "aero",
+      "tier": 0,
+      "maxRank": 5,
+      "perRank": 0.08
+    },
+    {
+      "id": "updraft",
+      "branch": "aero",
+      "tier": 2,
+      "maxRank": 4,
+      "perRank": 0.12
+    },
+    {
+      "id": "conductor",
+      "branch": "aero",
+      "tier": 4,
+      "maxRank": 4,
+      "perRank": 0.15
+    },
+    {
+      "id": "gale",
+      "branch": "aero",
+      "tier": 6,
+      "maxRank": 3,
+      "perRank": 0.25
+    },
+    {
+      "id": "tempest",
+      "branch": "aero",
+      "tier": 9,
+      "maxRank": 1,
+      "perRank": 1.0
+    },
+    {
+      "id": "bonecraft",
+      "branch": "necromancy",
+      "tier": 0,
+      "maxRank": 5,
+      "perRank": 0.16
+    },
+    {
+      "id": "hostmaster",
+      "branch": "necromancy",
+      "tier": 0,
+      "maxRank": 4,
+      "perRank": 1.0
+    },
+    {
+      "id": "quickraise",
+      "branch": "necromancy",
+      "tier": 2,
+      "maxRank": 4,
+      "perRank": 0.12
+    },
+    {
+      "id": "gravechill",
+      "branch": "necromancy",
+      "tier": 4,
+      "maxRank": 3,
+      "perRank": 0.06
+    },
+    {
+      "id": "secondwind",
+      "branch": "necromancy",
+      "tier": 7,
+      "maxRank": 2,
+      "perRank": 20.0
+    },
+    {
+      "id": "bonewall",
+      "branch": "necromancy",
+      "tier": 9,
+      "maxRank": 3,
+      "perRank": 0.12
+    },
+    {
+      "id": "focus",
+      "branch": "arcane",
+      "tier": 0,
+      "maxRank": 5,
+      "perRank": 0.07
+    },
+    {
+      "id": "amplify",
+      "branch": "arcane",
+      "tier": 0,
+      "maxRank": 5,
+      "perRank": 0.1
+    },
+    {
+      "id": "widecast",
+      "branch": "arcane",
+      "tier": 3,
+      "maxRank": 4,
+      "perRank": 0.12
+    },
+    {
+      "id": "emberfall",
+      "branch": "arcane",
+      "tier": 5,
+      "maxRank": 3,
+      "perRank": 0.3
+    },
+    {
+      "id": "eyeofstorm",
+      "branch": "arcane",
+      "tier": 8,
+      "maxRank": 2,
+      "perRank": 0.25
+    },
+    {
+      "id": "twincast",
+      "branch": "arcane",
+      "tier": 10,
+      "maxRank": 2,
+      "perRank": 0.5
+    }
+  ],
+  "talentEffects": [
+    {
+      "id": "rate",
+      "rank": 0,
+      "value": 0.0,
+      "effect": 1.0
+    },
+    {
+      "id": "rate",
+      "rank": 1,
+      "value": 0.06,
+      "effect": 0.94
+    },
+    {
+      "id": "rate",
+      "rank": 2,
+      "value": 0.12,
+      "effect": 0.88
+    },
+    {
+      "id": "rate",
+      "rank": 3,
+      "value": 0.18,
+      "effect": 0.8200000000000001
+    },
+    {
+      "id": "rate",
+      "rank": 4,
+      "value": 0.24,
+      "effect": 0.76
+    },
+    {
+      "id": "rate",
+      "rank": 5,
+      "value": 0.3,
+      "effect": 0.7
+    },
+    {
+      "id": "power",
+      "rank": 0,
+      "value": 0.0,
+      "effect": 1.0
+    },
+    {
+      "id": "power",
+      "rank": 1,
+      "value": 0.08,
+      "effect": 1.08
+    },
+    {
+      "id": "power",
+      "rank": 2,
+      "value": 0.16,
+      "effect": 1.16
+    },
+    {
+      "id": "power",
+      "rank": 3,
+      "value": 0.24,
+      "effect": 1.24
+    },
+    {
+      "id": "power",
+      "rank": 4,
+      "value": 0.32,
+      "effect": 1.32
+    },
+    {
+      "id": "power",
+      "rank": 5,
+      "value": 0.4,
+      "effect": 1.4
+    },
+    {
+      "id": "crit",
+      "rank": 0,
+      "value": 0.0,
+      "effect": 0.0
+    },
+    {
+      "id": "crit",
+      "rank": 1,
+      "value": 0.05,
+      "effect": 0.05
+    },
+    {
+      "id": "crit",
+      "rank": 2,
+      "value": 0.1,
+      "effect": 0.1
+    },
+    {
+      "id": "crit",
+      "rank": 3,
+      "value": 0.15000000000000002,
+      "effect": 0.15000000000000002
+    },
+    {
+      "id": "crit",
+      "rank": 4,
+      "value": 0.2,
+      "effect": 0.2
+    },
+    {
+      "id": "crit",
+      "rank": 5,
+      "value": 0.25,
+      "effect": 0.25
+    },
+    {
+      "id": "pierce",
+      "rank": 0,
+      "value": 0.0,
+      "effect": 0.0
+    },
+    {
+      "id": "pierce",
+      "rank": 1,
+      "value": 1.0,
+      "effect": 1.0
+    },
+    {
+      "id": "pierce",
+      "rank": 2,
+      "value": 2.0,
+      "effect": 2.0
+    },
+    {
+      "id": "pierce",
+      "rank": 3,
+      "value": 3.0,
+      "effect": 3.0
+    },
+    {
+      "id": "splash",
+      "rank": 0,
+      "value": 0.0,
+      "effect": 1.0
+    },
+    {
+      "id": "splash",
+      "rank": 1,
+      "value": 0.1,
+      "effect": 1.1
+    },
+    {
+      "id": "splash",
+      "rank": 2,
+      "value": 0.2,
+      "effect": 1.2
+    },
+    {
+      "id": "splash",
+      "rank": 3,
+      "value": 0.30000000000000004,
+      "effect": 1.3
+    },
+    {
+      "id": "splash",
+      "rank": 4,
+      "value": 0.4,
+      "effect": 1.4
+    },
+    {
+      "id": "overcharge",
+      "rank": 0,
+      "value": 0.0,
+      "effect": 1.0
+    },
+    {
+      "id": "overcharge",
+      "rank": 1,
+      "value": 0.18,
+      "effect": 0.8200000000000001
+    },
+    {
+      "id": "overcharge",
+      "rank": 2,
+      "value": 0.36,
+      "effect": 0.64
+    },
+    {
+      "id": "overcharge",
+      "rank": 3,
+      "value": 0.54,
+      "effect": 0.5
+    },
+    {
+      "id": "maxhp",
+      "rank": 0,
+      "value": 0.0,
+      "effect": 1.0
+    },
+    {
+      "id": "maxhp",
+      "rank": 1,
+      "value": 0.1,
+      "effect": 1.1
+    },
+    {
+      "id": "maxhp",
+      "rank": 2,
+      "value": 0.2,
+      "effect": 1.2
+    },
+    {
+      "id": "maxhp",
+      "rank": 3,
+      "value": 0.30000000000000004,
+      "effect": 1.3
+    },
+    {
+      "id": "maxhp",
+      "rank": 4,
+      "value": 0.4,
+      "effect": 1.4
+    },
+    {
+      "id": "maxhp",
+      "rank": 5,
+      "value": 0.5,
+      "effect": 1.5
+    },
+    {
+      "id": "regen",
+      "rank": 0,
+      "value": 0.0,
+      "effect": 0.0
+    },
+    {
+      "id": "regen",
+      "rank": 1,
+      "value": 0.012,
+      "effect": 0.012
+    },
+    {
+      "id": "regen",
+      "rank": 2,
+      "value": 0.024,
+      "effect": 0.024
+    },
+    {
+      "id": "regen",
+      "rank": 3,
+      "value": 0.036000000000000004,
+      "effect": 0.036000000000000004
+    },
+    {
+      "id": "regen",
+      "rank": 4,
+      "value": 0.048,
+      "effect": 0.048
+    },
+    {
+      "id": "spikedot",
+      "rank": 0,
+      "value": 0.0,
+      "effect": 0.0
+    },
+    {
+      "id": "spikedot",
+      "rank": 1,
+      "value": 0.9,
+      "effect": 0.9
+    },
+    {
+      "id": "spikedot",
+      "rank": 2,
+      "value": 1.8,
+      "effect": 1.8
+    },
+    {
+      "id": "spikedot",
+      "rank": 3,
+      "value": 2.7,
+      "effect": 2.7
+    },
+    {
+      "id": "spikedot",
+      "rank": 4,
+      "value": 3.6,
+      "effect": 3.6
+    },
+    {
+      "id": "towerhp",
+      "rank": 0,
+      "value": 0.0,
+      "effect": 1.0
+    },
+    {
+      "id": "towerhp",
+      "rank": 1,
+      "value": 0.18,
+      "effect": 1.18
+    },
+    {
+      "id": "towerhp",
+      "rank": 2,
+      "value": 0.36,
+      "effect": 1.3599999999999999
+    },
+    {
+      "id": "towerhp",
+      "rank": 3,
+      "value": 0.54,
+      "effect": 1.54
+    },
+    {
+      "id": "towerhp",
+      "rank": 4,
+      "value": 0.72,
+      "effect": 1.72
+    },
+    {
+      "id": "rebuild",
+      "rank": 0,
+      "value": 0.0,
+      "effect": 1.0
+    },
+    {
+      "id": "rebuild",
+      "rank": 1,
+      "value": 0.2,
+      "effect": 0.8
+    },
+    {
+      "id": "rebuild",
+      "rank": 2,
+      "value": 0.4,
+      "effect": 0.6
+    },
+    {
+      "id": "rebuild",
+      "rank": 3,
+      "value": 0.6000000000000001,
+      "effect": 0.4
+    },
+    {
+      "id": "thorns",
+      "rank": 0,
+      "value": 0.0,
+      "effect": 1.0
+    },
+    {
+      "id": "thorns",
+      "rank": 1,
+      "value": 0.07,
+      "effect": 0.9299999999999999
+    },
+    {
+      "id": "thorns",
+      "rank": 2,
+      "value": 0.14,
+      "effect": 0.86
+    },
+    {
+      "id": "thorns",
+      "rank": 3,
+      "value": 0.21000000000000002,
+      "effect": 0.79
+    },
+    {
+      "id": "greed",
+      "rank": 0,
+      "value": 0.0,
+      "effect": 1.0
+    },
+    {
+      "id": "greed",
+      "rank": 1,
+      "value": 0.12,
+      "effect": 1.12
+    },
+    {
+      "id": "greed",
+      "rank": 2,
+      "value": 0.24,
+      "effect": 1.24
+    },
+    {
+      "id": "greed",
+      "rank": 3,
+      "value": 0.36,
+      "effect": 1.3599999999999999
+    },
+    {
+      "id": "greed",
+      "rank": 4,
+      "value": 0.48,
+      "effect": 1.48
+    },
+    {
+      "id": "greed",
+      "rank": 5,
+      "value": 0.6,
+      "effect": 1.6
+    },
+    {
+      "id": "lighthands",
+      "rank": 0,
+      "value": 0.0,
+      "effect": 1.0
+    },
+    {
+      "id": "lighthands",
+      "rank": 1,
+      "value": 0.14,
+      "effect": 1.1400000000000001
+    },
+    {
+      "id": "lighthands",
+      "rank": 2,
+      "value": 0.28,
+      "effect": 1.28
+    },
+    {
+      "id": "lighthands",
+      "rank": 3,
+      "value": 0.42000000000000004,
+      "effect": 1.42
+    },
+    {
+      "id": "lighthands",
+      "rank": 4,
+      "value": 0.56,
+      "effect": 1.56
+    },
+    {
+      "id": "haggle",
+      "rank": 0,
+      "value": 0.0,
+      "effect": 1.0
+    },
+    {
+      "id": "haggle",
+      "rank": 1,
+      "value": 0.06,
+      "effect": 0.94
+    },
+    {
+      "id": "haggle",
+      "rank": 2,
+      "value": 0.12,
+      "effect": 0.88
+    },
+    {
+      "id": "haggle",
+      "rank": 3,
+      "value": 0.18,
+      "effect": 0.8200000000000001
+    },
+    {
+      "id": "haggle",
+      "rank": 4,
+      "value": 0.24,
+      "effect": 0.76
+    },
+    {
+      "id": "purse",
+      "rank": 0,
+      "value": 0.0,
+      "effect": 0.0
+    },
+    {
+      "id": "purse",
+      "rank": 1,
+      "value": 40.0,
+      "effect": 40.0
+    },
+    {
+      "id": "purse",
+      "rank": 2,
+      "value": 80.0,
+      "effect": 80.0
+    },
+    {
+      "id": "purse",
+      "rank": 3,
+      "value": 120.0,
+      "effect": 120.0
+    },
+    {
+      "id": "purse",
+      "rank": 4,
+      "value": 160.0,
+      "effect": 160.0
+    },
+    {
+      "id": "lightfingers",
+      "rank": 0,
+      "value": 0.0,
+      "effect": 1.0
+    },
+    {
+      "id": "lightfingers",
+      "rank": 1,
+      "value": 0.2,
+      "effect": 0.8
+    },
+    {
+      "id": "lightfingers",
+      "rank": 2,
+      "value": 0.4,
+      "effect": 0.6
+    },
+    {
+      "id": "lightfingers",
+      "rank": 3,
+      "value": 0.6000000000000001,
+      "effect": 0.3999999999999999
+    },
+    {
+      "id": "lightfingers",
+      "rank": 4,
+      "value": 0.8,
+      "effect": 0.19999999999999996
+    },
+    {
+      "id": "showman",
+      "rank": 0,
+      "value": 0.0,
+      "effect": 1.0
+    },
+    {
+      "id": "showman",
+      "rank": 1,
+      "value": 0.15,
+      "effect": 1.15
+    },
+    {
+      "id": "showman",
+      "rank": 2,
+      "value": 0.3,
+      "effect": 1.3
+    },
+    {
+      "id": "showman",
+      "rank": 3,
+      "value": 0.44999999999999996,
+      "effect": 1.45
+    },
+    {
+      "id": "showman",
+      "rank": 4,
+      "value": 0.6,
+      "effect": 1.6
+    },
+    {
+      "id": "scavenge",
+      "rank": 0,
+      "value": 0.0,
+      "effect": 1.0
+    },
+    {
+      "id": "scavenge",
+      "rank": 1,
+      "value": 0.1,
+      "effect": 1.1
+    },
+    {
+      "id": "scavenge",
+      "rank": 2,
+      "value": 0.2,
+      "effect": 1.2
+    },
+    {
+      "id": "scavenge",
+      "rank": 3,
+      "value": 0.30000000000000004,
+      "effect": 1.3
+    },
+    {
+      "id": "sentinels",
+      "rank": 0,
+      "value": 0.0,
+      "effect": 0.0
+    },
+    {
+      "id": "sentinels",
+      "rank": 1,
+      "value": 1.0,
+      "effect": 1.0
+    },
+    {
+      "id": "stormwinds",
+      "rank": 0,
+      "value": 0.0,
+      "effect": 0.0
+    },
+    {
+      "id": "stormwinds",
+      "rank": 1,
+      "value": 0.3,
+      "effect": 0.3
+    },
+    {
+      "id": "throwarm",
+      "rank": 0,
+      "value": 0.0,
+      "effect": 1.0
+    },
+    {
+      "id": "throwarm",
+      "rank": 1,
+      "value": 0.08,
+      "effect": 1.08
+    },
+    {
+      "id": "throwarm",
+      "rank": 2,
+      "value": 0.16,
+      "effect": 1.16
+    },
+    {
+      "id": "throwarm",
+      "rank": 3,
+      "value": 0.24,
+      "effect": 1.24
+    },
+    {
+      "id": "throwarm",
+      "rank": 4,
+      "value": 0.32,
+      "effect": 1.32
+    },
+    {
+      "id": "throwarm",
+      "rank": 5,
+      "value": 0.4,
+      "effect": 1.4
+    },
+    {
+      "id": "updraft",
+      "rank": 0,
+      "value": 0.0,
+      "effect": 1.0
+    },
+    {
+      "id": "updraft",
+      "rank": 1,
+      "value": 0.12,
+      "effect": 1.12
+    },
+    {
+      "id": "updraft",
+      "rank": 2,
+      "value": 0.24,
+      "effect": 1.24
+    },
+    {
+      "id": "updraft",
+      "rank": 3,
+      "value": 0.36,
+      "effect": 1.3599999999999999
+    },
+    {
+      "id": "updraft",
+      "rank": 4,
+      "value": 0.48,
+      "effect": 1.48
+    },
+    {
+      "id": "conductor",
+      "rank": 0,
+      "value": 0.0,
+      "effect": 1.0
+    },
+    {
+      "id": "conductor",
+      "rank": 1,
+      "value": 0.15,
+      "effect": 1.15
+    },
+    {
+      "id": "conductor",
+      "rank": 2,
+      "value": 0.3,
+      "effect": 1.3
+    },
+    {
+      "id": "conductor",
+      "rank": 3,
+      "value": 0.44999999999999996,
+      "effect": 1.45
+    },
+    {
+      "id": "conductor",
+      "rank": 4,
+      "value": 0.6,
+      "effect": 1.6
+    },
+    {
+      "id": "gale",
+      "rank": 0,
+      "value": 0.0,
+      "effect": 1.0
+    },
+    {
+      "id": "gale",
+      "rank": 1,
+      "value": 0.25,
+      "effect": 1.25
+    },
+    {
+      "id": "gale",
+      "rank": 2,
+      "value": 0.5,
+      "effect": 1.5
+    },
+    {
+      "id": "gale",
+      "rank": 3,
+      "value": 0.75,
+      "effect": 1.75
+    },
+    {
+      "id": "tempest",
+      "rank": 0,
+      "value": 0.0,
+      "effect": 1.0
+    },
+    {
+      "id": "tempest",
+      "rank": 1,
+      "value": 1.0,
+      "effect": 2.0
+    },
+    {
+      "id": "bonecraft",
+      "rank": 0,
+      "value": 0.0,
+      "effect": 1.0
+    },
+    {
+      "id": "bonecraft",
+      "rank": 1,
+      "value": 0.16,
+      "effect": 1.16
+    },
+    {
+      "id": "bonecraft",
+      "rank": 2,
+      "value": 0.32,
+      "effect": 1.32
+    },
+    {
+      "id": "bonecraft",
+      "rank": 3,
+      "value": 0.48,
+      "effect": 1.48
+    },
+    {
+      "id": "bonecraft",
+      "rank": 4,
+      "value": 0.64,
+      "effect": 1.6400000000000001
+    },
+    {
+      "id": "bonecraft",
+      "rank": 5,
+      "value": 0.8,
+      "effect": 1.8
+    },
+    {
+      "id": "hostmaster",
+      "rank": 0,
+      "value": 0.0,
+      "effect": 0.0
+    },
+    {
+      "id": "hostmaster",
+      "rank": 1,
+      "value": 1.0,
+      "effect": 1.0
+    },
+    {
+      "id": "hostmaster",
+      "rank": 2,
+      "value": 2.0,
+      "effect": 2.0
+    },
+    {
+      "id": "hostmaster",
+      "rank": 3,
+      "value": 3.0,
+      "effect": 3.0
+    },
+    {
+      "id": "hostmaster",
+      "rank": 4,
+      "value": 4.0,
+      "effect": 4.0
+    },
+    {
+      "id": "quickraise",
+      "rank": 0,
+      "value": 0.0,
+      "effect": 1.0
+    },
+    {
+      "id": "quickraise",
+      "rank": 1,
+      "value": 0.12,
+      "effect": 0.88
+    },
+    {
+      "id": "quickraise",
+      "rank": 2,
+      "value": 0.24,
+      "effect": 0.76
+    },
+    {
+      "id": "quickraise",
+      "rank": 3,
+      "value": 0.36,
+      "effect": 0.64
+    },
+    {
+      "id": "quickraise",
+      "rank": 4,
+      "value": 0.48,
+      "effect": 0.52
+    },
+    {
+      "id": "gravechill",
+      "rank": 0,
+      "value": 0.0,
+      "effect": 0.0
+    },
+    {
+      "id": "gravechill",
+      "rank": 1,
+      "value": 0.06,
+      "effect": 0.06
+    },
+    {
+      "id": "gravechill",
+      "rank": 2,
+      "value": 0.12,
+      "effect": 0.12
+    },
+    {
+      "id": "gravechill",
+      "rank": 3,
+      "value": 0.18,
+      "effect": 0.18
+    },
+    {
+      "id": "secondwind",
+      "rank": 0,
+      "value": 0.0,
+      "effect": 0.0
+    },
+    {
+      "id": "secondwind",
+      "rank": 1,
+      "value": 20.0,
+      "effect": 20.0
+    },
+    {
+      "id": "secondwind",
+      "rank": 2,
+      "value": 40.0,
+      "effect": 40.0
+    },
+    {
+      "id": "bonewall",
+      "rank": 0,
+      "value": 0.0,
+      "effect": 1.0
+    },
+    {
+      "id": "bonewall",
+      "rank": 1,
+      "value": 0.12,
+      "effect": 0.88
+    },
+    {
+      "id": "bonewall",
+      "rank": 2,
+      "value": 0.24,
+      "effect": 0.76
+    },
+    {
+      "id": "bonewall",
+      "rank": 3,
+      "value": 0.36,
+      "effect": 0.64
+    },
+    {
+      "id": "focus",
+      "rank": 0,
+      "value": 0.0,
+      "effect": 1.0
+    },
+    {
+      "id": "focus",
+      "rank": 1,
+      "value": 0.07,
+      "effect": 0.9299999999999999
+    },
+    {
+      "id": "focus",
+      "rank": 2,
+      "value": 0.14,
+      "effect": 0.86
+    },
+    {
+      "id": "focus",
+      "rank": 3,
+      "value": 0.21000000000000002,
+      "effect": 0.79
+    },
+    {
+      "id": "focus",
+      "rank": 4,
+      "value": 0.28,
+      "effect": 0.72
+    },
+    {
+      "id": "focus",
+      "rank": 5,
+      "value": 0.35000000000000003,
+      "effect": 0.6499999999999999
+    },
+    {
+      "id": "amplify",
+      "rank": 0,
+      "value": 0.0,
+      "effect": 1.0
+    },
+    {
+      "id": "amplify",
+      "rank": 1,
+      "value": 0.1,
+      "effect": 1.1
+    },
+    {
+      "id": "amplify",
+      "rank": 2,
+      "value": 0.2,
+      "effect": 1.2
+    },
+    {
+      "id": "amplify",
+      "rank": 3,
+      "value": 0.30000000000000004,
+      "effect": 1.3
+    },
+    {
+      "id": "amplify",
+      "rank": 4,
+      "value": 0.4,
+      "effect": 1.4
+    },
+    {
+      "id": "amplify",
+      "rank": 5,
+      "value": 0.5,
+      "effect": 1.5
+    },
+    {
+      "id": "widecast",
+      "rank": 0,
+      "value": 0.0,
+      "effect": 1.0
+    },
+    {
+      "id": "widecast",
+      "rank": 1,
+      "value": 0.12,
+      "effect": 1.12
+    },
+    {
+      "id": "widecast",
+      "rank": 2,
+      "value": 0.24,
+      "effect": 1.24
+    },
+    {
+      "id": "widecast",
+      "rank": 3,
+      "value": 0.36,
+      "effect": 1.3599999999999999
+    },
+    {
+      "id": "widecast",
+      "rank": 4,
+      "value": 0.48,
+      "effect": 1.48
+    },
+    {
+      "id": "emberfall",
+      "rank": 0,
+      "value": 0.0,
+      "effect": 1.0
+    },
+    {
+      "id": "emberfall",
+      "rank": 1,
+      "value": 0.3,
+      "effect": 1.3
+    },
+    {
+      "id": "emberfall",
+      "rank": 2,
+      "value": 0.6,
+      "effect": 1.6
+    },
+    {
+      "id": "emberfall",
+      "rank": 3,
+      "value": 0.8999999999999999,
+      "effect": 1.9
+    },
+    {
+      "id": "eyeofstorm",
+      "rank": 0,
+      "value": 0.0,
+      "effect": 1.0
+    },
+    {
+      "id": "eyeofstorm",
+      "rank": 1,
+      "value": 0.25,
+      "effect": 1.25
+    },
+    {
+      "id": "eyeofstorm",
+      "rank": 2,
+      "value": 0.5,
+      "effect": 1.5
+    },
+    {
+      "id": "twincast",
+      "rank": 0,
+      "value": 0.0,
+      "effect": 1.0
+    },
+    {
+      "id": "twincast",
+      "rank": 1,
+      "value": 0.5,
+      "effect": 1.5
+    },
+    {
+      "id": "twincast",
+      "rank": 2,
+      "value": 1.0,
+      "effect": 2.0
+    }
+  ],
+  "shopCosts": [
+    {
+      "id": "ballista",
+      "level": 0,
+      "raw": 250.0,
+      "cost": 250
+    },
+    {
+      "id": "ballista",
+      "level": 1,
+      "raw": 320.0,
+      "cost": 320
+    },
+    {
+      "id": "ballista",
+      "level": 2,
+      "raw": 409.6,
+      "cost": 409
+    },
+    {
+      "id": "ballista",
+      "level": 3,
+      "raw": 524.2880000000001,
+      "cost": 524
+    },
+    {
+      "id": "ballista",
+      "level": 5,
+      "raw": 858.9934592000002,
+      "cost": 858
+    },
+    {
+      "id": "ballista",
+      "level": 8,
+      "raw": 1801.439850948199,
+      "cost": 1801
+    },
+    {
+      "id": "ballista",
+      "level": 12,
+      "raw": 4835.703278458518,
+      "cost": 4835
+    },
+    {
+      "id": "bounce",
+      "level": 0,
+      "raw": 200.0,
+      "cost": 200
+    },
+    {
+      "id": "bounce",
+      "level": 1,
+      "raw": 310.0,
+      "cost": 310
+    },
+    {
+      "id": "bounce",
+      "level": 2,
+      "raw": 480.50000000000006,
+      "cost": 480
+    },
+    {
+      "id": "bounce",
+      "level": 3,
+      "raw": 744.7750000000001,
+      "cost": 744
+    },
+    {
+      "id": "bounce",
+      "level": 5,
+      "raw": 1789.3219375,
+      "cost": 1789
+    },
+    {
+      "id": "bounce",
+      "level": 8,
+      "raw": 6663.211230007813,
+      "cost": 6663
+    },
+    {
+      "id": "bounce",
+      "level": 12,
+      "raw": 38460.096864675295,
+      "cost": 38460
+    },
+    {
+      "id": "bowman",
+      "level": 0,
+      "raw": 110.0,
+      "cost": 110
+    },
+    {
+      "id": "bowman",
+      "level": 1,
+      "raw": 138.6,
+      "cost": 138
+    },
+    {
+      "id": "bowman",
+      "level": 2,
+      "raw": 174.63600000000002,
+      "cost": 174
+    },
+    {
+      "id": "bowman",
+      "level": 3,
+      "raw": 220.04136000000003,
+      "cost": 220
+    },
+    {
+      "id": "bowman",
+      "level": 5,
+      "raw": 349.337663136,
+      "cost": 349
+    },
+    {
+      "id": "bowman",
+      "level": 8,
+      "raw": 698.8066772333392,
+      "cost": 698
+    },
+    {
+      "id": "bowman",
+      "level": 12,
+      "raw": 1761.3238932794209,
+      "cost": 1761
+    },
+    {
+      "id": "cannon",
+      "level": 0,
+      "raw": 380.0,
+      "cost": 380
+    },
+    {
+      "id": "cannon",
+      "level": 1,
+      "raw": 486.40000000000003,
+      "cost": 486
+    },
+    {
+      "id": "cannon",
+      "level": 2,
+      "raw": 622.592,
+      "cost": 622
+    },
+    {
+      "id": "cannon",
+      "level": 3,
+      "raw": 796.9177600000002,
+      "cost": 796
+    },
+    {
+      "id": "cannon",
+      "level": 5,
+      "raw": 1305.6700579840003,
+      "cost": 1305
+    },
+    {
+      "id": "cannon",
+      "level": 8,
+      "raw": 2738.188573441262,
+      "cost": 2738
+    },
+    {
+      "id": "cannon",
+      "level": 12,
+      "raw": 7350.268983256948,
+      "cost": 7350
+    },
+    {
+      "id": "grab",
+      "level": 0,
+      "raw": 260.0,
+      "cost": 260
+    },
+    {
+      "id": "grab",
+      "level": 1,
+      "raw": 533.0,
+      "cost": 533
+    },
+    {
+      "id": "grab",
+      "level": 2,
+      "raw": 1092.6499999999999,
+      "cost": 1092
+    },
+    {
+      "id": "grab",
+      "level": 3,
+      "raw": 2239.9324999999994,
+      "cost": 2239
+    },
+    {
+      "id": "grab",
+      "level": 5,
+      "raw": 9413.316331249995,
+      "cost": 9413
+    },
+    {
+      "id": "grab",
+      "level": 8,
+      "raw": 81096.8968582601,
+      "cost": 81096
+    },
+    {
+      "id": "grab",
+      "level": 12,
+      "raw": 1432252.8022693365,
+      "cost": 1432252
+    },
+    {
+      "id": "multi",
+      "level": 0,
+      "raw": 340.0,
+      "cost": 340
+    },
+    {
+      "id": "multi",
+      "level": 1,
+      "raw": 629.0,
+      "cost": 629
+    },
+    {
+      "id": "multi",
+      "level": 2,
+      "raw": 1163.65,
+      "cost": 1163
+    },
+    {
+      "id": "multi",
+      "level": 3,
+      "raw": 2152.7525,
+      "cost": 2152
+    },
+    {
+      "id": "multi",
+      "level": 5,
+      "raw": 7367.7954312500015,
+      "cost": 7367
+    },
+    {
+      "id": "multi",
+      "level": 8,
+      "raw": 46650.1177473883,
+      "cost": 46650
+    },
+    {
+      "id": "multi",
+      "level": 12,
+      "raw": 546436.4457972689,
+      "cost": 546436
+    },
+    {
+      "id": "outpost",
+      "level": 0,
+      "raw": 300.0,
+      "cost": 300
+    },
+    {
+      "id": "outpost",
+      "level": 1,
+      "raw": 450.0,
+      "cost": 450
+    },
+    {
+      "id": "outpost",
+      "level": 2,
+      "raw": 675.0,
+      "cost": 675
+    },
+    {
+      "id": "outpost",
+      "level": 3,
+      "raw": 1012.5,
+      "cost": 1012
+    },
+    {
+      "id": "outpost",
+      "level": 5,
+      "raw": 2278.125,
+      "cost": 2278
+    },
+    {
+      "id": "outpost",
+      "level": 8,
+      "raw": 7688.671875,
+      "cost": 7688
+    },
+    {
+      "id": "outpost",
+      "level": 12,
+      "raw": 38923.9013671875,
+      "cost": 38923
+    },
+    {
+      "id": "spikes",
+      "level": 0,
+      "raw": 190.0,
+      "cost": 190
+    },
+    {
+      "id": "spikes",
+      "level": 1,
+      "raw": 323.0,
+      "cost": 323
+    },
+    {
+      "id": "spikes",
+      "level": 2,
+      "raw": 549.0999999999999,
+      "cost": 549
+    },
+    {
+      "id": "spikes",
+      "level": 3,
+      "raw": 933.4699999999999,
+      "cost": 933
+    },
+    {
+      "id": "spikes",
+      "level": 5,
+      "raw": 2697.7282999999998,
+      "cost": 2697
+    },
+    {
+      "id": "spikes",
+      "level": 8,
+      "raw": 13253.939137899997,
+      "cost": 13253
+    },
+    {
+      "id": "spikes",
+      "level": 12,
+      "raw": 110698.22507365455,
+      "cost": 110698
+    },
+    {
+      "id": "wall",
+      "level": 0,
+      "raw": 180.0,
+      "cost": 180
+    },
+    {
+      "id": "wall",
+      "level": 1,
+      "raw": 291.6,
+      "cost": 291
+    },
+    {
+      "id": "wall",
+      "level": 2,
+      "raw": 472.3920000000001,
+      "cost": 472
+    },
+    {
+      "id": "wall",
+      "level": 3,
+      "raw": 765.2750400000001,
+      "cost": 765
+    },
+    {
+      "id": "wall",
+      "level": 5,
+      "raw": 2008.3878149760005,
+      "cost": 2008
+    },
+    {
+      "id": "wall",
+      "level": 8,
+      "raw": 8538.717030229287,
+      "cost": 8538
+    },
+    {
+      "id": "wall",
+      "level": 12,
+      "raw": 58810.20315171661,
+      "cost": 58810
+    }
+  ],
+  "shopDiscount": [
+    {
+      "id": "bowman",
+      "level": 2,
+      "haggleRank": 0,
+      "discount": 1.0,
+      "cost": 174,
+      "costIfTruncatedFirst": 174
+    },
+    {
+      "id": "ballista",
+      "level": 3,
+      "haggleRank": 0,
+      "discount": 1.0,
+      "cost": 524,
+      "costIfTruncatedFirst": 524
+    },
+    {
+      "id": "cannon",
+      "level": 1,
+      "haggleRank": 0,
+      "discount": 1.0,
+      "cost": 486,
+      "costIfTruncatedFirst": 486
+    },
+    {
+      "id": "wall",
+      "level": 4,
+      "haggleRank": 0,
+      "discount": 1.0,
+      "cost": 1239,
+      "costIfTruncatedFirst": 1239
+    },
+    {
+      "id": "grab",
+      "level": 2,
+      "haggleRank": 0,
+      "discount": 1.0,
+      "cost": 1092,
+      "costIfTruncatedFirst": 1092
+    },
+    {
+      "id": "bowman",
+      "level": 2,
+      "haggleRank": 1,
+      "discount": 0.94,
+      "cost": 164,
+      "costIfTruncatedFirst": 163
+    },
+    {
+      "id": "ballista",
+      "level": 3,
+      "haggleRank": 1,
+      "discount": 0.94,
+      "cost": 492,
+      "costIfTruncatedFirst": 492
+    },
+    {
+      "id": "cannon",
+      "level": 1,
+      "haggleRank": 1,
+      "discount": 0.94,
+      "cost": 457,
+      "costIfTruncatedFirst": 456
+    },
+    {
+      "id": "wall",
+      "level": 4,
+      "haggleRank": 1,
+      "discount": 0.94,
+      "cost": 1165,
+      "costIfTruncatedFirst": 1164
+    },
+    {
+      "id": "grab",
+      "level": 2,
+      "haggleRank": 1,
+      "discount": 0.94,
+      "cost": 1027,
+      "costIfTruncatedFirst": 1026
+    },
+    {
+      "id": "bowman",
+      "level": 2,
+      "haggleRank": 2,
+      "discount": 0.88,
+      "cost": 153,
+      "costIfTruncatedFirst": 153
+    },
+    {
+      "id": "ballista",
+      "level": 3,
+      "haggleRank": 2,
+      "discount": 0.88,
+      "cost": 461,
+      "costIfTruncatedFirst": 461
+    },
+    {
+      "id": "cannon",
+      "level": 1,
+      "haggleRank": 2,
+      "discount": 0.88,
+      "cost": 428,
+      "costIfTruncatedFirst": 427
+    },
+    {
+      "id": "wall",
+      "level": 4,
+      "haggleRank": 2,
+      "discount": 0.88,
+      "cost": 1090,
+      "costIfTruncatedFirst": 1090
+    },
+    {
+      "id": "grab",
+      "level": 2,
+      "haggleRank": 2,
+      "discount": 0.88,
+      "cost": 961,
+      "costIfTruncatedFirst": 960
+    },
+    {
+      "id": "bowman",
+      "level": 2,
+      "haggleRank": 3,
+      "discount": 0.8200000000000001,
+      "cost": 143,
+      "costIfTruncatedFirst": 142
+    },
+    {
+      "id": "ballista",
+      "level": 3,
+      "haggleRank": 3,
+      "discount": 0.8200000000000001,
+      "cost": 429,
+      "costIfTruncatedFirst": 429
+    },
+    {
+      "id": "cannon",
+      "level": 1,
+      "haggleRank": 3,
+      "discount": 0.8200000000000001,
+      "cost": 398,
+      "costIfTruncatedFirst": 398
+    },
+    {
+      "id": "wall",
+      "level": 4,
+      "haggleRank": 3,
+      "discount": 0.8200000000000001,
+      "cost": 1016,
+      "costIfTruncatedFirst": 1015
+    },
+    {
+      "id": "grab",
+      "level": 2,
+      "haggleRank": 3,
+      "discount": 0.8200000000000001,
+      "cost": 895,
+      "costIfTruncatedFirst": 895
+    },
+    {
+      "id": "bowman",
+      "level": 2,
+      "haggleRank": 4,
+      "discount": 0.76,
+      "cost": 132,
+      "costIfTruncatedFirst": 132
+    },
+    {
+      "id": "ballista",
+      "level": 3,
+      "haggleRank": 4,
+      "discount": 0.76,
+      "cost": 398,
+      "costIfTruncatedFirst": 398
+    },
+    {
+      "id": "cannon",
+      "level": 1,
+      "haggleRank": 4,
+      "discount": 0.76,
+      "cost": 369,
+      "costIfTruncatedFirst": 369
+    },
+    {
+      "id": "wall",
+      "level": 4,
+      "haggleRank": 4,
+      "discount": 0.76,
+      "cost": 942,
+      "costIfTruncatedFirst": 941
+    },
+    {
+      "id": "grab",
+      "level": 2,
+      "haggleRank": 4,
+      "discount": 0.76,
+      "cost": 830,
+      "costIfTruncatedFirst": 829
+    }
+  ],
+  "shopBespokeCosts": [
+    {
+      "id": "barricade",
+      "level": 0,
+      "alive": false,
+      "hp": 0.0,
+      "maxHp": 0.0,
+      "cost": 240.0
+    },
+    {
+      "id": "barricade",
+      "level": 1,
+      "alive": true,
+      "hp": 340.0,
+      "maxHp": 340.0,
+      "cost": 360.0
+    },
+    {
+      "id": "barricade",
+      "level": 1,
+      "alive": false,
+      "hp": 0.0,
+      "maxHp": 340.0,
+      "cost": 210.0
+    },
+    {
+      "id": "barricade",
+      "level": 3,
+      "alive": true,
+      "hp": 500.0,
+      "maxHp": 980.0,
+      "cost": 810.0
+    },
+    {
+      "id": "barricade",
+      "level": 5,
+      "alive": true,
+      "hp": 900.0,
+      "maxHp": 2050.0,
+      "cost": 462.0
+    },
+    {
+      "id": "barricade",
+      "level": 5,
+      "alive": false,
+      "hp": 0.0,
+      "maxHp": 2050.0,
+      "cost": 806.0
+    },
+    {
+      "id": "repair",
+      "missing": 0.0,
+      "cost": 50
+    },
+    {
+      "id": "repair",
+      "missing": 50.0,
+      "cost": 50
+    },
+    {
+      "id": "repair",
+      "missing": 90.0,
+      "cost": 50
+    },
+    {
+      "id": "repair",
+      "missing": 400.0,
+      "cost": 220
+    },
+    {
+      "id": "repair",
+      "missing": 1200.0,
+      "cost": 660
+    }
+  ],
+  "skillConstants": [
+    {
+      "lightningRadius": 155.0,
+      "lightningDamage": 0.85,
+      "lightningCooldown": 14.0,
+      "bossLightningShare": 0.25,
+      "meteorCount": 16,
+      "meteorRadius": 96.0,
+      "meteorDamage": 130.0,
+      "meteorCooldown": 26.0,
+      "fireZoneTime": 6.0,
+      "fireZoneDps": 48.0,
+      "tornadoCooldown": 30.0,
+      "tornadoLife": 6.0,
+      "tornadoSpeed": 120.0,
+      "tornadoRadius": 130.0,
+      "tornadoLift": 620.0,
+      "tornadoSwirl": 6.5,
+      "tornadoHold": 0.12,
+      "tornadoBurstRadiusFactor": 1.4
+    }
+  ],
+  "skillScaling": [
+    {
+      "talent": "focus",
+      "rank": 0,
+      "value": 0.0,
+      "lightningCooldown": 14.0,
+      "meteorCooldown": 26.0,
+      "tornadoCooldown": 30.0
+    },
+    {
+      "talent": "focus",
+      "rank": 1,
+      "value": 0.07,
+      "lightningCooldown": 13.02,
+      "meteorCooldown": 24.18,
+      "tornadoCooldown": 27.9
+    },
+    {
+      "talent": "focus",
+      "rank": 2,
+      "value": 0.14,
+      "lightningCooldown": 12.04,
+      "meteorCooldown": 22.36,
+      "tornadoCooldown": 25.8
+    },
+    {
+      "talent": "focus",
+      "rank": 3,
+      "value": 0.21000000000000002,
+      "lightningCooldown": 11.06,
+      "meteorCooldown": 20.54,
+      "tornadoCooldown": 23.700000000000003
+    },
+    {
+      "talent": "focus",
+      "rank": 4,
+      "value": 0.28,
+      "lightningCooldown": 10.08,
+      "meteorCooldown": 18.72,
+      "tornadoCooldown": 21.599999999999998
+    },
+    {
+      "talent": "focus",
+      "rank": 5,
+      "value": 0.35000000000000003,
+      "lightningCooldown": 9.099999999999998,
+      "meteorCooldown": 16.9,
+      "tornadoCooldown": 19.499999999999996
+    },
+    {
+      "talent": "widecast",
+      "rank": 0,
+      "value": 0.0,
+      "lightningRadius": 155.0,
+      "meteorRadius": 96.0,
+      "tornadoRadius": 130.0
+    },
+    {
+      "talent": "widecast",
+      "rank": 1,
+      "value": 0.12,
+      "lightningRadius": 173.60000000000002,
+      "meteorRadius": 107.52000000000001,
+      "tornadoRadius": 145.60000000000002
+    },
+    {
+      "talent": "widecast",
+      "rank": 2,
+      "value": 0.24,
+      "lightningRadius": 192.2,
+      "meteorRadius": 119.03999999999999,
+      "tornadoRadius": 161.2
+    },
+    {
+      "talent": "widecast",
+      "rank": 3,
+      "value": 0.36,
+      "lightningRadius": 210.79999999999998,
+      "meteorRadius": 130.56,
+      "tornadoRadius": 176.79999999999998
+    },
+    {
+      "talent": "widecast",
+      "rank": 4,
+      "value": 0.48,
+      "lightningRadius": 229.4,
+      "meteorRadius": 142.07999999999998,
+      "tornadoRadius": 192.4
+    },
+    {
+      "talent": "twincast",
+      "rank": 0,
+      "value": 0.0,
+      "meteorCount": 16
+    },
+    {
+      "talent": "twincast",
+      "rank": 1,
+      "value": 0.5,
+      "meteorCount": 24
+    },
+    {
+      "talent": "twincast",
+      "rank": 2,
+      "value": 1.0,
+      "meteorCount": 32
+    },
+    {
+      "talent": "emberfall",
+      "rank": 0,
+      "value": 0.0,
+      "fireZoneLife": 6.0
+    },
+    {
+      "talent": "emberfall",
+      "rank": 1,
+      "value": 0.3,
+      "fireZoneLife": 7.800000000000001
+    },
+    {
+      "talent": "emberfall",
+      "rank": 2,
+      "value": 0.6,
+      "fireZoneLife": 9.600000000000001
+    },
+    {
+      "talent": "emberfall",
+      "rank": 3,
+      "value": 0.8999999999999999,
+      "fireZoneLife": 11.399999999999999
+    },
+    {
+      "talent": "eyeofstorm",
+      "rank": 0,
+      "value": 0.0,
+      "tornadoLife": 6.0,
+      "tornadoPower": 1.0
+    },
+    {
+      "talent": "eyeofstorm",
+      "rank": 1,
+      "value": 0.25,
+      "tornadoLife": 7.5,
+      "tornadoPower": 1.25
+    },
+    {
+      "talent": "eyeofstorm",
+      "rank": 2,
+      "value": 0.5,
+      "tornadoLife": 9.0,
+      "tornadoPower": 1.5
+    },
+    {
+      "talent": "lightning-damage",
+      "maxHp": 58.0,
+      "amplifyRank": 0,
+      "conductorRank": 0,
+      "damage": 49.3,
+      "bossDamage": 12.325
+    },
+    {
+      "talent": "lightning-damage",
+      "maxHp": 58.0,
+      "amplifyRank": 0,
+      "conductorRank": 4,
+      "damage": 78.88,
+      "bossDamage": 19.72
+    },
+    {
+      "talent": "lightning-damage",
+      "maxHp": 58.0,
+      "amplifyRank": 5,
+      "conductorRank": 0,
+      "damage": 73.94999999999999,
+      "bossDamage": 18.487499999999997
+    },
+    {
+      "talent": "lightning-damage",
+      "maxHp": 58.0,
+      "amplifyRank": 5,
+      "conductorRank": 4,
+      "damage": 118.32,
+      "bossDamage": 29.58
+    },
+    {
+      "talent": "lightning-damage",
+      "maxHp": 1200.0,
+      "amplifyRank": 0,
+      "conductorRank": 0,
+      "damage": 1020.0,
+      "bossDamage": 255.0
+    },
+    {
+      "talent": "lightning-damage",
+      "maxHp": 1200.0,
+      "amplifyRank": 0,
+      "conductorRank": 4,
+      "damage": 1632.0,
+      "bossDamage": 408.0
+    },
+    {
+      "talent": "lightning-damage",
+      "maxHp": 1200.0,
+      "amplifyRank": 5,
+      "conductorRank": 0,
+      "damage": 1530.0,
+      "bossDamage": 382.5
+    },
+    {
+      "talent": "lightning-damage",
+      "maxHp": 1200.0,
+      "amplifyRank": 5,
+      "conductorRank": 4,
+      "damage": 2448.0,
+      "bossDamage": 612.0
+    },
+    {
+      "talent": "lightning-damage",
+      "maxHp": 8400.0,
+      "amplifyRank": 0,
+      "conductorRank": 0,
+      "damage": 7140.0,
+      "bossDamage": 1785.0
+    },
+    {
+      "talent": "lightning-damage",
+      "maxHp": 8400.0,
+      "amplifyRank": 0,
+      "conductorRank": 4,
+      "damage": 11424.0,
+      "bossDamage": 2856.0
+    },
+    {
+      "talent": "lightning-damage",
+      "maxHp": 8400.0,
+      "amplifyRank": 5,
+      "conductorRank": 0,
+      "damage": 10710.0,
+      "bossDamage": 2677.5
+    },
+    {
+      "talent": "lightning-damage",
+      "maxHp": 8400.0,
+      "amplifyRank": 5,
+      "conductorRank": 4,
+      "damage": 17136.0,
+      "bossDamage": 4284.0
     }
   ],
   "lichWard": [

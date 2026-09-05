@@ -43,7 +43,9 @@ public final class Announcements {
         WEATHER_STORM,
         HORN_CALLED,
         HORN_ELITES,
-        WAVE_CLEARED
+        WAVE_CLEARED,
+        SKILL_UNLOCKED,
+        TALENT_POINTS
     }
 
     /** One live banner. Mutable and reused only through the owning list. */

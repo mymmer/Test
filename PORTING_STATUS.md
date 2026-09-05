@@ -10,7 +10,7 @@ Legend: `[ ]` not started · `[~]` in progress · `[x]` ported (compiles, believ
 Nothing is complete merely because it compiles. A row may only reach `[T]` when a named
 test exercises it.
 
-**Phase status: Phases 1, 3, 4, 5, 6, 7 and 8 complete, plus the pre-Phase-8
+**Phase status: Phases 1, 3, 4, 5, 6, 7, 8 and 9 complete, plus the pre-Phase-8
 time-domain hardening. Phase 2 implemented and hardened but NOT fully tested —
 the Android assembly gate is still open because Google's Maven is unreachable
 from the build environment, and stays open until `./gradlew verifyAndroid`
@@ -21,11 +21,11 @@ Enemy`, so a boss walks, takes damage, dies and pays out through contracts that
 were already tested; what it adds is immunity to ordinary grabbing, a
 difficulty-scaled fire clock, and a disruption the player performs by hand.
 
-Phase 8 adds the run itself: `RunWorld` assembles the field, the fight and the
-pacing, and two directors run the two modes. The game now plays — headless and
-on the desktop backend — with waves, tiers, bosses, gold, score, weather and the
-Challenge Horn. What is left is the shop, the talent tree and rendering —
-Phases 9 to 11.
+Phase 8 added the run itself: `RunWorld` assembles the field, the fight and the
+pacing, and two directors run the two modes. Phase 9 adds the player's half of it
+— 38 talents, 11 shop items, 3 active skills and the full difficulty
+integration. **The gameplay is now complete.** What is left is rendering:
+Phases 10 and 11.
 
 **A skin cannot change gameplay, and that is now enforced three ways:**
 gameplay packages cannot import `assets` (`ArchitectureTest`);
@@ -537,14 +537,98 @@ Contracts: [`MODES_PROGRESSION.md`](java-port/docs/subsystems/MODES_PROGRESSION.
 
 ## Phase 9 — Player progression
 
-- [ ] Shop (11 items, cost curves, availability, discount talent, hotkeys)
-- [ ] Tower purchase → upgrade fallback when slots are full
-- [ ] Talent tree (38 nodes, 6 branches, tier gating, ranks, all effect getters)
-- [ ] Talent income (per wave / per minute / boss bounty)
-- [ ] Active skills (unlock order, cooldowns, targeting, casts)
-- [ ] Lightning / Meteor + FireZone / Tornado physics
-- [ ] Difficulty presets incl. Hard overhaul + grab cooldown + Light Fingers
-- [ ] Settings persistence + high score
+Contracts: [`TALENTS.md`](java-port/docs/subsystems/TALENTS.md),
+[`SHOP.md`](java-port/docs/subsystems/SHOP.md),
+[`SKILLS.md`](java-port/docs/subsystems/SKILLS.md),
+[`DIFFICULTY.md`](java-port/docs/subsystems/DIFFICULTY.md).
+
+- [T] **All 38 talents**, 6 branches — `TalentTable` + `data/talents.json`.
+      Every node's branch, tier, rank cap, per-rank magnitude and effect id
+      asserted against the source one by one; there is no talent in `main.py`
+      without an explicit Java disposition. `TalentInventoryTest` (10)
+- [T] `TalentTree` — tier gating (`branchPoints(branch) >= tier`, which is
+      points in the node's OWN branch, not a prerequisite node), rank caps,
+      purchase failures that consume nothing, reset. `TalentTreeTest` (19)
+- [T] **`TalentTree` IS the run's `CombatModifiers`.** No new coupling: every
+      system was already written against that interface in Phases 5–8, so the
+      tree simply became what sits behind it. Nothing in `enemy`, `boss`,
+      `defence`, `shop` or `skill` names `TalentTree`, and `ArchitectureTest`
+      now covers `talent`, `shop` and `skill` too
+- [T] **Live values, no snapshot** — every modifier is computed from the current
+      ranks on each call, as Python's `@property` reads are, so there is no
+      cached copy for a purchase to forget to invalidate. Each effect is proved
+      by buying it mid-run and performing the action it should change.
+      `TalentEffectsTest` (16). The one deliberate cache, the cursor's grab
+      cooldown, is refreshed by a named method
+- [T] Talent graph validation — duplicate ids, unknown branch/effect, negative
+      tier, `maxRank < 1`, non-positive `perRank`, doubled branch declarations,
+      and **a branch with no entry node**. There is no cycle check because the
+      gating model has no edges: six independent ladders, so a cycle is not
+      expressible
+- [T] **All 11 shop items** — `ShopTable` + `data/shop.json`, in the source's
+      order (the number hotkeys depend on it). Every curve, cap and availability
+      rule transcribed. `ShopTest` (22)
+- [T] Transactional purchases — availability, price, purse, apply, **then**
+      deduct. A refused effect costs nothing and does not move the price. Every
+      failure path tested
+- [T] Discount ordering — `int(rawCurve * discount)`, one truncation at the end.
+      The fixture emits the other ordering too and the test asserts they differ,
+      so the assertion is not vacuous. **Cost constants are `double`**: `150f *
+      1.4f` truncates to 209 where the source charges 210
+- [T] Tower fallback — free slot stations one; a full wall upgrades **every**
+      tower of that type; a full wall with none of that type refuses and costs
+      nothing
+- [T] **All 3 active skills** — `SkillPanel`, unlock order fixed by a boss each,
+      cooldowns in the time domain, targeting on virtual world coordinates.
+      `SkillTest` (24)
+- [T] Lightning — a column at any height, damage as a share of MAXIMUM health,
+      a boss takes a quarter
+- [T] Meteor + `FireZone` — rocks are ordinary projectiles; the burning ground
+      is created at **cast** time, not on impact, and burns continuously rather
+      than in ticks
+- [T] `Tornado` — drift, catch, carry and hurl, all four. `tornadoHold` renewed
+      each step so gravity is mostly cancelled; the throw list is keyed by the
+      uids it actually caught, because the funnel drifts away from them
+- [T] **Every skill area effect iterates a snapshot** — the Phase 8 lesson, not
+      allowed to recur. Proved with a boss dying mid-blast and with two bosses
+      on the field
+- [T] Full difficulty audit — all eight knobs, where each is consumed, and
+      **applied exactly once**: enemy health, speed, boss fire scale, grab delay,
+      gold and the boss headstart each proved single. `DifficultyIntegrationTest`
+      (11)
+- [T] Hard overhaul — seven of eight knobs changed, the elite horn (10 elites
+      rolled 3 tiers deep, swapping chaff in Classic so the head-count holds),
+      and the Berzerker quirk still holding under a real difficulty
+- [T] Run difficulty captured at run creation — Python reads it live off
+      Settings, but no UI path reaches Settings during a run, so the observable
+      contract is "it cannot change while the run runs". Documented and tested
+- [T] **Persistence re-audited: nothing was added.** `saveVersion` stays 1.
+      Talent points and ranks, shop purchases, cursor levels, unlocked skills,
+      cooldowns and run economy are all per-run, exactly as in the source.
+      `ProgressionPersistenceTest` (11) enforces the save's field list by
+      reflection
+- [T] New-run reset semantics — new Classic, new Endless, restart after game
+      over and a mode switch all start from nothing. **Found and fixed:** the
+      structures were built once and never rebuilt, so a tower survived into the
+      next run; they are now reconstructed as `Game.reset()` does
+- [T] Talent income wired to the real tree — the directors still only say
+      "award"; the tree owns the balance. Boss bounty 2 with a slot free, 3 once
+      the bar is full
+- [T] Read-only query surfaces for Phase 10 — `TalentTree.NodeView`,
+      `Shop.ItemView`, `SkillPanel.SlotView`. Immutable, built on demand, no
+      view-model framework
+- [T] Trace integration — `TALENT_POINT_AWARDED`, `TALENT_PURCHASED`,
+      `SHOP_PURCHASED`, `SHOP_PURCHASE_FAILED`, `SKILL_UNLOCKED`,
+      `SKILL_SELECTED`, `SKILL_CAST`, `SKILL_EFFECT_CREATED`,
+      `SKILL_COOLDOWN_READY`. Observation only
+- [T] Python↔Java Phase 9 fixtures — **346 new cases**, total **771**. The 38
+      talent definitions are **parsed out of `main.py`** rather than retyped, so
+      the fixture cannot drift; every effect at every rank (175), every shop
+      curve (63), the discount ordering (25), the bespoke curves (11), the skill
+      constants and every scaling talent (33). `ProgressionNineParityTest`
+- [T] Seeded progression smokes — a Classic run that buys, clears four waves,
+      earns and spends; an Endless run that tiers up, kills a boss, unlocks
+      Lightning and recharges it. `ProgressionSmokeTest`
 
 ## Phase 10 — UI
 

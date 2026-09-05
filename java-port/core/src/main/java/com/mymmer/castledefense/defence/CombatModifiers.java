@@ -185,4 +185,52 @@ public interface CombatModifiers {
     default double grabCdScale() {
         return 1d;
     }
+
+    // ========================================================================
+    //  Shop and active skills (Phase 9).
+    //
+    //  Same one interface, for the same reason: Shop and the skills must not
+    //  name TalentTree either.  The tree is what sits behind these calls; the
+    //  neutral defaults are what a run with no tree wired up sees.
+    //
+    //  DELIBERATELY ABSENT: castleHp.  Deep Foundations has no consumer in the
+    //  Python source, and a method here would be an invitation to give it one.
+    //  TalentTree.castleHpClaim() exposes the number for a tooltip and nothing
+    //  can reach it from gameplay.  See PORT_ANALYSIS.md section 13.
+    // ========================================================================
+
+    /** Haggler: multiplies every shop price. Capped at 40% off. */
+    default double shopDiscount() {
+        return 1d;
+    }
+
+    /** Arcane Focus: scales active skill cooldowns. Time domain. */
+    default double skillCd() {
+        return 1d;
+    }
+
+    /** Amplify: scales active skill damage. */
+    default float skillPower() {
+        return 1f;
+    }
+
+    /** Wide Cast: scales active skill radii. */
+    default float skillArea() {
+        return 1f;
+    }
+
+    /** Emberfall: scales how long meteor fire burns. Time domain. */
+    default double fireTime() {
+        return 1d;
+    }
+
+    /** Eye of the Storm: scales tornado lifetime AND pull strength. */
+    default double tornadoMult() {
+        return 1d;
+    }
+
+    /** Twin Cast: scales how many meteors fall. */
+    default float meteorCount() {
+        return 1f;
+    }
 }

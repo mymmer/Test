@@ -5,7 +5,6 @@ import com.mymmer.castledefense.config.DifficultyConfig;
 import com.mymmer.castledefense.config.DifficultyTable;
 import com.mymmer.castledefense.data.JsonSource;
 import com.mymmer.castledefense.debug.RecordingSimulationTrace;
-import com.mymmer.castledefense.defence.CombatModifiers;
 import com.mymmer.castledefense.defence.DefenceTable;
 import com.mymmer.castledefense.enemy.Enemy;
 import com.mymmer.castledefense.enemy.EnemyTable;
@@ -43,32 +42,105 @@ public final class TestRun {
     public final DefenceTable defences;
     public final BossTable bosses;
     public final DifficultyTable difficulties;
+    public final com.mymmer.castledefense.talent.TalentTable talentTable;
+    public final com.mymmer.castledefense.shop.ShopTable shopTable;
     public final RecordingSimulationTrace trace = new RecordingSimulationTrace(16384);
-    public final TalentIncome.Counter talents = new TalentIncome.Counter();
 
     public TestRun() {
-        this(SEED, CombatModifiers.NONE);
+        this(SEED);
     }
 
     public TestRun(long seed) {
-        this(seed, CombatModifiers.NONE);
-    }
-
-    public TestRun(long seed, CombatModifiers mods) {
         JsonSource json = new DiskJsonSource();
         this.rng = new Rng(seed);
         this.enemies = EnemyTable.load(json);
         this.defences = DefenceTable.load(json);
         this.bosses = BossTable.load(json);
         this.difficulties = DifficultyTable.load(json);
+        this.talentTable = com.mymmer.castledefense.talent.TalentTable.load(json);
+        this.shopTable = com.mymmer.castledefense.shop.ShopTable.load(json);
         this.world = new GameWorld(rng);
-        this.run = new RunWorld(world, enemies, defences, bosses, mods,
+        this.run = new RunWorld(world, enemies, defences, bosses,
+                talentTable, shopTable,
                 (pointerId, out) -> {
                     out[0] = 0f;
                     out[1] = 0f;
                 });
         this.simulation = new Simulation(world);
-        this.run.setTalentIncome(talents);
+    }
+
+    /** The run's talent tree. From Phase 9 it IS the run's CombatModifiers. */
+    public com.mymmer.castledefense.talent.TalentTree talents() {
+        return run.talentTree();
+    }
+
+    public com.mymmer.castledefense.shop.Shop shop() {
+        return run.shop();
+    }
+
+    public com.mymmer.castledefense.skill.SkillPanel skills() {
+        return run.skills();
+    }
+
+    /** Hands the tree the points a test wants to spend, without playing for them. */
+    public TestRun grantPoints(int n) {
+        talents().award(n, "test");
+        return this;
+    }
+
+    /**
+     * Opens a talent's tier gate by spending into its branch's entry nodes.
+     *
+     * <p>A deep node needs points already in its own branch; a test that wants
+     * to prove what Eye of the Storm <em>does</em> should not have to spell out
+     * how to get there. Grant the points first.
+     */
+    public TestRun openBranchFor(String id) {
+        com.mymmer.castledefense.talent.TalentDef target = talents().table().require(id);
+        int guard = 0;
+        while (talents().branchPoints(target.branch) < target.tier && guard++ < 400) {
+            com.badlogic.gdx.utils.Array<com.mymmer.castledefense.talent.TalentDef> siblings =
+                    talents().table().branch(target.branch);
+            boolean spent = false;
+            for (int i = 0; i < siblings.size; i++) {
+                com.mymmer.castledefense.talent.TalentDef other = siblings.get(i);
+                if (other != target && talents().canPurchase(other.id)) {
+                    talents().purchase(other.id);
+                    spent = true;
+                    break;
+                }
+            }
+            if (!spent) {
+                throw new IllegalStateException("cannot open '" + id + "': branch "
+                        + target.branch.id() + " stalled at "
+                        + talents().branchPoints(target.branch) + "/" + target.tier
+                        + " with " + talents().availablePoints() + " points");
+            }
+        }
+        return this;
+    }
+
+    /** {@link #openBranchFor} then {@link #buyTalent}. */
+    public TestRun buyTalentDeep(String id, int ranks) {
+        openBranchFor(id);
+        return buyTalent(id, ranks);
+    }
+
+    /** Buys a talent to a rank, asserting each purchase took. */
+    public TestRun buyTalent(String id, int ranks) {
+        for (int i = 0; i < ranks; i++) {
+            if (!talents().purchase(id)) {
+                throw new IllegalStateException("could not buy '" + id + "' rank "
+                        + (i + 1) + ": " + talents().describe());
+            }
+        }
+        return this;
+    }
+
+    /** Puts gold in the purse, for a shop test that has not earned any. */
+    public TestRun grantGold(int amount) {
+        session().addGold(amount);
+        return this;
     }
 
     // --- starting -----------------------------------------------------------

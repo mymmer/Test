@@ -1,0 +1,41 @@
+{
+  "//": "Transcribed from main.py:1039 _build_shop and main.py:1155 the item list.",
+  "//cost": "`curve` names the shape; `base` and `growth` are its numbers. GEOMETRIC is base * growth^n, where `n` is the item's own level (see `counter`). BARRICADE and REPAIR are bespoke and read their numbers from the fields below, because the source computes them from live state rather than from a level.",
+  "//discount": "Never in this file. Python applies it as int(cost_fn() * discount) at the point of sale -- the raw curve is multiplied FIRST and truncated after. See Shop.currentCost.",
+
+  "items": [
+    { "id": "bowman",    "curve": "GEOMETRIC", "base": 110, "growth": 1.26, "counter": "PURCHASES",
+      "effect": "TOWER", "tower": "bowman" },
+    { "id": "ballista",  "curve": "GEOMETRIC", "base": 250, "growth": 1.28, "counter": "PURCHASES",
+      "effect": "TOWER", "tower": "ballista" },
+    { "id": "cannon",    "curve": "GEOMETRIC", "base": 380, "growth": 1.28, "counter": "PURCHASES",
+      "effect": "TOWER", "tower": "cannon" },
+
+    { "id": "wall",      "curve": "GEOMETRIC", "base": 180, "growth": 1.62, "counter": "WALL_LEVEL_MINUS_ONE",
+      "effect": "WALL",
+      "//": "Uncapped: the keep keeps gaining health past its last visual tier." },
+
+    { "id": "bounce",    "curve": "GEOMETRIC", "base": 200, "growth": 1.55, "counter": "BOUNCE_LEVEL",
+      "effect": "BOUNCE", "maxLevel": 5 },
+    { "id": "grab",      "curve": "GEOMETRIC", "base": 260, "growth": 2.05, "counter": "GRAB_LEVEL",
+      "effect": "GRAB", "maxLevel": 4 },
+    { "id": "multi",     "curve": "GEOMETRIC", "base": 340, "growth": 1.85, "counter": "MULTI_LEVEL",
+      "effect": "MULTI", "maxLevel": 3 },
+    { "id": "outpost",   "curve": "GEOMETRIC", "base": 300, "growth": 1.5,  "counter": "OUTPOST_LEVEL",
+      "effect": "OUTPOST",
+      "//": "Always available: past the crew cap the levels buy raw firepower." },
+
+    { "id": "barricade", "curve": "BARRICADE", "base": 240, "growth": 1.5,
+      "effect": "BARRICADE",
+      "firstCost": 240, "rebuildBase": 150, "rebuildGrowth": 1.4,
+      "topUpFlat": 60, "topUpPerMissingHp": 0.35,
+      "//": "Four cases: 240 flat before it exists; 150*1.4^level to rebuild a wreck; 60 + missing*0.35 to top up a capped one; 240*1.5^level otherwise." },
+
+    { "id": "spikes",    "curve": "GEOMETRIC", "base": 190, "growth": 1.7,  "counter": "SPIKE_LEVEL",
+      "effect": "SPIKES", "maxLevel": 4 },
+
+    { "id": "repair",    "curve": "REPAIR", "base": 50,
+      "effect": "REPAIR", "perMissingHp": 0.55, "healFraction": 0.40,
+      "//": "max(50, int(missing * 0.55)), and it heals 40% of maximum." }
+  ]
+}

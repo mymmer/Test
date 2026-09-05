@@ -39,6 +39,16 @@ import com.mymmer.castledefense.progress.Scoring;
 import com.mymmer.castledefense.progress.TalentIncome;
 import com.mymmer.castledefense.progress.WaveDirector;
 import com.mymmer.castledefense.progress.Weather;
+import com.mymmer.castledefense.shop.Shop;
+import com.mymmer.castledefense.shop.ShopContext;
+import com.mymmer.castledefense.shop.ShopTable;
+import com.mymmer.castledefense.skill.FireZone;
+import com.mymmer.castledefense.skill.SkillContext;
+import com.mymmer.castledefense.skill.SkillId;
+import com.mymmer.castledefense.skill.SkillPanel;
+import com.mymmer.castledefense.skill.Tornado;
+import com.mymmer.castledefense.talent.TalentTable;
+import com.mymmer.castledefense.talent.TalentTree;
 import com.mymmer.castledefense.util.Rng;
 import java.util.Locale;
 
@@ -83,7 +93,7 @@ import java.util.Locale;
  * tidied.
  */
 public final class RunWorld implements BossContext, DirectorContext, AllyFactory,
-        GameWorld.StepListener, GameWorld.AlwaysListener {
+        ShopContext, SkillContext, GameWorld.StepListener, GameWorld.AlwaysListener {
 
     private final GameWorld world;
     private final Rng rng;
@@ -91,6 +101,16 @@ public final class RunWorld implements BossContext, DirectorContext, AllyFactory
     private final DefenceTable defenceTable;
     private final BossTable bossTable;
     private final WaveComposition composition;
+
+    /**
+     * The talent tree, which <b>is</b> this run's {@link CombatModifiers}.
+     *
+     * <p>Every gameplay system already asks its context for
+     * {@code modifiers().something()}; from Phase 9 the thing behind that call is
+     * the tree. Nothing had to change below this line, and nothing outside this
+     * field names {@code TalentTree}.
+     */
+    private final TalentTree talents;
     private final CombatModifiers mods;
 
     // --- the field ----------------------------------------------------------
@@ -98,23 +118,41 @@ public final class RunWorld implements BossContext, DirectorContext, AllyFactory
     private final EntityList<Projectile> projectiles = new EntityList<>();
     private final EntityList<DroppedItem> items = new EntityList<>();
     private final Array<FriendlySkeleton> allies = new Array<>();
-    private final Castle castle;
-    private final Barricade barricade;
-    private final Outpost outpost;
-    private final SpikeWalls spikes;
+    /**
+     * The structures.
+     *
+     * <p><b>Not final:</b> Python's {@code Game.reset()} constructs a brand new
+     * {@code Castle}, {@code Outpost}, {@code Barricade} and {@code SpikeWalls}
+     * for every run, and so does {@link #startRun}. Rebuilding them rather than
+     * clearing them by hand is what guarantees nothing is forgotten — a wall
+     * level, a garrison, a prisoner, a tower still standing from the last
+     * attempt. Everything downstream reads them through this context, so nothing
+     * holds a stale reference.
+     */
+    private Castle castle;
+    private Barricade barricade;
+    private Outpost outpost;
+    private SpikeWalls spikes;
     private final CrowdSeparation separation = new CrowdSeparation();
     private final BossRegistry bosses = new BossRegistry();
     private final CursorInteraction cursor;
+
+    // --- skill effects, owned and stepped here -------------------------------
+    private final Array<FireZone> fireZones = new Array<>(false, 32);
+    private final Array<Tornado> tornados = new Array<>(false, 4);
 
     // --- the run ------------------------------------------------------------
     private final RunSession session;
     private final Weather weather;
     private final ScreenShake shake = new ScreenShake();
     private final Announcements banners = new Announcements();
-    private TalentIncome talents = new TalentIncome.Counter();
+    private final Shop shop;
+    private final SkillPanel skills;
     private RunDirector director;
 
     private DifficultyConfig difficulty;
+    /** Bought in the shop. Lives on the run rather than on any structure. */
+    private int bounceLevel;
 
     // --- cursor plumbing ----------------------------------------------------
     private boolean pointerDown;
@@ -122,8 +160,10 @@ public final class RunWorld implements BossContext, DirectorContext, AllyFactory
     private float pointerY;
 
     public RunWorld(GameWorld world, EnemyTable enemyTable, DefenceTable defenceTable,
-                    BossTable bossTable, CombatModifiers mods, PointerVelocity velocity) {
-        if (world == null || enemyTable == null || defenceTable == null || bossTable == null) {
+                    BossTable bossTable, TalentTable talentTable, ShopTable shopTable,
+                    PointerVelocity velocity) {
+        if (world == null || enemyTable == null || defenceTable == null
+                || bossTable == null || talentTable == null || shopTable == null) {
             throw new IllegalArgumentException("world and tables must not be null");
         }
         this.world = world;
@@ -131,7 +171,8 @@ public final class RunWorld implements BossContext, DirectorContext, AllyFactory
         this.enemyTable = enemyTable;
         this.defenceTable = defenceTable;
         this.bossTable = bossTable;
-        this.mods = mods != null ? mods : CombatModifiers.NONE;
+        this.talents = new TalentTree(talentTable);
+        this.mods = talents;
         this.composition = new WaveComposition(enemyTable);
 
         this.session = new RunSession(this.mods);
@@ -150,9 +191,25 @@ public final class RunWorld implements BossContext, DirectorContext, AllyFactory
         this.cursor.setDroppedItems(items);
         this.bosses.addInteractionOwner(cursor);
 
+        this.shop = new Shop(shopTable, this);
+        this.skills = new SkillPanel(this);
+
         world.setStepListener(this);
         world.setAlwaysListener(this);
         setTrace(world.trace());
+    }
+
+    /**
+     * Convenience for a run with no talents of its own.
+     *
+     * <p>Used by nothing in production -- it exists so a Phase 5-8 test can build
+     * a world without a talent table and get the neutral defaults.
+     */
+    public static RunWorld withoutProgression(GameWorld world, EnemyTable enemies,
+                                              DefenceTable defences, BossTable bosses,
+                                              TalentTable talents, ShopTable shop,
+                                              PointerVelocity velocity) {
+        return new RunWorld(world, enemies, defences, bosses, talents, shop, velocity);
     }
 
     /** Wires the trace through everything that reports. */
@@ -161,11 +218,20 @@ public final class RunWorld implements BossContext, DirectorContext, AllyFactory
         world.setTrace(t);
         session.setTrace(t);
         weather.setTrace(t);
+        talents.setTrace(t);
     }
 
-    /** The sink talent points go to. Phase 9 replaces the counter with the tree. */
-    public void setTalentIncome(TalentIncome income) {
-        this.talents = income != null ? income : new TalentIncome.Counter();
+    /** The talent tree. The UI reads it; gameplay goes through {@link #modifiers}. */
+    public TalentTree talentTree() {
+        return talents;
+    }
+
+    public Shop shop() {
+        return shop;
+    }
+
+    public SkillPanel skills() {
+        return skills;
     }
 
     // ========================================================================
@@ -194,6 +260,23 @@ public final class RunWorld implements BossContext, DirectorContext, AllyFactory
     private void startRun(GameMode mode, DifficultyConfig difficulty, long seed) {
         this.difficulty = difficulty;
         clearField();
+        //  Progression is PER RUN.  Python rebuilds TalentTree and SkillPanel in
+        //  Game.reset(); nothing here is persisted and nothing survives a new
+        //  run.  See PERSISTENCE.md.
+        //
+        //  The structures are rebuilt for the same reason and in the same way
+        //  the source does it: a fresh keep, a bare wall, no garrison, no
+        //  barricade, no spikes.
+        castle = new Castle(this, defenceTable);
+        barricade = new Barricade(this);
+        outpost = new Outpost(this);
+        spikes = new SpikeWalls(this);
+        talents.reset();
+        shop.reset();
+        skills.reset();
+        bounceLevel = 0;
+        cursor.setGrabLevel(0);
+        cursor.setMultiLevel(0);
         session.begin(mode, difficulty, seed);
         weather.reset();
         shake.reset();
@@ -214,7 +297,21 @@ public final class RunWorld implements BossContext, DirectorContext, AllyFactory
         items.clear();
         allies.clear();
         bosses.clear();
+        fireZones.clear();
+        tornados.clear();
         cursor.releaseEverything();
+    }
+
+    /**
+     * Re-reads the grab delay after a talent purchase.
+     *
+     * <p>The cursor caches its cooldown because it is set once at run start and
+     * read on every grab; Light Fingers is the one talent that changes it
+     * mid-run, so the shop and the talent screen call this when a rank lands.
+     * Everything else a talent touches is read live and needs no such call.
+     */
+    public void refreshGrabCooldown() {
+        cursor.setGrabCooldown(grabCooldownSeconds());
     }
 
     /** The difficulty's grab delay, after the Light Fingers talent. Time domain. */
@@ -306,6 +403,7 @@ public final class RunWorld implements BossContext, DirectorContext, AllyFactory
             director.update(dt);
         }
 
+        skills.update(dt);
         castle.update(dt);
         outpost.update(dt);
         barricade.update(dt);
@@ -335,6 +433,26 @@ public final class RunWorld implements BossContext, DirectorContext, AllyFactory
         for (int i = allies.size - 1; i >= 0; i--) {
             if (!allies.get(i).alive()) {
                 allies.removeIndex(i);
+            }
+        }
+
+        //  Skill effects, in Python's position: after the allies and before the
+        //  separation pass, so a mob a funnel just lifted is airborne by the
+        //  time the crowd is untangled and is therefore not part of it.
+        for (int i = 0; i < fireZones.size; i++) {
+            fireZones.get(i).update(dt);
+        }
+        for (int i = fireZones.size - 1; i >= 0; i--) {
+            if (!fireZones.get(i).alive()) {
+                fireZones.removeIndex(i);
+            }
+        }
+        for (int i = 0; i < tornados.size; i++) {
+            tornados.get(i).update(dt);
+        }
+        for (int i = tornados.size - 1; i >= 0; i--) {
+            if (!tornados.get(i).alive()) {
+                tornados.removeIndex(i);
             }
         }
 
@@ -467,9 +585,15 @@ public final class RunWorld implements BossContext, DirectorContext, AllyFactory
         return shake;
     }
 
+    /**
+     * Where a director's talent points go.
+     *
+     * <p>Phase 8 owns <em>when</em> a point is earned and this owns the balance.
+     * The director never sees the tree, only the one-method sink.
+     */
     @Override
     public TalentIncome talents() {
-        return talents;
+        return talents.asIncome();
     }
 
     @Override
@@ -506,9 +630,25 @@ public final class RunWorld implements BossContext, DirectorContext, AllyFactory
         items.add(item);
     }
 
+    /**
+     * A boss died.
+     *
+     * <p>Python {@code on_boss_defeated}: purge it, then light up the next skill
+     * slot -- and when the bar is already full, pay a bigger talent bounty
+     * instead. Two points for a slot, three for a boss that has nothing left to
+     * unlock.
+     */
     @Override
     public void onBossDefeated(Boss boss) {
         bosses.purge(boss, horde, projectiles, items);
+        SkillId unlockedNow = skills.unlockNext();
+        if (unlockedNow == null) {
+            talents.award(3, "boss-bounty");
+            return;
+        }
+        banners.post(Announcements.Id.SKILL_UNLOCKED, skills.unlockedCount(),
+                unlockedNow.id(), 5.0);
+        talents.award(2, "boss-bounty");
     }
 
     @Override
@@ -574,18 +714,6 @@ public final class RunWorld implements BossContext, DirectorContext, AllyFactory
     @Override
     public double gameTime() {
         return world.simulationTime();
-    }
-
-    @Override
-    public int bounceLevel() {
-        return bounceLevel;
-    }
-
-    private int bounceLevel;
-
-    /** Bought in the shop. Phase 9 drives it; the field exists now so throws work. */
-    public void setBounceLevel(int level) {
-        this.bounceLevel = level;
     }
 
     @Override
@@ -744,6 +872,78 @@ public final class RunWorld implements BossContext, DirectorContext, AllyFactory
         return this;
     }
 
+    // ========================================================================
+    //  ShopContext
+    // ========================================================================
+
+    @Override
+    public int bounceLevel() {
+        return bounceLevel;
+    }
+
+    @Override
+    public void setBounceLevel(int level) {
+        this.bounceLevel = Math.max(0, level);
+    }
+
+    @Override
+    public int grabLevel() {
+        return cursor.grabLevel();
+    }
+
+    @Override
+    public void setGrabLevel(int level) {
+        cursor.setGrabLevel(level);
+    }
+
+    @Override
+    public int multiLevel() {
+        return cursor.multiLevel();
+    }
+
+    @Override
+    public void setMultiLevel(int level) {
+        cursor.setMultiLevel(level);
+    }
+
+    // ========================================================================
+    //  SkillContext
+    // ========================================================================
+
+    @Override
+    public com.mymmer.castledefense.defence.DefenceContext projectileContext() {
+        return this;
+    }
+
+    @Override
+    public void addFireZone(FireZone zone) {
+        if (zone != null) {
+            fireZones.add(zone);
+        }
+    }
+
+    @Override
+    public void addTornado(Tornado tornado) {
+        if (tornado != null) {
+            tornados.add(tornado);
+        }
+    }
+
+    @Override
+    public void onSkillCast(SkillId id) {
+        session.addCast();
+    }
+
+    /** Burning ground currently on the field. */
+    public Array<FireZone> fireZones() {
+        return fireZones;
+    }
+
+    /** Funnels currently on the field. */
+    public Array<Tornado> tornados() {
+        return tornados;
+    }
+
     // --- AllyFactory --------------------------------------------------------
 
     @Override
@@ -801,6 +1001,9 @@ public final class RunWorld implements BossContext, DirectorContext, AllyFactory
                 + " items=" + items.size()
                 + " allies=" + allies.size
                 + " bosses=" + bosses.liveCount()
+                + " fire=" + fireZones.size + " tornados=" + tornados.size
+                + " | " + talents.describe()
+                + " | " + skills.describe()
                 + " | " + weather.describe()
                 + " shake=" + String.format(Locale.ROOT, "%.1f", shake.amount())
                 + " | " + (director != null ? director.describe() : "no director");

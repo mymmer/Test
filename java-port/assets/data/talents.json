@@ -1,0 +1,64 @@
+{
+  "//": "Transcribed from main.py:313 TALENTS. Six branches, 38 nodes.",
+  "//tier": "`tier` is the number of points that must ALREADY be in this node's own branch before it unlocks. It is not a row index and not a prerequisite node: a branch deepens as you commit points to it, whichever nodes you spent them on.",
+  "//perRank": "Effect magnitude per rank. `value = rank * perRank`, and the effect property derives from that -- see effect ids below.",
+  "//effect": "Stable effect id. TalentTree maps each to one CombatModifiers method; validation rejects an unknown one.",
+
+  "branches": [
+    { "id": "offense",    "name": "OFFENSE" },
+    { "id": "defense",    "name": "DEFENCE" },
+    { "id": "utility",    "name": "UTILITY" },
+    { "id": "aero",       "name": "AERO-MASTERY" },
+    { "id": "necromancy", "name": "NECROMANCY" },
+    { "id": "arcane",     "name": "ARCANE" }
+  ],
+
+  "talents": [
+    { "id": "rate",        "branch": "offense",    "tier": 0, "maxRank": 5, "perRank": 0.06,  "effect": "tower_rate" },
+    { "id": "power",       "branch": "offense",    "tier": 0, "maxRank": 5, "perRank": 0.08,  "effect": "tower_damage" },
+    { "id": "crit",        "branch": "offense",    "tier": 2, "maxRank": 5, "perRank": 0.05,  "effect": "crit_chance" },
+    { "id": "pierce",      "branch": "offense",    "tier": 4, "maxRank": 3, "perRank": 1.0,   "effect": "extra_pierce" },
+    { "id": "splash",      "branch": "offense",    "tier": 6, "maxRank": 4, "perRank": 0.10,  "effect": "splash_mult" },
+    { "id": "overcharge",  "branch": "offense",    "tier": 9, "maxRank": 3, "perRank": 0.18,  "effect": "overcharge_cd" },
+
+    { "id": "maxhp",       "branch": "defense",    "tier": 0, "maxRank": 5, "perRank": 0.10,  "effect": "castle_hp",
+      "//": "DEAD EFFECT. Nothing in the Python source reads TalentTree.castle_hp -- Deep Foundations does not change castle health. Reproduced deliberately; see PORT_ANALYSIS.md and TalentQuirksTest." },
+    { "id": "regen",       "branch": "defense",    "tier": 0, "maxRank": 4, "perRank": 0.012, "effect": "barricade_regen" },
+    { "id": "spikedot",    "branch": "defense",    "tier": 2, "maxRank": 4, "perRank": 0.9,   "effect": "spike_dot" },
+    { "id": "towerhp",     "branch": "defense",    "tier": 3, "maxRank": 4, "perRank": 0.18,  "effect": "tower_hp" },
+    { "id": "rebuild",     "branch": "defense",    "tier": 5, "maxRank": 3, "perRank": 0.20,  "effect": "rebuild_mult" },
+    { "id": "thorns",      "branch": "defense",    "tier": 8, "maxRank": 3, "perRank": 0.07,  "effect": "damage_taken" },
+
+    { "id": "greed",       "branch": "utility",    "tier": 0, "maxRank": 5, "perRank": 0.12,  "effect": "gold_pop" },
+    { "id": "lighthands",  "branch": "utility",    "tier": 0, "maxRank": 4, "perRank": 0.14,  "effect": "grab_bonus" },
+    { "id": "haggle",      "branch": "utility",    "tier": 2, "maxRank": 4, "perRank": 0.06,  "effect": "shop_discount" },
+    { "id": "purse",       "branch": "utility",    "tier": 3, "maxRank": 4, "perRank": 40.0,  "effect": "wave_purse" },
+    { "id": "lightfingers","branch": "utility",    "tier": 3, "maxRank": 4, "perRank": 0.20,  "effect": "grab_cd_scale",
+      "//perRank": "GRAB_CD_PER_RANK from the tuning block; TalentTableTest asserts it still equals Tuning.GRAB_CD_PER_RANK." },
+    { "id": "showman",     "branch": "utility",    "tier": 5, "maxRank": 4, "perRank": 0.15,  "effect": "score_mult" },
+    { "id": "scavenge",    "branch": "utility",    "tier": 7, "maxRank": 3, "perRank": 0.10,  "effect": "kill_gold" },
+    { "id": "sentinels",   "branch": "utility",    "tier": 5, "maxRank": 1, "perRank": 1.0,   "effect": "ally_sentinels" },
+
+    { "id": "stormwinds",  "branch": "aero",       "tier": 0, "maxRank": 1, "perRank": 0.30,  "effect": "storm_wind_slow",
+      "//perRank": "STORM_WIND_SLOW from the tuning block; asserted against Tuning.STORM_WIND_SLOW." },
+    { "id": "throwarm",    "branch": "aero",       "tier": 0, "maxRank": 5, "perRank": 0.08,  "effect": "throw_power" },
+    { "id": "updraft",     "branch": "aero",       "tier": 2, "maxRank": 4, "perRank": 0.12,  "effect": "fall_damage" },
+    { "id": "conductor",   "branch": "aero",       "tier": 4, "maxRank": 4, "perRank": 0.15,  "effect": "lightning_mult" },
+    { "id": "gale",        "branch": "aero",       "tier": 6, "maxRank": 3, "perRank": 0.25,  "effect": "wind_mult" },
+    { "id": "tempest",     "branch": "aero",       "tier": 9, "maxRank": 1, "perRank": 1.0,   "effect": "storm_chance" },
+
+    { "id": "bonecraft",   "branch": "necromancy", "tier": 0, "maxRank": 5, "perRank": 0.16,  "effect": "ally_power" },
+    { "id": "hostmaster",  "branch": "necromancy", "tier": 0, "maxRank": 4, "perRank": 1.0,   "effect": "ally_cap_bonus" },
+    { "id": "quickraise",  "branch": "necromancy", "tier": 2, "maxRank": 4, "perRank": 0.12,  "effect": "ally_rate" },
+    { "id": "gravechill",  "branch": "necromancy", "tier": 4, "maxRank": 3, "perRank": 0.06,  "effect": "grave_chill" },
+    { "id": "secondwind",  "branch": "necromancy", "tier": 7, "maxRank": 2, "perRank": 20.0,  "effect": "ally_life" },
+    { "id": "bonewall",    "branch": "necromancy", "tier": 9, "maxRank": 3, "perRank": 0.12,  "effect": "ally_tough" },
+
+    { "id": "focus",       "branch": "arcane",     "tier": 0, "maxRank": 5, "perRank": 0.07,  "effect": "skill_cd" },
+    { "id": "amplify",     "branch": "arcane",     "tier": 0, "maxRank": 5, "perRank": 0.10,  "effect": "skill_power" },
+    { "id": "widecast",    "branch": "arcane",     "tier": 3, "maxRank": 4, "perRank": 0.12,  "effect": "skill_area" },
+    { "id": "emberfall",   "branch": "arcane",     "tier": 5, "maxRank": 3, "perRank": 0.30,  "effect": "fire_time" },
+    { "id": "eyeofstorm",  "branch": "arcane",     "tier": 8, "maxRank": 2, "perRank": 0.25,  "effect": "tornado_mult" },
+    { "id": "twincast",    "branch": "arcane",     "tier": 10, "maxRank": 2, "perRank": 0.5,  "effect": "meteor_count" }
+  ]
+}

@@ -85,6 +85,12 @@ EnemyContext  extends DefenceContext: horde(), createEnemy(), spawnEnemy(),
 
 ## Important invariants
 
+0c. **`CombatModifiers` is the talent tree now.** From Phase 9 the object behind
+   `ctx.modifiers()` is `TalentTree`, and its values are computed live from the
+   current ranks — so a talent bought mid-run is in effect on the next step here
+   with no cache to invalidate. Nothing in this package names `TalentTree`, and
+   nothing may: see [`TALENTS.md`](TALENTS.md).
+
 0b. **A Volatile detonation iterates a SNAPSHOT.** Python walks
    `list(g.enemies)`, and the reason is not decorative: the blast can kill a
    boss, and a boss's death purges it and its debris from the roster on the

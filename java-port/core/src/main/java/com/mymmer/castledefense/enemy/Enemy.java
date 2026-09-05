@@ -435,6 +435,22 @@ public abstract class Enemy extends Entity implements Target {
         stormCd = GameConfig.STORM_COOLDOWN;
     }
 
+    /**
+     * Seconds of tornado lift still acting.
+     *
+     * <p>While it is positive the airborne integration applies only 12% of
+     * gravity, which is what makes a funnel carry a body rather than slow its
+     * fall. The Tornado renews it every step it holds something.
+     */
+    public double tornadoHold() {
+        return tornadoHold;
+    }
+
+    /** Renews (or clears) the tornado lift. Time domain. */
+    public void holdInTornado(double seconds) {
+        tornadoHold = Math.max(0d, seconds);
+    }
+
     public float maxHp() {
         return maxHp;
     }

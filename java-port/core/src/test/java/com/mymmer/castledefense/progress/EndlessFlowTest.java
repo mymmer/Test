@@ -228,12 +228,14 @@ class EndlessFlowTest {
     @DisplayName("one talent point per minute survived, on the minute")
     void talentDrip() {
         TestRun r = new TestRun().beginEndless();
-        assertEquals(0, r.talents.points());
+        assertEquals(0, r.endless().talentPointsAwarded());
         r.scheduleSteps(3599);
-        assertEquals(0, r.talents.points(), "one step short of a minute");
+        assertEquals(0, r.endless().talentPointsAwarded(),
+                "one step short of a minute");
         r.scheduleStep();
-        assertEquals(1, r.talents.points(), "the 3600th step is the minute");
-        assertEquals("endless-minute", r.talents.lastReason());
+        assertEquals(1, r.endless().talentPointsAwarded(),
+                "the 3600th step is the minute");
+        assertEquals(1, r.talents().availablePoints(), "and it reached the tree");
     }
 
     @Test
@@ -244,7 +246,13 @@ class EndlessFlowTest {
         //  is where the drift would show.
         TestRun r = new TestRun().beginEndless();
         r.scheduleSeconds(3600);
-        assertEquals(60, r.talents.points(), "an hour is sixty points, exactly");
+        //  The MINUTE income specifically.  availablePoints() also carries boss
+        //  bounties, and an hour of undefended play kills a few bosses by
+        //  Volatile blast, so the totals legitimately differ.
+        assertEquals(60, r.endless().talentPointsAwarded(),
+                "an hour is sixty minute-points, exactly");
+        assertTrue(r.talents().availablePoints() >= 60,
+                "the tree has those plus whatever the bosses paid");
         assertEquals(3600d, r.session().playTime(), 1e-9);
         assertTrue(r.endless().talentSeconds() < Tuning.TALENT_SECONDS_PER_POINT,
                 "the bank never exceeds one minute");
@@ -262,7 +270,7 @@ class EndlessFlowTest {
 
         assertEquals(1800d, r.session().playTime(), 1e-9);
         assertEquals(61, r.session().wave(), "1 + 1800/30");
-        assertEquals(30, r.talents.points(), "1800/60");
+        assertEquals(30, r.endless().talentPointsAwarded(), "1800/60");
         assertEquals(3, r.endless().scriptedBossesSent());
         assertEquals(12, r.endless().repeatBossesSent(), "(1800 - 360) / 120");
     }
@@ -275,7 +283,7 @@ class EndlessFlowTest {
 
         assertEquals(3600d, r.session().playTime(), 1e-9);
         assertEquals(121, r.session().wave(), "1 + 3600/30");
-        assertEquals(60, r.talents.points());
+        assertEquals(60, r.endless().talentPointsAwarded());
         assertEquals(3, r.endless().scriptedBossesSent());
         assertEquals(27, r.endless().repeatBossesSent(), "(3600 - 360) / 120");
     }
@@ -295,7 +303,8 @@ class EndlessFlowTest {
             r.scheduleSeconds(marks[i] - at);
             at = marks[i];
             assertEquals(tiers[i], r.session().wave(), "tier at " + at + "s");
-            assertEquals(points[i], r.talents.points(), "points at " + at + "s");
+            assertEquals(points[i], r.endless().talentPointsAwarded(),
+                    "minute-points at " + at + "s");
             assertEquals(scripted[i], r.endless().scriptedBossesSent(),
                     "scripted bosses at " + at + "s");
             assertEquals(repeats[i], r.endless().repeatBossesSent(),

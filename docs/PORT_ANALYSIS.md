@@ -557,6 +557,17 @@ rather than silently changing the game.
 | **A summed run clock is a step out at every boundary** | `play_time += dt` over 1800 steps reads 29.999999999999577, which puts the tier ladder, the boss timetable and the talent drip one step late — and the error grows. | Fixed by deriving `playTime()` from a step count, per §14.1's invariant 2b. An hour now reads exactly 3600.0 and awards exactly 60 talent points. |
 | **The Classic and Endless alive caps genuinely differ** | 58 (`enemies.py:2131`) and 60 (`main.py:241`). It reads like a typo and is not; both are preserved. | Recorded, and pinned by a named test. |
 
+### Newly discovered in Phase 9
+
+| Finding | Detail | Status |
+|---|---|---|
+| **`TalentTree.castle_hp` is dead code** | Phase 5 suspected it; Phase 9 confirmed it by implementing the tree. `grep castle_hp main.py castle.py enemies.py` returns exactly one hit — its own definition. So **Deep Foundations changes no health at all**, at any rank, and the node's description is a lie the shipped game tells. | Reproduced. `TalentTree.castleHpClaim()` exposes the number for a tooltip and is deliberately NOT a `CombatModifiers` method, so nothing in gameplay can reach it. `TalentQuirksTest` asserts both the behaviour and the structure — adding a `castleHp()` to the shared interface fails the build. |
+| **Crowd Financier raises the gold CAP, not just the slope** | `min(POP_GOLD_CAP * gold_pop, 1 + step * n)` — the talent multiplies **both** terms. Reading it as a cap on the base rate alone would silently halve the talent at high populations, which is exactly where a player buys it. | Reproduced and pinned by a named test. |
+| **The shop's tower fallback upgrades EVERY tower of that type** | With the wall full, `buy_tower` iterates `for x in existing: x.upgrade()`. Not the weakest, not the nearest — all of them. Buying a fourth Bowman makes all three existing Bowmen better, which makes a full wall a deliberate strategy rather than a dead end. | Reproduced. No "better" selection strategy invented. |
+| **Float cost constants change a price by a coin** | `150f * 1.4f` is 209.9999964 and truncates to **209** where Python charges **210**. Same class of error as the Dragon breath, in the economy rather than the clock. | Fixed: every shop cost constant is a `double`, read through `Json5.exact`. Fixtured at 63 curve points. |
+| **The discount is applied in the DRAW loop** | `main.py:3192` assigns `item.discount` while rendering the shop, so a price technically depends on the screen having been drawn. Harmless in the source because the screen is always drawn before a click. | Deviated deliberately and documented: the port computes the discount live at the point of sale, which is the same observable behaviour with no rendering in the path. |
+| **The structures survived a new run** | Not a source quirk — a port defect Phase 9's reset tests found. `RunWorld` built the castle, outpost, barricade and spikes once in its constructor; Python's `Game.reset()` constructs new ones every run. A tower bought in one run was still standing in the next. | Fixed by reconstructing them in `startRun`, which is what the source does and what guarantees no field is forgotten. |
+
 ---
 
 ## 14.1 The time-domain rule (pre-Phase 8)

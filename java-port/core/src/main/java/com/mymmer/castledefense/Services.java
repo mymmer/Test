@@ -43,6 +43,8 @@ public final class Services implements Disposable {
     private com.mymmer.castledefense.enemy.EnemyTable enemies;
     private com.mymmer.castledefense.defence.DefenceTable defences;
     private com.mymmer.castledefense.boss.BossTable bosses;
+    private com.mymmer.castledefense.talent.TalentTable talents;
+    private com.mymmer.castledefense.shop.ShopTable shop;
     private SaveData save;
     private QualityConfig quality = QualityConfig.HIGH;
 
@@ -92,6 +94,8 @@ public final class Services implements Disposable {
         enemies = com.mymmer.castledefense.enemy.EnemyTable.load(json);
         defences = com.mymmer.castledefense.defence.DefenceTable.load(json);
         bosses = com.mymmer.castledefense.boss.BossTable.load(json);
+        talents = com.mymmer.castledefense.talent.TalentTable.load(json);
+        shop = com.mymmer.castledefense.shop.ShopTable.load(json);
 
         save = saves.load();
         if (!saves.lastLoadNote().isEmpty()) {
@@ -165,6 +169,16 @@ public final class Services implements Disposable {
     /** The boss table. */
     public com.mymmer.castledefense.boss.BossTable bosses() {
         return bosses;
+    }
+
+    /** The 38 talent definitions. */
+    public com.mymmer.castledefense.talent.TalentTable talents() {
+        return talents;
+    }
+
+    /** The 11 shop items. */
+    public com.mymmer.castledefense.shop.ShopTable shop() {
+        return shop;
     }
 
     public SaveData save() {

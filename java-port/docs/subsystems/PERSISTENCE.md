@@ -83,6 +83,29 @@ String path();
 JsonValue read(String path);  boolean exists(String path);
 ```
 
+## The Phase 9 audit: what is NOT saved
+
+Re-audited once the real Talent, Shop and Skill systems existed.
+
+Python's `Settings` writes exactly three keys — `muted`, `difficulty`,
+`high_score` — and rebuilds everything else in `Game.reset()`. So **none** of the
+following is persisted, and none of it may become persisted because the save
+system happens to be able to hold it:
+
+```
+talent points          talent ranks           shop purchase counters
+cursor levels          unlocked skills        skill cooldowns
+gold                   score                  wave / tier
+castle / outpost / barricade / spike levels
+```
+
+The Java save adds `skin`, `quality` and `haptics` — all settings, approved in
+Phase 3, and none of them run state.
+
+**`saveVersion` is unchanged at 1.** Phase 9 added no persistent state, so there
+is nothing to migrate. `ProgressionPersistenceTest` enforces the field list by
+reflection and fails the build on anything outside it.
+
 ## Important invariants
 
 1. **Every save is versioned.** `saveVersion` is written on every save and read

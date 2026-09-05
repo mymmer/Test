@@ -1,0 +1,59 @@
+package com.mymmer.castledefense.talent;
+
+/**
+ * One talent node, as defined by the data.
+ *
+ * <p>Immutable. Identity is {@link #id}, a stable semantic string — never a
+ * branch index, a grid position or a display name. The display name and the
+ * description are localisation keys derived from the id, so translating the game
+ * cannot change what a save or a test refers to.
+ */
+public final class TalentDef {
+
+    /** Stable semantic id: {@code "light_fingers"}-style, from the source. */
+    public final String id;
+    public final TalentBranch branch;
+    /**
+     * Points that must already be in this node's <b>own branch</b> before it
+     * unlocks.
+     *
+     * <p>Not a row index and not a prerequisite node. A branch deepens as you
+     * commit points to it, whichever of its nodes you spent them on — which is
+     * why the graph has no edges and cannot have a cycle.
+     */
+    public final int tier;
+    public final int maxRank;
+    /** Effect magnitude per rank. {@code value = rank * perRank}. */
+    public final double perRank;
+    public final TalentEffect effect;
+
+    TalentDef(String id, TalentBranch branch, int tier, int maxRank,
+              double perRank, TalentEffect effect) {
+        this.id = id;
+        this.branch = branch;
+        this.tier = tier;
+        this.maxRank = maxRank;
+        this.perRank = perRank;
+        this.effect = effect;
+    }
+
+    /** Localisation key for the display name. Never gameplay identity. */
+    public String nameKey() {
+        return "talent." + id + ".name";
+    }
+
+    /** Localisation key for the description. */
+    public String descriptionKey() {
+        return "talent." + id + ".desc";
+    }
+
+    /** The magnitude at a given rank. */
+    public double valueAt(int rank) {
+        return rank * perRank;
+    }
+
+    @Override
+    public String toString() {
+        return id + "(" + branch.id() + " t" + tier + " x" + maxRank + ")";
+    }
+}

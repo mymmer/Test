@@ -96,6 +96,13 @@ REQUIRED = ["GRAVITY", "AIR_DRAG", "THROW_POWER", "FALL_DMG_FLOOR", "FALL_DMG_SC
             "WIDTH", "GRAB_CAPACITY",
             "REGALIA_COOLDOWN", "REGALIA_CD_GROWTH", "CROWN_RETRIEVE_SPEED",
             "STAFF_DISARM_TIME", "CLAW_SMACK_DISTANCE", "CLAW_STAGGER", "WALL_TOP",
+            #  --- Phase 9: talents, shop and skills ---
+            "GRAB_CD_PER_RANK", "STORM_WIND_SLOW",
+            "LIGHTNING_RADIUS", "LIGHTNING_DAMAGE", "LIGHTNING_COOLDOWN",
+            "METEOR_COUNT", "METEOR_RADIUS", "METEOR_DAMAGE", "METEOR_COOLDOWN",
+            "FIRE_ZONE_TIME", "FIRE_ZONE_DPS",
+            "TORNADO_COOLDOWN", "TORNADO_LIFE", "TORNADO_SPEED", "TORNADO_RADIUS",
+            "TORNADO_LIFT", "TORNADO_SWIRL",
             #  --- Phase 8: progression, scoring and the Endless timetable ---
             "POP_GOLD_FREE", "POP_GOLD_STEP", "POP_GOLD_CAP",
             "SCORE_PER_PX", "SCORE_PER_SEC", "SCORE_COMBO_STEP",
@@ -503,6 +510,164 @@ def wave_clear_fires(elapsed, dt):
     return -1
 
 
+# ===========================================================================
+#  PHASE 9: talents, shop and skills.
+#
+#  The talent table is READ OUT of main.py by parsing its Talent(...) calls --
+#  no import, no execution -- so the fixture cannot drift from the source's
+#  numbers.  The shop curves and skill constants are transcribed, each naming
+#  the line it mirrors.
+# ===========================================================================
+
+MAIN_SRC = open(MAIN, encoding="utf-8").read()
+
+
+def read_talents():
+    """Parse the TALENTS list out of main.py without importing it.
+
+    Talent(key, branch, tier, name, max_rank, per_rank, desc) -- the first five
+    are literals and the sixth is either a literal or a named constant."""
+    block = MAIN_SRC[MAIN_SRC.index("TALENTS = ["):MAIN_SRC.index("TALENTS_BY_KEY")]
+    out = []
+    pattern = re.compile(
+        r'Talent\(\s*"([a-z]+)"\s*,\s*"([a-z]+)"\s*,\s*(\d+)\s*,\s*'
+        r'"([^"]*)"\s*,\s*(\d+)\s*,\s*([A-Z_0-9.]+)\s*,')
+    for m in pattern.finditer(block):
+        per = m.group(6)
+        try:
+            per_rank = float(per)
+        except ValueError:
+            #  a named constant from the tuning block
+            per_rank = C[per]
+        out.append({"id": m.group(1), "branch": m.group(2), "tier": int(m.group(3)),
+                    "maxRank": int(m.group(5)), "perRank": per_rank})
+    return out
+
+
+#  --- talent effect formulas, main.py:456-537 -------------------------------
+#  Each is (id, python expression as a lambda of the raw value v).
+TALENT_EFFECTS = {
+    "rate":         lambda v: 1.0 - min(0.45, v),
+    "power":        lambda v: 1.0 + v,
+    "crit":         lambda v: v,
+    "pierce":       lambda v: float(int(v)),
+    "splash":       lambda v: 1.0 + v,
+    "overcharge":   lambda v: 1.0 - min(0.5, v),
+    "maxhp":        lambda v: 1.0 + v,          # DEAD: nothing reads it
+    "regen":        lambda v: v,
+    "spikedot":     lambda v: v,
+    "towerhp":      lambda v: 1.0 + v,
+    "rebuild":      lambda v: 1.0 - min(0.6, v),
+    "thorns":       lambda v: 1.0 - min(0.4, v),
+    "greed":        lambda v: 1.0 + v,
+    "lighthands":   lambda v: 1.0 + v,
+    "haggle":       lambda v: 1.0 - min(0.4, v),
+    "purse":        lambda v: v,
+    "lightfingers": lambda v: max(0.0, 1.0 - v),
+    "showman":      lambda v: 1.0 + v,
+    "scavenge":     lambda v: 1.0 + v,
+    "sentinels":    lambda v: 1.0 if v > 0 else 0.0,
+    "stormwinds":   lambda v: v,
+    "throwarm":     lambda v: 1.0 + v,
+    "updraft":      lambda v: 1.0 + v,
+    "conductor":    lambda v: 1.0 + v,
+    "gale":         lambda v: 1.0 + v,
+    "tempest":      lambda v: 2.0 if v > 0 else 1.0,
+    "bonecraft":    lambda v: 1.0 + v,
+    "hostmaster":   lambda v: float(int(v)),
+    "quickraise":   lambda v: 1.0 - min(0.5, v),
+    "gravechill":   lambda v: v,
+    "secondwind":   lambda v: v,
+    "bonewall":     lambda v: 1.0 - min(0.5, v),
+    "focus":        lambda v: 1.0 - min(0.45, v),
+    "amplify":      lambda v: 1.0 + v,
+    "widecast":     lambda v: 1.0 + v,
+    "emberfall":    lambda v: 1.0 + v,
+    "eyeofstorm":   lambda v: 1.0 + v,
+    "twincast":     lambda v: 1.0 + v,
+}
+
+
+#  --- shop cost curves, main.py:1039-1155 -----------------------------------
+SHOP_GEOMETRIC = {
+    "bowman":    (110.0, 1.26),
+    "ballista":  (250.0, 1.28),
+    "cannon":    (380.0, 1.28),
+    "wall":      (180.0, 1.62),
+    "bounce":    (200.0, 1.55),
+    "grab":      (260.0, 2.05),
+    "multi":     (340.0, 1.85),
+    "outpost":   (300.0, 1.5),
+    "spikes":    (190.0, 1.7),
+}
+
+
+def shop_raw_cost(item, level):
+    """The undiscounted curve value.  Fractional -- the truncation is later."""
+    base, growth = SHOP_GEOMETRIC[item]
+    return base * (growth ** level)
+
+
+def shop_price(item, level, discount=1.0):
+    """main.py:900  ShopItem.cost -- int(cost_fn() * discount).
+
+    ONE truncation, at the end, on the RAW curve times the discount."""
+    return int(shop_raw_cost(item, level) * discount)
+
+
+def shop_price_wrong_order(item, level, discount=1.0):
+    """The other ordering, emitted so the Java test can prove they differ."""
+    return int(int(shop_raw_cost(item, level)) * discount)
+
+
+def barricade_cost(level, alive, hp, max_hp, max_level=5):
+    """main.py:1128  barricade_cost -- four cases, in this order."""
+    if level == 0:
+        return 240.0
+    if not alive:
+        return float(int(150 * (1.4 ** level)))
+    if hp < max_hp and level >= max_level:
+        return float(int(60 + (max_hp - hp) * 0.35))
+    return float(int(240 * (1.5 ** level)))
+
+
+def repair_cost(missing):
+    """main.py:1150 -- max(50, int(missing * 0.55))."""
+    return max(50, int(missing * 0.55))
+
+
+#  --- skills, main.py:697-767 ------------------------------------------------
+def skill_cooldown(base, focus_value):
+    """main.py:680  full_cooldown -- base * (1 - min(0.45, focus))."""
+    return base * (1.0 - min(0.45, focus_value))
+
+
+def lightning_damage(max_hp, skill_power=1.0, lightning_mult=1.0, is_boss=False):
+    """main.py:707.  A boss takes a quarter."""
+    dmg = max_hp * C["LIGHTNING_DAMAGE"] * skill_power * lightning_mult
+    return dmg * 0.25 if is_boss else dmg
+
+
+def meteor_count(twincast_value):
+    """main.py:737 -- int(METEOR_COUNT * (1 + v))."""
+    return int(C["METEOR_COUNT"] * (1.0 + twincast_value))
+
+
+def fire_zone_life(emberfall_value):
+    """main.py:746 -- FIRE_ZONE_TIME * (1 + v)."""
+    return C["FIRE_ZONE_TIME"] * (1.0 + emberfall_value)
+
+
+def tornado_life(eye_value):
+    """main.py:763 -- TORNADO_LIFE * (1 + v)."""
+    return C["TORNADO_LIFE"] * (1.0 + eye_value)
+
+
+def skill_radius(base, widecast_value):
+    """Every skill area is base * (1 + widecast)."""
+    return base * (1.0 + widecast_value)
+
+
 def build():
     fx = {
         "//": "Generated by tools/parity/generate_fixtures.py from the "
@@ -536,6 +701,13 @@ def build():
         "screenShake": [],
         "hornComposition": [],
         "waveClear": [],
+        "talentDefs": [],
+        "talentEffects": [],
+        "shopCosts": [],
+        "shopDiscount": [],
+        "shopBespokeCosts": [],
+        "skillConstants": [],
+        "skillScaling": [],
         "lichWard": [],
         "droppedItem": [],
         "regaliaThrowCap": [],
@@ -800,6 +972,116 @@ def build():
     fx["waveClear"].append({"delay": 1.1, "dt": DT,
                             "firesOnStep": wave_clear_fires(10.0, DT),
                             "note": "strictly greater than 1.1"})
+
+    # ---------------------------------------------------------------- Phase 9
+    #  All 38 talent definitions, parsed out of main.py rather than retyped.
+    talents = read_talents()
+    if len(talents) != 38:
+        sys.exit("expected 38 talents in main.py, parsed %d" % len(talents))
+    for t in talents:
+        fx["talentDefs"].append(t)
+
+    #  every effect at every rank, including 0 and the cap
+    for t in talents:
+        fn = TALENT_EFFECTS[t["id"]]
+        for rank in range(0, t["maxRank"] + 1):
+            v = rank * t["perRank"]
+            fx["talentEffects"].append({
+                "id": t["id"], "rank": rank, "value": v, "effect": fn(v)})
+
+    #  shop curves over representative levels
+    for item in sorted(SHOP_GEOMETRIC):
+        for level in (0, 1, 2, 3, 5, 8, 12):
+            fx["shopCosts"].append({
+                "id": item, "level": level,
+                "raw": shop_raw_cost(item, level),
+                "cost": shop_price(item, level)})
+
+    #  the discount, and the ordering that would be wrong
+    for haggle_rank in (0, 1, 2, 3, 4):
+        discount = 1.0 - min(0.4, haggle_rank * 0.06)
+        for item, level in (("bowman", 2), ("ballista", 3), ("cannon", 1),
+                            ("wall", 4), ("grab", 2)):
+            fx["shopDiscount"].append({
+                "id": item, "level": level, "haggleRank": haggle_rank,
+                "discount": discount,
+                "cost": shop_price(item, level, discount),
+                "costIfTruncatedFirst": shop_price_wrong_order(item, level, discount)})
+
+    #  the two bespoke curves
+    for level, alive, hp, max_hp in ((0, False, 0.0, 0.0),
+                                     (1, True, 340.0, 340.0),
+                                     (1, False, 0.0, 340.0),
+                                     (3, True, 500.0, 980.0),
+                                     (5, True, 900.0, 2050.0),
+                                     (5, False, 0.0, 2050.0)):
+        fx["shopBespokeCosts"].append({
+            "id": "barricade", "level": level, "alive": alive,
+            "hp": hp, "maxHp": max_hp,
+            "cost": barricade_cost(level, alive, hp, max_hp)})
+    for missing in (0.0, 50.0, 90.0, 400.0, 1200.0):
+        fx["shopBespokeCosts"].append({
+            "id": "repair", "missing": missing, "cost": repair_cost(missing)})
+
+    #  skill constants, straight out of the tuning block
+    fx["skillConstants"].append({
+        "lightningRadius": C["LIGHTNING_RADIUS"],
+        "lightningDamage": C["LIGHTNING_DAMAGE"],
+        "lightningCooldown": C["LIGHTNING_COOLDOWN"],
+        "bossLightningShare": 0.25,
+        "meteorCount": int(C["METEOR_COUNT"]),
+        "meteorRadius": C["METEOR_RADIUS"],
+        "meteorDamage": C["METEOR_DAMAGE"],
+        "meteorCooldown": C["METEOR_COOLDOWN"],
+        "fireZoneTime": C["FIRE_ZONE_TIME"],
+        "fireZoneDps": C["FIRE_ZONE_DPS"],
+        "tornadoCooldown": C["TORNADO_COOLDOWN"],
+        "tornadoLife": C["TORNADO_LIFE"],
+        "tornadoSpeed": C["TORNADO_SPEED"],
+        "tornadoRadius": C["TORNADO_RADIUS"],
+        "tornadoLift": C["TORNADO_LIFT"],
+        "tornadoSwirl": C["TORNADO_SWIRL"],
+        "tornadoHold": 0.12,
+        "tornadoBurstRadiusFactor": 1.4})
+
+    #  and how the talents scale them
+    for rank in range(0, 6):
+        focus = rank * 0.07
+        fx["skillScaling"].append({
+            "talent": "focus", "rank": rank, "value": focus,
+            "lightningCooldown": skill_cooldown(C["LIGHTNING_COOLDOWN"], focus),
+            "meteorCooldown": skill_cooldown(C["METEOR_COOLDOWN"], focus),
+            "tornadoCooldown": skill_cooldown(C["TORNADO_COOLDOWN"], focus)})
+    for rank in range(0, 5):
+        wide = rank * 0.12
+        fx["skillScaling"].append({
+            "talent": "widecast", "rank": rank, "value": wide,
+            "lightningRadius": skill_radius(C["LIGHTNING_RADIUS"], wide),
+            "meteorRadius": skill_radius(C["METEOR_RADIUS"], wide),
+            "tornadoRadius": skill_radius(C["TORNADO_RADIUS"], wide)})
+    for rank in range(0, 3):
+        fx["skillScaling"].append({
+            "talent": "twincast", "rank": rank, "value": rank * 0.5,
+            "meteorCount": meteor_count(rank * 0.5)})
+    for rank in range(0, 4):
+        fx["skillScaling"].append({
+            "talent": "emberfall", "rank": rank, "value": rank * 0.30,
+            "fireZoneLife": fire_zone_life(rank * 0.30)})
+    for rank in range(0, 3):
+        fx["skillScaling"].append({
+            "talent": "eyeofstorm", "rank": rank, "value": rank * 0.25,
+            "tornadoLife": tornado_life(rank * 0.25),
+            "tornadoPower": 1.0 + rank * 0.25})
+    for hp in (58.0, 1200.0, 8400.0):
+        for amp in (0, 5):
+            for cond in (0, 4):
+                sp = 1.0 + amp * 0.10
+                lm = 1.0 + cond * 0.15
+                fx["skillScaling"].append({
+                    "talent": "lightning-damage", "maxHp": hp,
+                    "amplifyRank": amp, "conductorRank": cond,
+                    "damage": lightning_damage(hp, sp, lm),
+                    "bossDamage": lightning_damage(hp, sp, lm, is_boss=True)})
     return fx
 
 

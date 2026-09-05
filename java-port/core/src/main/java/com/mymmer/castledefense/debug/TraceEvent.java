@@ -60,5 +60,16 @@ public enum TraceEvent {
     WEATHER_CHANGED,
     STORM_STRIKE,
     TALENT_AWARDED,
-    ANNOUNCEMENT
+    ANNOUNCEMENT,
+
+    // --- player progression (Phase 9) ---------------------------------------
+    TALENT_POINT_AWARDED,
+    TALENT_PURCHASED,
+    SHOP_PURCHASED,
+    SHOP_PURCHASE_FAILED,
+    SKILL_UNLOCKED,
+    SKILL_SELECTED,
+    SKILL_CAST,
+    SKILL_EFFECT_CREATED,
+    SKILL_COOLDOWN_READY
 }

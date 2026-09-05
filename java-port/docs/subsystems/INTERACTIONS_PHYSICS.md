@@ -67,6 +67,12 @@ interface PointerVelocity { void velocityFor(int pointerId, float[] out); }   //
 
 ## Important invariants
 
+0c. **`CombatModifiers` is the talent tree now.** From Phase 9 the object behind
+   `ctx.modifiers()` is `TalentTree`, and its values are computed live from the
+   current ranks — so a talent bought mid-run is in effect on the next step here
+   with no cache to invalidate. Nothing in this package names `TalentTree`, and
+   nothing may: see [`TALENTS.md`](TALENTS.md).
+
 0. **Gameplay time is `double`.** The grab cooldown and the configured grab delay are `double` seconds; positions,
    velocities, angles and drawing state stay `float`. `update`/`think` receive
    the canonical `double` step and narrow it once, themselves, with

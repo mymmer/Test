@@ -163,15 +163,15 @@ class ClassicFlowTest {
     void waveBonus() {
         TestRun r = new TestRun().beginClassic();
         int before = r.session().gold();
-        int points = r.talents.points();
+        int points = r.talents().availablePoints();
         clearTheField(r);
         r.seconds(1.5);
 
         assertEquals(GameState.SHOP, r.state());
         assertEquals(80 + 1 * 22, r.waves().lastWaveBonus());
         assertEquals(before + 80 + 22, r.session().gold());
-        assertEquals(points + 1, r.talents.points(), "one point per wave cleared");
-        assertEquals("wave", r.talents.lastReason());
+        assertEquals(points + 1, r.talents().availablePoints(),
+                "one point per wave cleared");
     }
 
     @Test

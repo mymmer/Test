@@ -80,6 +80,7 @@ public final class RunSession {
     private int kills;
     private float thrownDamage;
     private int platesTorn;
+    private int casts;
 
     public RunSession(CombatModifiers mods) {
         this.mods = mods != null ? mods : CombatModifiers.NONE;
@@ -117,6 +118,7 @@ public final class RunSession {
         kills = 0;
         thrownDamage = 0f;
         platesTorn = 0;
+        casts = 0;
     }
 
     /**
@@ -335,6 +337,15 @@ public final class RunSession {
 
     public int platesTorn() {
         return platesTorn;
+    }
+
+    /** Active skills cast this run. Python {@code stats_casts}. */
+    public int casts() {
+        return casts;
+    }
+
+    public void addCast() {
+        casts++;
     }
 
     public void addPlatesTorn() {
