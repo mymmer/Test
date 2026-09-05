@@ -188,6 +188,155 @@ class ArchitectureTest {
         }
     }
 
+    // ========================================================================
+    //  Phase 10: the interface is downstream of everything
+    // ========================================================================
+
+    /**
+     * Gameplay may not name the interface.
+     *
+     * <p>The dependency runs one way: screens read subsystems, subsystems have
+     * never heard of screens. This is what makes the whole gameplay suite
+     * runnable without a UI, and what stops a rule like "the shop is closed"
+     * from being expressed as "the shop screen is not showing".
+     */
+    @Test
+    @DisplayName("no gameplay package may import the ui package")
+    void gameplayNeverImportsUi() {
+        String[] gameplayPackages = {"enemy", "boss", "defence", "interaction",
+            "entity", "progress", "talent", "shop", "skill", "config", "util"};
+        Array<String> violations = new Array<>();
+        for (String pkg : gameplayPackages) {
+            scan(SOURCE_ROOT.resolve(pkg), file -> {
+                if (read(file).contains("import com.mymmer.castledefense.ui.")) {
+                    violations.add(SOURCE_ROOT.relativize(file).toString());
+                }
+            });
+        }
+        if (violations.size > 0) {
+            fail("gameplay must not know the interface exists:\n  "
+                    + violations.toString("\n  "));
+        }
+    }
+
+    /**
+     * The interface may not draw, and may not be Scene2D.
+     *
+     * <p>Two rules that happen to share a scan. Layout code holding a
+     * {@code SpriteBatch} is how a screen ends up impossible to test headlessly;
+     * every one of the UI tests runs because these classes compute rectangles and
+     * nothing else, and the renderer reads those rectangles from the outside.
+     *
+     * <p>The {@code scenes.scene2d} half is the Phase 10 framework decision made
+     * permanent. Scene2D brings its own actor tree, its own hit detection and its
+     * own input multiplexer — a second interaction model beside
+     * {@code InputRouter}'s pointer ownership, which is the one thing the port
+     * cannot afford two of. See {@code UI.md}, "why not Scene2D".
+     */
+    @Test
+    @DisplayName("the ui package neither draws nor uses Scene2D")
+    void uiHoldsNoGraphics() {
+        Array<String> violations = new Array<>();
+        scan(SOURCE_ROOT.resolve("ui"), file -> {
+            String text = read(file);
+            for (String banned : new String[]{
+                    "import com.badlogic.gdx.graphics.",
+                    "import com.badlogic.gdx.scenes.",
+            }) {
+                if (text.contains(banned)) {
+                    violations.add(SOURCE_ROOT.relativize(file) + " -> " + banned);
+                }
+            }
+        });
+        if (violations.size > 0) {
+            fail("the interface computes layout; it does not paint:\n  "
+                    + violations.toString("\n  "));
+        }
+    }
+
+    @Test
+    @DisplayName("Scene2D is not used anywhere in core")
+    void noScene2dAtAll() {
+        Array<String> violations = new Array<>();
+        scan(SOURCE_ROOT, file -> {
+            if (read(file).contains("com.badlogic.gdx.scenes.scene2d")) {
+                violations.add(SOURCE_ROOT.relativize(file).toString());
+            }
+        });
+        if (violations.size > 0) {
+            fail("a second input and layout model has appeared:\n  "
+                    + violations.toString("\n  "));
+        }
+    }
+
+    /**
+     * The interface has no randomness and no clock of its own.
+     *
+     * <p>Both would desynchronise the same way. A screen drawing from the run's
+     * {@code Rng} makes the simulation depend on how many buttons were pressed;
+     * a screen reading a wall clock makes a cooldown ring finish at a different
+     * moment from the cooldown. Everything the interface shows about time comes
+     * from the subsystem that owns it — {@code SkillPanel.cooldownRemaining},
+     * {@code RunSession.playTime} — which is frozen exactly when the world is.
+     */
+    @Test
+    @DisplayName("the ui package has neither an Rng nor a clock")
+    void uiHasNoRngAndNoClock() {
+        Array<String> violations = new Array<>();
+        scan(SOURCE_ROOT.resolve("ui"), file -> {
+            String text = read(file);
+            for (String banned : new String[]{
+                    "new Rng(", "new RandomXS128(", "Math.random(",
+                    "import java.util.Random",
+                    "System.currentTimeMillis(", "System.nanoTime(",
+                    "Gdx.graphics.getDeltaTime(", "Gdx.graphics.getRawDeltaTime(",
+                    "TimeUtils.",
+            }) {
+                if (text.contains(banned)) {
+                    violations.add(SOURCE_ROOT.relativize(file) + " -> " + banned);
+                }
+            }
+        });
+        if (violations.size > 0) {
+            fail("the interface must not have its own randomness or its own time:\n  "
+                    + violations.toString("\n  "));
+        }
+    }
+
+    /**
+     * No screen decides where the game goes next by itself.
+     *
+     * <p>Every transition is a {@code Navigation} call. If a screen could set the
+     * state directly, the graph in {@code Navigation} would stop being the whole
+     * truth about routing — and the run-difficulty guarantee, which is enforced
+     * as a routing rule, would stop being enforceable.
+     */
+    @Test
+    @DisplayName("no screen sets the game state directly")
+    void screensRouteThroughNavigation() {
+        Array<String> violations = new Array<>();
+        scan(SOURCE_ROOT.resolve("ui"), file -> {
+            if (file.getFileName().toString().equals("Navigation.java")) {
+                return;             // the graph is allowed to be the graph
+            }
+            String text = read(file);
+            //  Narrowly the ROUTING calls.  UiRect.setState is a control's own
+            //  look -- normal, selected -- and has nothing to do with the game
+            //  state; a rule that banned the word would ban the wrong thing.
+            for (String banned : new String[]{
+                    "world().setState(", ".setState(GameState.",
+                    ".startRun(", ".resetToMenu("}) {
+                if (text.contains(banned)) {
+                    violations.add(SOURCE_ROOT.relativize(file) + " -> " + banned);
+                }
+            }
+        });
+        if (violations.size > 0) {
+            fail("routing belongs to Navigation alone:\n  "
+                    + violations.toString("\n  "));
+        }
+    }
+
     @Test
     @DisplayName("comment stripping does not hide real code")
     void stripCommentsKeepsCode() {

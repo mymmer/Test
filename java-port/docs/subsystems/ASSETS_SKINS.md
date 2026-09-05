@@ -167,3 +167,17 @@ core/src/test/java/com/mymmer/castledefense/boss/SkinIndependenceTest.java     (
 core/src/test/java/com/mymmer/castledefense/ArchitectureTest.java              (9)
 core/src/test/java/com/mymmer/castledefense/testsupport/FakeAtlasSource.java
 ```
+
+## Phase 10 — the interface is not skinned
+
+The chrome is drawn from a flat palette in `UiRenderer` and from libGDX's built-in
+`BitmapFont`. No skin file is consulted, no `AttachmentPoint` is read, and no
+atlas is loaded. The interface therefore cannot be a route by which a skin reaches
+gameplay — which is the invariant this document exists to protect, and it is
+enforced structurally: the `ui` package holds no graphics import at all
+(`ArchitectureTest.uiHoldsNoGraphics`).
+
+Phase 11 introduces the game's real typeface and the skinned entity renderer. The
+UI's own look is deliberately plain until then: the point of Phase 10 is that the
+rectangles are in the right places, which is a claim `UiLayoutTest` can make
+without a single asset.

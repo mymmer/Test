@@ -149,3 +149,25 @@ a `progress()` for the sweep.
 `SkillTest` (unlocking, cooldowns, targeting, all three effects, bosses,
 snapshots, determinism), `ProgressionNineParityTest` (constants and every
 scaling talent against Python), `ProgressionSmokeTest`.
+
+## Phase 10 — the skill bar
+
+One slot per skill, appearing as each is unlocked. The bar reads `SkillPanel` and
+holds nothing: `isReady(id)` for readiness, `cooldownRemaining(id)` and
+`fullCooldown(id)` for the shade, `aiming()` for which slot is armed.
+
+**Readiness is never inferred from a rounded remaining-seconds value.** A skill
+one step away from coming back must not display as ready, and
+`UiIntegrationTest.readinessIsNeverInferredFromASeconds` steps to exactly that
+moment to prove it.
+
+**Two-stage targeting.** Tapping a targeted skill (Lightning, Meteor's zone,
+Tornado) arms it and the next world press casts it at that point; tapping an
+untargeted one fires immediately. The source casts at the mouse position, which a
+finger does not have. Both stages are claimed by the interface, so arming does not
+grab the enemy under the button and casting does not grab the one under the
+target (`UiInputTest.armingDoesNotGrab`, `armThenCastThroughTheRouter`).
+
+**The bar has no timer.** Opening the Endless armoury freezes the world and the
+cooldown display freezes with it, to the bit, because the number displayed is the
+panel's own (`UiIntegrationTest.cooldownComesFromGameplay`).

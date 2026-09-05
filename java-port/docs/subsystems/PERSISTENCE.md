@@ -183,3 +183,20 @@ core/src/test/java/com/mymmer/castledefense/ServicesStartupTest.java
 core/src/test/java/com/mymmer/castledefense/config/DifficultyTableTest.java
 core/src/test/java/com/mymmer/castledefense/testsupport/InMemoryJsonSource.java
 ```
+
+## Phase 10 — what the interface saves
+
+Three settings, and only from the settings screen: mute, preferred difficulty and
+clearing the high score. Each writes to `SaveData` and calls the injected
+`persist` runnable — the screens never touch a file, and `SaveData` remains the
+only thing that knows the format.
+
+Nothing else the interface does is persisted. Which screen was open, which shop
+card was selected, which talent node was being inspected, the scroll position of a
+talent column — all of it is presentation state, discarded on exit, and
+deliberately so: restoring a player into a mid-run screen would mean restoring the
+run, which is not something this port claims to do.
+
+**Preferred difficulty is a preference, not run state.** The saved value is what
+the *next* run will use; the run in progress keeps the difficulty captured into
+its `RunSession` at creation. See [`DIFFICULTY.md`](DIFFICULTY.md).

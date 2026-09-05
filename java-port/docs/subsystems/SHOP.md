@@ -145,3 +145,29 @@ list), `main.py:1815` (`try_buy`).
 `ShopTest` (inventory, curves, discount ordering, availability, every failure
 path, the fallback), `ProgressionNineParityTest` (63 curve cases, 25 discount
 cases, 11 bespoke cases against Python).
+
+## Phase 10 — the shop screen
+
+Every number on a card comes from `Shop`: `currentCost(id)`, `view(id).affordable`,
+`isAvailable(id)`, `view(id).level`, and `buy(id)` to purchase. There is no cost
+formula, no gold arithmetic and no availability rule in the screen. Phase 9's
+discount ordering is the precedent — the one place that knows what a thing costs
+is the shop, and a second implementation in a draw method is how the two drift
+apart. `UiIntegrationTest.uiDoesNotComputePrices` asserts the card shows exactly
+what `buy()` will charge, with a Haggle discount applied.
+
+**An unaffordable card is still pressable.** Python calls `try_buy` for any card
+the click lands on and answers "maxed out" or "Not enough gold!"; the refusal
+belongs to the shop, not to the hit test. How a card *looks* is answered by
+`shop.view(id)` at draw time rather than by a flag cached on the rectangle.
+
+The grid reflows rather than scaling: the column count comes from the available
+width, so a 20:9 screen gets more cards per row instead of wider cards. All eleven
+are laid out at every tested shape.
+
+The number hotkeys keep the source's order — 1..9 then 0 — which is why the item
+order in `shop.json` is load-bearing.
+
+One screen serves both modes: Classic shows it between waves and the button sends
+in the next one, Endless shows it mid-fight and the button resumes. The freeze is
+the state machine's, not the screen's — see [`UI.md`](UI.md) §7.

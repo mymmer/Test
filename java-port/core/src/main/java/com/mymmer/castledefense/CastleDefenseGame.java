@@ -34,6 +34,16 @@ import com.mymmer.castledefense.render.ViewportSet;
 public class CastleDefenseGame extends ApplicationAdapter {
 
     private final GameRendererFactory rendererFactory;
+    /**
+     * Whether to build the interface renderer.
+     *
+     * <p>False for the injecting constructors, which exist so a test can run the
+     * whole lifecycle with no GL context. {@code UiRenderer} allocates a
+     * {@code SpriteBatch} the moment it is created, and a headless backend
+     * cannot compile its shader — the same reason the world renderer is behind a
+     * factory. The interface still lays out; only the painting is skipped.
+     */
+    private final boolean paintUi;
     private final ViewportSet viewports = new ViewportSet();
     private final Services services;
 
@@ -47,6 +57,10 @@ public class CastleDefenseGame extends ApplicationAdapter {
     private volatile GameRenderer renderer;
     /** The run, built once the balance tables are loaded. Null before create(). */
     private volatile RunWorld run;
+    /** The interface, built with it. Registered as the router's first consumer. */
+    private volatile com.mymmer.castledefense.ui.UiRoot ui;
+    private volatile com.mymmer.castledefense.render.UiRenderer uiRenderer;
+    private volatile com.mymmer.castledefense.render.UiDebugOverlay uiDebug;
 
     //  volatile: libGDX runs create()/render() on the application thread while
     //  tests (and Android lifecycle callbacks) observe from another one
@@ -71,7 +85,7 @@ public class CastleDefenseGame extends ApplicationAdapter {
             public GameRenderer create() {
                 return new FoundationRenderer();
             }
-        }, new Services(platform));
+        }, new Services(platform), true);
     }
 
     /**
@@ -81,11 +95,17 @@ public class CastleDefenseGame extends ApplicationAdapter {
      *                        pass one that draws nothing
      */
     public CastleDefenseGame(GameRendererFactory rendererFactory) {
-        this(rendererFactory, new Services(new NoOpPlatformServices()));
+        this(rendererFactory, new Services(new NoOpPlatformServices()), false);
     }
 
     /** Full injection, for tests that supply their own infrastructure. */
     public CastleDefenseGame(GameRendererFactory rendererFactory, Services services) {
+        this(rendererFactory, services, false);
+    }
+
+    private CastleDefenseGame(GameRendererFactory rendererFactory, Services services,
+                              boolean paintUi) {
+        this.paintUi = paintUi;
         if (rendererFactory == null) {
             throw new IllegalArgumentException("rendererFactory must not be null");
         }
@@ -122,11 +142,30 @@ public class CastleDefenseGame extends ApplicationAdapter {
             run = new RunWorld(world, services.enemies(), services.defences(),
                     services.bosses(), services.talents(), services.shop(),
                     input::releaseVelocity);
+            //  The UI is a UiConsumer like any other, and it is registered
+            //  FIRST so a press it claims never reaches the world.  There is no
+            //  second input path -- see UI.md.
+            ui = new com.mymmer.castledefense.ui.UiRoot(run, viewports,
+                    services.difficulties(), services.save(), services::persist, null);
+            ui.setSafeAreaInsets(services.platform().safeAreaInsets());
+            inputRouter.addConsumer(ui);
             inputRouter.setWorldHandler(run.cursor());
         }
 
         renderer = rendererFactory.create();
         renderer.create(viewports);
+        if (ui != null && paintUi) {
+            //  The interface paints only once a GL context exists, and only then
+            //  can it be measured with the font that will draw it.  Until this
+            //  point the layout used an estimate, which is harmless because it
+            //  lays out again every frame.
+            uiRenderer = new com.mymmer.castledefense.render.UiRenderer(run, ui);
+            uiRenderer.create();
+            ui.setTextLayout(new com.mymmer.castledefense.ui.TextLayout(
+                    uiRenderer.measurer()));
+            uiDebug = new com.mymmer.castledefense.render.UiDebugOverlay(ui, input);
+            uiDebug.create();
+        }
         // A backend may never call resize() before the first frame (the headless
         // one does not), so start from a defined layout.
         int w = Gdx.graphics != null ? Gdx.graphics.getWidth() : 0;
@@ -144,6 +183,12 @@ public class CastleDefenseGame extends ApplicationAdapter {
             return;                 // Android reports 0x0 while minimised
         }
         viewports.resize(width, height);
+        if (ui != null) {
+            //  the cutouts can change with the orientation, so they are re-read
+            //  rather than cached from startup
+            ui.setSafeAreaInsets(services.platform().safeAreaInsets());
+            ui.layout();
+        }
         if (renderer != null) {
             renderer.resize(viewports, width, height);
         }
@@ -177,9 +222,26 @@ public class CastleDefenseGame extends ApplicationAdapter {
             input.endStep();
         }
 
+        if (ui != null) {
+            //  Laid out once per rendered frame, from gameplay state and the
+            //  viewport only -- never from the frame delta.
+            ui.layout();
+        }
         if (renderer != null) {
             renderer.render(viewports, simulation.alpha());
         }
+        //  The interface last, over the world, and the overlay last of all.
+        if (uiRenderer != null) {
+            uiRenderer.render(viewports);
+        }
+        if (uiDebug != null) {
+            uiDebug.render(viewports);
+        }
+    }
+
+    /** The interface's debug overlay, or null before create(). */
+    public com.mymmer.castledefense.render.UiDebugOverlay getUiDebugOverlay() {
+        return uiDebug;
     }
 
     /**
@@ -221,6 +283,14 @@ public class CastleDefenseGame extends ApplicationAdapter {
             renderer.dispose();
             renderer = null;
         }
+        if (uiRenderer != null) {
+            uiRenderer.dispose();
+            uiRenderer = null;
+        }
+        if (uiDebug != null) {
+            uiDebug.dispose();
+            uiDebug = null;
+        }
         services.persist();
         services.dispose();
         log("disposed");
@@ -258,6 +328,11 @@ public class CastleDefenseGame extends ApplicationAdapter {
         return run;
     }
 
+    /** The interface, or null if the balance tables failed to load. */
+    public com.mymmer.castledefense.ui.UiRoot getUi() {
+        return ui;
+    }
+
     /**
      * Starts a run. The entry point Phase 10's menu will call.
      *
@@ -267,6 +342,16 @@ public class CastleDefenseGame extends ApplicationAdapter {
     public long startRun(GameMode mode) {
         if (run == null) {
             return Long.MIN_VALUE;
+        }
+        //  Through the navigation graph, which is the only way a player can
+        //  start one.  A second entry point that called beginRun directly would
+        //  land in a different state from the menu button -- and it did: it
+        //  left the game PLAYING while the menu opens the first armoury.
+        if (ui != null) {
+            if (!ui.navigation().chooseMode(mode, ui.preferredDifficulty())) {
+                return Long.MIN_VALUE;
+            }
+            return run.session().seed();
         }
         String id = services.save() != null ? services.save().difficulty : null;
         return run.beginRun(mode, services.difficulties().get(id));

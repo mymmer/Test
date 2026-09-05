@@ -166,3 +166,39 @@ core/src/test/java/com/mymmer/castledefense/input/InputRouterTest.java          
 core/src/test/java/com/mymmer/castledefense/input/TouchVelocityTrackerTest.java (8)
 core/src/test/java/com/mymmer/castledefense/render/ViewportSetTest.java
 ```
+
+## Phase 10 — the interface on top of this router
+
+`UiRoot` is a `UiConsumer` like any other, registered **before** the world
+handler, so nothing about the ownership model below changes: it claims a press or
+it does not, and if it does, that pointer belongs to it for the whole gesture.
+
+What Phase 10 adds is proof that the model holds with a real interface on it,
+driven through `GameInput.touchDown` with screen pixels rather than around it
+(`UiInputTest`):
+
+- a press on a HUD control never reaches the world — including the horn with an
+  enemy standing behind it, and including a *spent* horn, because a button that
+  stops claiming presses once it is unusable becomes a hole to grab through;
+- a press that misses every HUD control does reach the world, which is how
+  grabbing works at all — the HUD is the only non-modal screen;
+- a drag that started on a button stays with the button even when it travels
+  across the field;
+- a modal screen opening under a live finger does **not** steal the gesture,
+  because ownership was decided at press time;
+- a cancel arrives as a cancel, not a release;
+- a second finger on the interface leaves the first one's world interaction
+  intact.
+
+**Skills are a two-stage cast**, which is the only new interaction shape: tapping
+a targeted skill arms it, and the following world press casts it. That press is
+claimed by the HUD as well, so casting never also grabs. The source casts at the
+mouse position; a touch device has no cursor.
+
+**Android Back** enters through `UiRoot.back()`, which returns the navigation
+graph's own `BackResult` rather than a boolean — `EXIT_APP` is a decision for the
+platform layer, and "unhandled" is not the same thing as "leave the app".
+
+Desktop and Android share one path: `DesktopInput` and `TouchInput` both feed
+`GameInput`, and below that there is one router and one `UiRoot`. See
+[`UI.md`](UI.md).

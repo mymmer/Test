@@ -168,3 +168,29 @@ nothing in this subsystem touches it.
 
 `ClassicFlowTest`, `EndlessFlowTest`, `ScoringTest`, `ChallengeHornTest`,
 `WeatherTest`, `RunStateTest`, `AnnouncementsTest`, `ProgressionParityTest`.
+
+## Phase 10 — how a player reaches all of this
+
+The flows above are now driven through `Navigation`, which holds every transition
+in one class; no screen sets a game state itself
+(`ArchitectureTest.screensRouteThroughNavigation`).
+
+```
+   MENU ──choose mode──> SHOP ──start/resume──> PLAYING ──> GAMEOVER ──> MENU
+                          │  ^                     │  ^
+                       TALENTS                  PAUSED
+```
+
+The Classic armoury's action button sends in the next wave; the Endless one
+resumes. Both are `Navigation.startPlaying()`, which asks the session which mode
+it is — the screen does not branch on mode to decide what the button *does*, only
+what it is labelled.
+
+**Restarting is a genuine reset.** `UiIntegrationTest.restartIsFresh` plays a
+Hard Endless run with towers, talents, an unlocked skill on cooldown and a live
+horde, loses it, returns to the menu through the game-over button and starts a
+new Classic run — then asserts nothing survives: no talent ranks, no talent
+points, no purchases, no towers, no unlocked skills, no lingering cooldown, no
+enemies, no projectiles, no dropped items, starting gold restored, and the new
+difficulty in force. `screensRebindAfterRestart` additionally proves the *screens*
+read the new run's subsystems rather than the old ones they were holding.

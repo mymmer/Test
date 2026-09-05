@@ -158,3 +158,30 @@ whole `TalentTree`.
 failures, validation), `TalentEffectsTest` (cross-system, live),
 `TalentQuirksTest`, `ProgressionNineParityTest` (every effect at every rank
 against Python).
+
+## Phase 10 — the talent screen
+
+Data-driven end to end: the screen walks the table, branch by branch, and builds
+one `UiRect` per node keyed by the node's stable id. There is no per-talent code
+and no switch on a talent name anywhere in `TalentScreen`; a new entry in
+`talents.json` appears on screen, and the only thing needing a hand is its
+localisation key (which `UiTextTest` fails until it is added).
+
+It reads the tree and never computes an effect. Rank, cap, unlocked, buyable,
+points and purchase all come from `TalentTree`; the number in a tooltip is the
+tree's own `valueAt(rank)`, so a tooltip cannot disagree with the game.
+
+**Tap to inspect, tap again to buy.** Python hovers for the detail panel and
+clicks to buy, which a touchscreen cannot do. A locked node is still pressable —
+tapping it selects it and shows why it is locked, which is the mobile equivalent
+of the hover — and the *tree* refuses the purchase. The gameplay command is
+`purchase(id)` either way.
+
+**Deep Foundations is unchanged**, quirk included: its description still claims
++50% castle maximum health at rank 5, nothing reads the value, and buying all
+five ranks through the interface leaves the castle exactly as tough as it was
+(`UiIntegrationTest.deepFoundationsStaysInert`). The port reproduces the game, not
+its tooltip.
+
+Buying **Light Fingers** calls `run.refreshGrabCooldown()` — the one talent whose
+effect the cursor caches.

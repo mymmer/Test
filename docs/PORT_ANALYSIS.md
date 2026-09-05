@@ -640,6 +640,38 @@ temporal and are meant to be doubles.
 
 ---
 
+### 14.2 Interface differences (Phase 10)
+
+A touchscreen cannot do some of what a mouse does. Each row below sends the
+identical gameplay command; none of them reaches a subsystem, and none changes a
+number.
+
+| Source | Port | Why |
+|---|---|---|
+| Hover shows talent details, click buys | Tap to inspect, tap again to buy | There is no hover on a touchscreen. A locked node is still pressable and still selectable — the *tree* refuses the purchase |
+| `P` / `ESC` leaves pause | A RESUME button, plus Android Back | Python's pause panel handles **no clicks at all**; its mouse chain has no `PAUSED` branch. A phone has no ESC key, so the state would be unexitable |
+| Skills cast at the mouse position | Arm on the bar, then tap the target | A finger has no cursor to cast at. Untargeted skills still fire on the tap |
+| Fixed 1280x720 window | Safe areas, reflow, 44-unit touch targets | Phones have cutouts, gesture bars and thumbs. The **world** viewport is still exactly 1280x720 on every device, so no gameplay coordinate moves |
+| Discount assigned in the shop's draw loop (§14 above) | Computed live at the point of sale | Already deviated in Phase 9; Phase 10 keeps it, and the shop screen has no cost arithmetic at all |
+
+Behaviours reproduced rather than corrected, now that a player can see them:
+
+| Behaviour | Kept because |
+|---|---|
+| **Deep Foundations' tooltip lies** | It claims +50% castle maximum health at rank 5; nothing in the shipped game reads the value. Buying all five ranks through the interface changes the castle by exactly nothing (`UiIntegrationTest.deepFoundationsStaysInert`). The port reproduces the game, not its tooltip |
+| **The Endless horn stays spent all run** | It re-arms per wave in Classic and never in Endless. The button remains present and pressable, and does nothing |
+| **An unaffordable shop card is still clickable** | `try_buy` runs for any card the click lands on and answers "Not enough gold!". Making the card refuse the *press* would silently swallow it — and would open a hole for the press to fall through into a grab |
+| **Settings is reachable only from the menu** | The source's handler has no other route to it. This is also what makes the run-difficulty guarantee enforceable rather than assumed |
+
+Two port defects Phase 10 found in earlier code, both fixed:
+
+| Defect | Detail |
+|---|---|
+| **Two entry points into a run disagreed** | `CastleDefenseGame.startRun` called `RunWorld.beginRun` directly and left the game `PLAYING`, while the menu button routes through `Navigation.chooseMode` and opens the first armoury. Found by staging a screenshot: `--screen menu` produced a shop. Fixed by routing the entry point through the graph, so there is one way in |
+| **Preferred difficulty was never seeded** | `UiRoot`'s was null until the player touched the setting, so a run started before then had no difficulty selected in the menu. It now defaults from `SaveData` |
+
+---
+
 ## 15. Phase plan
 
 | Phase | Content | Exit criterion |

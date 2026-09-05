@@ -10,8 +10,8 @@ Legend: `[ ]` not started · `[~]` in progress · `[x]` ported (compiles, believ
 Nothing is complete merely because it compiles. A row may only reach `[T]` when a named
 test exercises it.
 
-**Phase status: Phases 1, 3, 4, 5, 6, 7, 8 and 9 complete, plus the pre-Phase-8
-time-domain hardening. Phase 2 implemented and hardened but NOT fully tested —
+**Phase status: Phases 1, 3, 4, 5, 6, 7, 8, 9 and 10 complete, plus the
+pre-Phase-8 time-domain hardening. Phase 2 implemented and hardened but NOT fully tested —
 the Android assembly gate is still open because Google's Maven is unreachable
 from the build environment, and stays open until `./gradlew verifyAndroid`
 succeeds on a machine with the SDK.**
@@ -24,8 +24,17 @@ difficulty-scaled fire clock, and a disruption the player performs by hand.
 Phase 8 added the run itself: `RunWorld` assembles the field, the fight and the
 pacing, and two directors run the two modes. Phase 9 adds the player's half of it
 — 38 talents, 11 shop items, 3 active skills and the full difficulty
-integration. **The gameplay is now complete.** What is left is rendering:
-Phases 10 and 11.
+integration. **The gameplay is now complete.** Phase 10 adds the interface —
+every screen, the navigation graph, safe areas, touch targets, text layout and
+localisation — leaving Phase 11 for the entity, effect and weather rendering the
+interface deliberately does not do.
+
+Phase 10's load-bearing decision is that the interface is **custom immediate
+layout, not Scene2D**. Scene2D would have brought a second pointer-ownership model
+beside `InputRouter`'s, and two answers to "who owns this finger" is the exact bug
+Phase 4 exists to prevent. The custom path also lays out headlessly, which is why
+the layout is asserted at seven screen shapes in unit tests rather than eyeballed
+in a screenshot. See [`docs/subsystems/UI.md`](java-port/docs/subsystems/UI.md).
 
 **A skin cannot change gameplay, and that is now enforced three ways:**
 gameplay packages cannot import `assets` (`ArchitectureTest`);
@@ -632,18 +641,75 @@ Contracts: [`TALENTS.md`](java-port/docs/subsystems/TALENTS.md),
 
 ## Phase 10 — UI
 
-- [ ] Main menu + mode picker + difficulty row + settings button
-- [ ] Settings screen
-- [ ] Shop screen (grid, cards, icons, counter tags, start/resume button)
-- [ ] Realtime Endless shop (world frozen)
-- [ ] Talent screen (measured grid, tooltip, back)
-- [ ] HUD vertical stack (tier/badge/gold, wall, multiplier, health, score, talents, clock)
-- [ ] Boss health bars (two)
-- [ ] Pause / game-over panels
-- [ ] Text layout engine (wrap, line height, paragraph fit)
-- [ ] Safe-area anchoring
-- [ ] Enlarged touch targets
-- [ ] Localisation lookup for all user-facing strings
+Contract: [`docs/subsystems/UI.md`](java-port/docs/subsystems/UI.md),
+[`TEXT_LOCALIZATION.md`](java-port/docs/subsystems/TEXT_LOCALIZATION.md).
+
+**Framework decision: custom immediate layout, not Scene2D.** Recorded in `UI.md`
+§2 and held by `ArchitectureTest.noScene2dAtAll`.
+
+- [T] Main menu + mode picker + difficulty row + settings button — `MenuScreens.MainMenu`
+- [T] Settings screen — mute, difficulty, clear high score, and nothing else, matching
+      a source whose settings screen has exactly those. `MenuScreens.Settings`
+- [T] Shop screen — eleven reflowing cards, every number asked of `Shop`, number
+      hotkeys in the source's order. `ShopScreen`
+- [T] Realtime Endless shop — the freeze is the state machine's; 120 frames in the
+      armoury move play time, enemy positions, the tier ladder and the spawn timer
+      by exactly nothing. `UiIntegrationTest.realtimeShopFreezesThroughTheUi`
+- [T] Talent screen — data-driven over all 38 nodes, tap to inspect then tap to
+      buy, tooltip values read from the tree. `TalentScreen`
+- [T] HUD measured row stack — title/badge/gold, wall, multiplier, health, score,
+      talents, clock; rows appended only when they apply and the panel sized to
+      fit, as in the source. `HudScreen`
+- [T] Boss health bars — a list, not a `currentBoss`; two live bosses get two
+      non-overlapping bars and a death removes one cleanly. `UiIntegrationTest.twoBossBars`
+- [T] Pause / game-over panels — pause has one control (RESUME) and deliberately no
+      settings door; game over routes to the menu, which resets
+- [T] Skill bar — two-stage targeting, readiness from `isReady`, cooldown display
+      frozen with the world
+- [T] Challenge Horn button — pressable when spent so the press is consumed rather
+      than falling through to a grab
+- [T] Navigation graph — every transition in `Navigation`; no screen sets a state
+      (`ArchitectureTest.screensRouteThroughNavigation`). `NavigationTest`
+- [T] **Difficulty cannot change mid-run** — the Phase 9 snapshot's condition.
+      Settings only from MENU, no in-run screen has a difficulty control at all,
+      and the preference applies to the next run. `NavigationTest`
+- [T] Text layout engine — wrap, ellipsize, fit-to-width, paragraph fit with a
+      `clipped` report; font injected as a `Measurer` so it tests headlessly
+- [T] Safe-area anchoring — insets through `PlatformServices`, converted with the
+      viewport's own ratios, degrading to the full rect on absurd input; the world
+      viewport is provably untouched
+- [T] Enlarged touch targets — 44 UI units minimum on the hit box only, never the
+      artwork; no two controls overlap on any screen at any tested shape
+- [T] Responsive layout — 16:9, 18:9, 19.5:9, 20:9 and portrait, by reflow
+- [T] Localisation for all user-facing strings — completeness checked against the
+      data tables *and* by scanning the source for literal keys
+- [T] Long-string layout — every screen at 3x English width and 2x line height
+- [T] Input consumption — proven through the real `InputRouter` with a world spy
+      underneath. `UiInputTest`
+- [T] Android Back through the existing seam — `UiRoot.back()` returns the graph's
+      `BackResult`; `EXIT_APP` is the platform layer's decision
+- [T] Desktop mouse on the same logical path — one `GameInput`, one router, one
+      `UiRoot`. `UiInputTest.mouseAndTouchAreOnePath`
+- [x] `UiRenderer` — UI chrome only; built-in `BitmapFont`, whose metrics feed the
+      layout so it is measured with the font that draws it. Entities are Phase 11
+- [x] UI debug overlay — safe area, visual and hit bounds, viewports, live pointer
+      and its owner, with violations in red. `--ui-debug`
+- [x] Device-frame presets and simulated cutouts — `--device`, `--insets`,
+      `--screen`, through `PlatformServices`, i.e. the production seam
+- [x] Screenshot smoke matrix — 8 screens x 3 device frames + the debug overlay,
+      `tools/ui/screenshots.sh`. Evidence, not a gate: the layout assertions are in
+      `UiLayoutTest`
+
+Two defects Phase 10 found and fixed in earlier code:
+
+- `CastleDefenseGame.startRun` called `beginRun` directly, bypassing the navigation
+  graph and leaving the game `PLAYING` where the menu button opens the first
+  armoury — two entry points that disagreed. It now routes through `chooseMode`.
+- `UiRoot`'s preferred difficulty was never seeded, so it was null until the player
+  touched the setting. It now defaults from the save.
+
+Not in Phase 10, by the brief: entity and skin rendering, particles, weather
+visuals, skill visual effects, screen-shake compositing, audio.
 
 ## Phase 11 — Effects & graphics
 

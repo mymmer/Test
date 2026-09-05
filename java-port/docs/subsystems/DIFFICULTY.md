@@ -101,3 +101,28 @@ rather than the restored field, because `think` mutates and restores `speed`.
 
 `DifficultyIntegrationTest`, `DifficultyTableTest`, `EnemySpeedTest`,
 `ChallengeHornTest`, `BossParityTest`.
+
+## Phase 10 — difficulty is chosen before a run, never during one
+
+Phase 9 captures the difficulty into `RunSession` when a run is created. Phase 10
+was required not to open a gameplay-reachable route that would change it
+afterwards, and it does not — enforced rather than assumed:
+
+- `Navigation.canChangePreferredDifficulty()` is true only in `MENU` and
+  `SETTINGS`;
+- `canOpenSettings()` is true only in `MENU`;
+- `PAUSED` has exactly one control, RESUME — no settings door, matching a source
+  whose pause handler processes no clicks at all;
+- the only route from a run back to `MENU` runs through `GAMEOVER`, which resets
+  first;
+- **no in-run screen has a difficulty control at all** —
+  `NavigationTest.noInRunScreenHasADifficultyButton` walks every control of every
+  in-run screen rather than the ones it remembers to check.
+
+Changing the setting stores a preference that the **next** run uses
+(`NavigationTest.preferenceAppliesToTheNextRun`); a run in progress keeps the
+difficulty it started with, and `difficultyLockedDuringARun` proves the attempt is
+refused rather than silently ignored.
+
+The settings screen says so in as many words: *"Applies to your NEXT run. A run in
+progress keeps the difficulty it started with."*

@@ -276,3 +276,26 @@ core/src/test/java/com/mymmer/castledefense/game/GameWorldTest.java    (9)
 core/src/test/java/com/mymmer/castledefense/entity/EntityListTest.java (10)
 core/src/test/java/com/mymmer/castledefense/util/CollisionsTest.java   (8)
 ```
+
+## Phase 10 — the interface does not participate in time
+
+The interface holds no clock and no accumulator. Every duration it displays is
+asked of the subsystem that owns it — `SkillPanel.cooldownRemaining`,
+`RunSession.playTime` — which means it is frozen exactly when the world is and
+resumes exactly when the world does, with no second timer to drift.
+
+`ArchitectureTest.uiHasNoRngAndNoClock` bans `System.currentTimeMillis`,
+`System.nanoTime`, `Gdx.graphics.getDeltaTime` and `TimeUtils` from the `ui`
+package outright, alongside every way of constructing a generator.
+
+`UiRoot.layout()` runs once per **rendered frame**, never per simulation step, and
+takes its inputs from gameplay state and the viewport only — never from the frame
+delta. A layout that varied with the frame rate would be a second, badly
+integrated clock.
+
+The **Endless armoury freeze** is a state-machine property, not an interface one:
+the state is `SHOP`, the machine does not advance the world in it, and no screen
+holds a timer or suppresses a step.
+`UiIntegrationTest.realtimeShopFreezesThroughTheUi` opens it the way a player
+does, runs 120 frames, and asserts play time, every enemy position, the tier
+ladder and the spawn timer are unchanged to the bit.

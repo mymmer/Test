@@ -371,6 +371,34 @@ public final class RunWorld implements BossContext, DirectorContext, AllyFactory
         return true;
     }
 
+    /**
+     * Ends the run and goes back to the front end.
+     *
+     * <p>Python's {@code GAMEOVER} handler: {@code reset()} <b>then</b>
+     * {@code state = MENU}, so nothing from the finished run is reachable from
+     * the menu. Everything a run owns is cleared here, using the same path a
+     * new run uses.
+     */
+    public void resetToMenu() {
+        clearField();
+        talents.reset();
+        shop.reset();
+        skills.reset();
+        bounceLevel = 0;
+        castle = new Castle(this, defenceTable);
+        barricade = new Barricade(this);
+        outpost = new Outpost(this);
+        spikes = new SpikeWalls(this);
+        cursor.setGrabLevel(0);
+        cursor.setMultiLevel(0);
+        session.begin(session.mode(), difficulty, session.seed());
+        weather.reset();
+        shake.reset();
+        banners.clear();
+        director = null;
+        world.setState(GameState.MENU);
+    }
+
     @Override
     public void onCastleDestroyed() {
         if (world.state() == GameState.GAMEOVER) {
