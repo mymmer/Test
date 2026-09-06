@@ -36,6 +36,16 @@ public final class TrollKing extends Boss {
         this.leapTimer = ctx.rng().uniformSeconds(boss.leapIntervalMin, boss.leapIntervalMax);
     }
 
+    @Override
+    public boolean regaliaAttached() {
+        return hasCrown();
+    }
+
+    @Override
+    public float swing() {
+        return smash();
+    }
+
     public boolean hasCrown() {
         return hasCrown;
     }

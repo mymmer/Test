@@ -181,3 +181,29 @@ core/src/test/java/com/mymmer/castledefense/boss/
     TestBossWorld.java  BossJson.java
 core/src/test/java/com/mymmer/castledefense/ArchitectureTest.java  (9)
 ```
+
+## Phase 11 — bodies, regalia and the display surface
+
+Body, aura, breath, ward, crown, staff and the reeling club are world rendering.
+The **health bar is not**: Phase 10's UI owns it, drawn unshaken, and a second
+bar in world space would disagree with the first during a screen shake.
+
+**Regalia follows gameplay, never animation.** The crown is on the Troll King's
+head only while `regaliaAttached()` is true; the instant it comes off, the head
+is bare and a real `DroppedItem` is drawn at its own position. Nothing waits for
+an animation, because an animation cannot be the reason a detached item still
+looks attached.
+
+The **regalia ward** arc is the boss's own cooldown against its own growing span
+— `REGALIA_COOLDOWN * (1 + GROWTH * (taken - 1))` — because it is the player's
+only cue that grabbing again will fail, and an arc emptying at the wrong rate
+would mislead them about when to try.
+
+### The uniform display surface
+
+`ArchitectureTest` forbids `instanceof TrollKing`, and rightly: once a type test
+is acceptable in one place it spreads. So `Boss` publishes neutral-default
+accessors that each boss overrides where they mean something —
+`regaliaAttached()`, `swing()`, `venting()`, `reeling()`, `wardStrength()`,
+`orbCharge()`, `disarmedFor()`. A painter switches on `bossType()` to choose a
+body and reads these for its state.

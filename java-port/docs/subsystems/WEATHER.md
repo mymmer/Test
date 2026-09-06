@@ -100,3 +100,19 @@ of an enemy rather than of the weather.
 
 `WeatherTest`, `ProgressionParityTest.weather`, `EnemyPhysicsTest` (the airborne
 integration that consumes the wind).
+
+## Phase 11 — weather visuals
+
+Rendering reads the weather and draws it. It cannot create a strike.
+
+- **Wind streaks** above `|wind| > 40`, positioned by a hash of index and time
+  exactly as the source's `seed` expression does — not a random draw, so they
+  stream rather than flicker.
+- **The storm veil**, a full-screen tint at `stormFlash` strength.
+- **Lightning bolts** as a jagged path from the clouds, keyed to the bolt so it
+  keeps its shape for its whole life. In the source this draw perturbs the
+  gameplay generator; here it cannot.
+
+**Gameplay lightning and visual lightning are separate.** `Weather` chooses the
+target, the damage and the timing; this draws the result. LOW quality shows fewer
+streaks and a simpler bolt, and never removes a strike.

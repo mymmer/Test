@@ -541,6 +541,14 @@ public abstract class Enemy extends Entity implements Target {
             ctx.addKill();
             ctx.trace().event(TraceEvent.GOLD_PAYOUT, ctx.step(), uid(),
                     gain, mult, config.typeId);
+            //  A death sprays and pays.  Both are notices, not decisions: the
+            //  sink cannot refuse and cannot answer back.
+            ctx.visuals().burst(x, y, 14,
+                    com.mymmer.castledefense.render.VisualEvents.BLOOD,
+                    240f, 0.5f, 3f, 900f,
+                    com.mymmer.castledefense.render.VisualEvents.Shape.RECT);
+            ctx.visuals().text(x, y - 18f, "+" + gain,
+                    com.mymmer.castledefense.render.VisualEvents.GOLD, 20f, 0.9f);
             resolveFling();
         }
     }

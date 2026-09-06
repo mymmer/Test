@@ -72,6 +72,11 @@ public final class Volatile extends Enemy {
      */
     public void detonate() {
         float dmg = damage() * BLAST_DAMAGE;
+        //  The blast is drawn once, here, from the same radius the damage uses
+        //  -- so what the player sees is exactly what was hit.
+        ctx.visuals().burst(x, y, 34, com.mymmer.castledefense.render.VisualEvents.FIRE, 420f, 0.7f, 5f, 700f,
+                com.mymmer.castledefense.render.VisualEvents.Shape.CIRCLE);
+        ctx.visuals().ring(x, y, 18, com.mymmer.castledefense.render.VisualEvents.SPARK, BLAST_RADIUS * 2.2f, 0.45f, 3f);
 
         try (EntityList<Enemy>.Snapshot snap = ctx.horde().beginSnapshot()) {
             for (int i = 0; i < snap.size(); i++) {

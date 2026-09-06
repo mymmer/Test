@@ -133,4 +133,17 @@ public interface EnemyContext extends DefenceContext {
 
     /** The endgame tier table, in ascending wave order. */
     EndgameTier[] endgameTiers();
+
+    /**
+     * Where one-shot visual notices go.
+     *
+     * <p>A default, so this seam gains a capability without any implementor
+     * having to know about it: every fake in the test suite answers
+     * {@code NONE} and the simulation behaves identically. One-way — nothing
+     * here returns anything and nothing can fail, so no gameplay decision can
+     * depend on whether something is drawing.
+     */
+    default com.mymmer.castledefense.render.VisualEvents visuals() {
+        return com.mymmer.castledefense.render.VisualEvents.NONE;
+    }
 }

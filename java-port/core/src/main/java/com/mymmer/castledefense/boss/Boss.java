@@ -210,6 +210,55 @@ public abstract class Boss extends Enemy {
     }
 
     /** True when this boss's interactive point is a smack target, not a grab target. */
+    // ========================================================================
+    //  A uniform display surface
+    // ========================================================================
+    //
+    //  Phase 11 needs to draw three bosses differently, and `instanceof
+    //  TrollKing` in a painter is exactly what ArchitectureTest forbids -- for
+    //  good reason: the moment a type test is acceptable in one place it spreads.
+    //  So each boss's distinguishing display state is published here with a
+    //  neutral default and overridden by the one boss it applies to. A painter
+    //  switches on bossType() to pick a BODY and reads these for its STATE.
+    //
+    //  These are reads. None of them can change anything, and gameplay does not
+    //  call them.
+
+    /** Whether this boss still wears or holds its regalia. True if it has none. */
+    public boolean regaliaAttached() {
+        return true;
+    }
+
+    /** A melee swing in progress, 0..1. The Troll King's club. */
+    public float swing() {
+        return 0f;
+    }
+
+    /** Whether a breath weapon is firing right now. The Dragon's. */
+    public boolean venting() {
+        return false;
+    }
+
+    /** Seconds of staggered recovery left. The Dragon's, after a claw smack. */
+    public double reeling() {
+        return 0d;
+    }
+
+    /** A protective ward's strength, 0 when none. The Lich Lord's. */
+    public double wardStrength() {
+        return 0d;
+    }
+
+    /** A charging orb, 0..1. The Lich Lord's staff. */
+    public float orbCharge() {
+        return 0f;
+    }
+
+    /** Seconds left disarmed, 0 when armed. The Lich Lord's. */
+    public double disarmedFor() {
+        return 0d;
+    }
+
     public boolean isSmackTarget() {
         return false;
     }

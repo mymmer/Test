@@ -37,6 +37,11 @@ public final class SiegeRam extends Enemy {
         ramPush = 1f;
         ctx.castle().takeDamage(damage());
         ctx.spikes().bite(this);
+        //  The source's SMASH: stone chips off the wall and the word over it.
+        float front = ctx.castle().frontX();
+        ctx.visuals().burst(front, y, 26, com.mymmer.castledefense.render.VisualEvents.STONE, 320f, 0.6f, 5f, 900f,
+                com.mymmer.castledefense.render.VisualEvents.Shape.RECT);
+        ctx.visuals().text(front + 30f, y + 40f, "SMASH!", 0xFF8C6E, 26f, 0.9f);
     }
 
     @Override

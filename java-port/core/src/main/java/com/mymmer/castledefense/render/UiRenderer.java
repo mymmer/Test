@@ -78,10 +78,30 @@ public final class UiRenderer {
     private final RunWorld run;
     private final UiRoot ui;
 
+    /**
+     * The world's shake offset, applied to the two widgets that share it.
+     *
+     * <p>{@code Game.draw} paints the skill bar, the horn and the grab cursor
+     * into the world surface and only the stat panel and the menus onto the
+     * unshaken screen. So those move with a castle hit and the rest of the
+     * interface does not — reproduced rather than tidied, because a HUD that
+     * shakes as one is a different game to look at.
+     *
+     * <p>Only the <b>drawing</b> moves. The hit rectangles are the ones the
+     * layout produced, so a shaking button is still pressed where it was laid
+     * out — exactly as in the source, whose click tests use the fixed rect.
+     */
+    private float shakeX;
+    private float shakeY;
+
     private ShapeRenderer shapes;
     private SpriteBatch batch;
     private BitmapFont font;
     private final GlyphLayout glyphs = new GlyphLayout();
+    private final com.badlogic.gdx.math.Matrix4 baseMatrix =
+            new com.badlogic.gdx.math.Matrix4();
+    private final com.badlogic.gdx.math.Matrix4 shakeMatrix =
+            new com.badlogic.gdx.math.Matrix4();
     private FontMeasurer measurer;
 
     public UiRenderer(RunWorld run, UiRoot ui) {
@@ -90,6 +110,12 @@ public final class UiRenderer {
         }
         this.run = run;
         this.ui = ui;
+    }
+
+    /** This frame's world shake, from the world renderer. */
+    public void setWorldShake(float dx, float dy) {
+        this.shakeX = dx;
+        this.shakeY = dy;
     }
 
     public void create() {
@@ -129,8 +155,9 @@ public final class UiRenderer {
 
     public void render(ViewportSet viewports) {
         viewports.getUi().apply();
-        shapes.setProjectionMatrix(viewports.getUiCamera().combined);
-        batch.setProjectionMatrix(viewports.getUiCamera().combined);
+        baseMatrix.set(viewports.getUiCamera().combined);
+        shapes.setProjectionMatrix(baseMatrix);
+        batch.setProjectionMatrix(baseMatrix);
 
         GameState state = run.world().state();
         switch (state) {
@@ -153,6 +180,8 @@ public final class UiRenderer {
                 PANEL, PANEL_EDGE);
         drawStatRows(hud);
 
+        //  These two shake with the world; everything above does not.
+        beginShaken();
         for (int i = 0; i < hud.skillSlots().size; i++) {
             drawSkillSlot(hud.skillSlots().get(i), SkillId.values()[i]);
         }
@@ -164,9 +193,37 @@ public final class UiRenderer {
         if (hud.shopButton().visible()) {
             button(hud.shopButton(), Strings.get("hud.shop"), BUTTON, GOLD, 13f);
         }
+        endShaken();
+        //  Boss bars are Phase 10 UI and stay put: the source draws them on the
+        //  unshaken screen, and a health bar that jitters is unreadable exactly
+        //  when it matters most.
         for (int i = 0; i < hud.visibleBossBars(); i++) {
             drawBossBar(hud.bossBars().get(i), i);
         }
+    }
+
+    /**
+     * Translates the projection by the world shake, for the widgets that share it.
+     *
+     * <p>A matrix nudge rather than an offset threaded through every draw call:
+     * it cannot be forgotten in one of them, and it is undone in exactly one
+     * place.
+     */
+    private void beginShaken() {
+        if (shakeX == 0f && shakeY == 0f) {
+            return;
+        }
+        shakeMatrix.set(baseMatrix).translate(shakeX, shakeY, 0f);
+        shapes.setProjectionMatrix(shakeMatrix);
+        batch.setProjectionMatrix(shakeMatrix);
+    }
+
+    private void endShaken() {
+        if (shakeX == 0f && shakeY == 0f) {
+            return;
+        }
+        shapes.setProjectionMatrix(baseMatrix);
+        batch.setProjectionMatrix(baseMatrix);
     }
 
     /**
@@ -195,9 +252,12 @@ public final class UiRenderer {
                 y -= HudScreen.ROW_GAP
                         + line(x, y, run.castle().tierLabel(), TEXT_DIM, 18f);
             } else if ("hud.row.multiplier".equals(row)) {
+                //  Two placeholders: the multiplier and the head count that
+                //  earned it.  Passing one left a literal {1} on the HUD.
                 y -= HudScreen.ROW_GAP + line(x, y, Strings.format("hud.multiplier",
                         String.format(java.util.Locale.ROOT, "%.2f",
-                                run.goldMultiplier())), GOLD, 18f);
+                                run.goldMultiplier()),
+                        run.aliveEnemyCount()), GOLD, 18f);
             } else if ("hud.row.health".equals(row)) {
                 y -= HudScreen.ROW_GAP + 18f;
                 drawHealth(x, y, right - x);

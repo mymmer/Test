@@ -672,6 +672,33 @@ Two port defects Phase 10 found in earlier code, both fixed:
 
 ---
 
+### 14.3 Rendering differences (Phase 11)
+
+Rendering is where Pygame and libGDX differ most, so these are the deviations
+that could not be avoided — each with what was preserved instead.
+
+| Source | Port | Why, and what is kept |
+|---|---|---|
+| **Draw methods pull from the global `random`** — the shake offset, the lightning path, the castle cracks | the decoration stream, plus `VisualRng.stable` for fixed decoration | Otherwise the gameplay sequence depends on how many frames were rendered: a 144 Hz display would literally play a different game from a 60 Hz one. `RenderPurityTest` asserts ten thousand rendered frames move the gameplay generator by nothing |
+| `random.seed(1337)` … `random.seed()` around the cracks | a private generator keyed to 1337 | The same fixed crack pattern, without perturbing a shared stream on the way past |
+| The castle is built into a cached surface and blitted | drawn directly each frame | There is nothing to cache into without a framebuffer, which is a lifecycle Phase 11 does not need. Recorded as Phase 12's first profiling target |
+| Castle damage flash: `BLEND_RGBA_MULT` then `BLEND_RGBA_ADD` | an additive tinted pass | That composite has no direct batch equivalent. **A documented visual approximation** — recognisably the same red pulse, not bit-identical, and it adds no gameplay effect |
+| Glows via a new `SRCALPHA` surface per frame | concentric translucent discs | Same look; no texture allocated during a frame, by anything, anywhere |
+| `Projectile.trail` is a field on the projectile | trails live in the renderer, keyed by uid | A cosmetic list on a gameplay object is a list something can read. This way the shot's motion structurally cannot depend on it |
+| The scene is blitted at a random offset for shake | the world camera is offset for the world pass and restored | No render target, no resize handling, no full-screen resample every frame. Entities are never moved — that would be moving the game |
+| Sky drawn as stacked bands | one gradient quad | The bands showed seams where rows met, and this is one draw call instead of twenty-four |
+| No interpolation (fixed 60 fps window) | previous/current blend on fast movers | The port runs at the display's rate. Simulation positions stay authoritative; the blend is two floats handed to a draw call. Teleports are not blended |
+
+### 14.4 Port defects Phase 11 found
+
+| Defect | Detail |
+|---|---|
+| **Entities drawn upside down** | The simulation keeps Pygame's downward y — every ported formula and all 771 parity fixtures depend on it — and the renderer assumed libGDX's upward y. Static geometry had been flipped; entity positions had not. Found by *looking at* the first capture, which had the horde walking along the top of the sky. Fixed by putting the conversion in `WorldGeometry` at the single boundary where the renderer reads a position |
+| **The procedural skin could not be re-selected** | `SkinManager.load` looks for a descriptor file and the built-in skin has none, so switching *back* to procedural failed once a real skin was loaded — leaving no way to return to the fallback. Now special-cased, since it is the fallback and must always be reachable |
+| **`hud.multiplier` was formatted with one argument** | The key takes two — the multiplier and the head count that earned it — so the HUD showed a literal `{1}`. A Phase 10 slip, visible only once the row was drawn |
+
+---
+
 ## 15. Phase plan
 
 | Phase | Content | Exit criterion |

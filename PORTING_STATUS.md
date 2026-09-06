@@ -10,7 +10,7 @@ Legend: `[ ]` not started · `[~]` in progress · `[x]` ported (compiles, believ
 Nothing is complete merely because it compiles. A row may only reach `[T]` when a named
 test exercises it.
 
-**Phase status: Phases 1, 3, 4, 5, 6, 7, 8, 9 and 10 complete, plus the
+**Phase status: Phases 1, 3, 4, 5, 6, 7, 8, 9, 10 and 11 complete, plus the
 pre-Phase-8 time-domain hardening. Phase 2 implemented and hardened but NOT fully tested —
 the Android assembly gate is still open because Google's Maven is unreachable
 from the build environment, and stays open until `./gradlew verifyAndroid`
@@ -27,7 +27,10 @@ pacing, and two directors run the two modes. Phase 9 adds the player's half of i
 integration. **The gameplay is now complete.** Phase 10 adds the interface —
 every screen, the navigation graph, safe areas, touch targets, text layout and
 localisation — leaving Phase 11 for the entity, effect and weather rendering the
-interface deliberately does not do.
+interface deliberately does not do. Phase 11 does it: the world is drawn, from
+primitives, in the source's painter order, with the skin path and the effect
+systems behind it. **The game is now visually complete**, and what remains is
+Phase 12's optimisation work.
 
 Phase 10's load-bearing decision is that the interface is **custom immediate
 layout, not Scene2D**. Scene2D would have brought a second pointer-ownership model
@@ -713,16 +716,97 @@ visuals, skill visual effects, screen-shake compositing, audio.
 
 ## Phase 11 — Effects & graphics
 
-- [ ] Particles + floating text (pooled)
-- [ ] Screen shake compositing
-- [ ] Weather visuals (wind streaks, bolts, storm flash)
-- [ ] Skill visuals (bolts, meteors, fire zones, tornado funnel)
-- [ ] Procedural renderer for every unit, tower, structure, item
-- [ ] Skinned rendering path + animation states
-- [ ] Draw-order parity
-- [ ] `ShapeKit` rounded rects / arcs / bars / glows
+Contracts: [`RENDERING.md`](java-port/docs/subsystems/RENDERING.md),
+[`VISUAL_EFFECTS.md`](java-port/docs/subsystems/VISUAL_EFFECTS.md).
+
+**The rule the phase rests on: rendering reads gameplay and never touches it.**
+Enforced structurally (no gameplay mutator, no gameplay `Rng`, gameplay may name
+only `VisualEvents` in the render package) and behaviourally — ten thousand
+rendered frames leave every position, every hit point, the run clock and both
+halves of the generator's state exactly as they were.
+
+- [T] Draw-order parity — `DrawOrder.Layer` transcribes `Game.draw`; the enemy
+      comparator is `(flying, depth, x)`, and the sort runs on a buffer the
+      renderer owns so the authoritative roster keeps its insertion order.
+      `RenderPurityTest`
+- [T] Coordinate boundary — the simulation keeps Pygame's downward y (771 parity
+      fixtures depend on it); `WorldGeometry` converts at the one place the
+      renderer reads a position. Angles flip too. Found by the first capture,
+      which had the horde walking along the top of the sky
+- [T] Screen shake — a world-camera offset, restored before the frame ends: no
+      entity moves, no hitbox moves, and a pointer aimed at world x still lands
+      on world x. No drift over a thousand cycles. `ShakeAndInterpolationTest`
+- [T] World/UI separation — the skill bar, horn and grab cursor shake because the
+      source draws them into the shaken surface; the HUD panel, menus and boss
+      bars do not. Only the drawing moves — hit rectangles stay put
+- [T] Interpolation — enemies, projectiles and items; previous transforms live in
+      the renderer keyed by uid, never on the entities; a jump past 240 px is a
+      teleport and is not blended; a run reset clears the history
+- [x] Procedural renderer — background, castle (all 6 wall tiers, with the
+      turret, portcullis, buttresses and runes), 3 towers, outpost, barricade,
+      spikes, all 11 enemies, the ally, all 3 bosses, crown and staff, every
+      projectile kind
+- [T] Skin path with **per-visual** fallback — a skin missing one unit keeps the
+      rest; missing art warns once per skin/visual/state and never per frame;
+      static and animated skins both valid; animation timing is cosmetic.
+      `ArtFallbackTest`
+- [T] Particles + floating text — pooled at the source's caps, every field reset
+      on reuse, bounded, cleared on a new run. `EffectsAndQualityTest`
+- [T] Presentation-event seam — `VisualEvents`, three void methods, one sink,
+      default `NONE`. Deliberately **not** `SimulationTrace` and not an event bus;
+      a run with a sink attached is bit-identical to one without
+- [x] Weather visuals — wind streaks, storm veil, jagged bolts; the strike itself
+      stays Phase 8's
+- [x] Skill visuals — Lightning, Meteor, FireZone flames, Tornado funnel, all
+      from gameplay geometry; no radius or lifetime is duplicated
+- [x] Damage flashes, glows and auras — from gameplay timers; no texture is
+      allocated during a frame
+- [T] `ShapeKit` — the Pygame primitives this game uses and no more; rounded
+      rectangles built once for all ~80 uses
+- [T] Quality is cosmetic — LOW/MEDIUM/HIGH change particle counts, glow, shadows
+      and trails and nothing else; a minute of identically seeded Endless matches
+      exactly on LOW and HIGH. `EffectsAndQualityTest`
+- [x] Visual scenario harness — 14 controlled states built from **real gameplay
+      objects**; `--scenario`. No parallel implementation
+- [x] Rendering diagnostics in the debug overlay — fps, frame time, alpha,
+      quality, drawn counts, particles against the cap, skin, atlas, missing art
+- [x] Visual baseline — 18 captures in `build/visual-baseline`, including three
+      device shapes and one with the overlay on
+
+Two defects this phase found and fixed:
+
+- **Entities were drawn upside down.** The simulation keeps Pygame's y and the
+  renderer assumed libGDX's. Found by looking at the first capture, not by a
+  test — which is exactly what the capture suite is for.
+- **The procedural skin could not be re-selected.** `SkinManager.load` looked for
+  a descriptor file, and the built-in skin has none, so switching *back* to it
+  failed once a real skin was loaded. Found by `ArtFallbackTest`.
+
+Not in Phase 11, by the brief: the Phase 12 optimisation rewrite, spatial
+broadphase, cluster grids, target caches, gameplay pooling changes, audio.
+
+### Deferred with a reason
+
+- **Python↔Java visual reference captures.** Attempted and set aside. The Python
+  game has no headless or screenshot mode, and adding one means either modifying
+  the authoritative source — which the brief forbids — or writing a harness that
+  drives Pygame's event loop and window, which is a larger and more fragile piece
+  of software than the renderer it would be checking. The parity that matters
+  (silhouette, relative size, placement, layers, colours) is verifiable by reading
+  the source's draw methods beside the Java painters, which is how every body in
+  this phase was written. Recorded here rather than half-built.
 
 ## Phase 12 — Mobile optimisation
+
+> **Input from Phase 11.** The first thing to profile is the castle's brickwork:
+> a few hundred small rectangles redrawn every frame, because the source caches it
+> into a surface and there is nothing to cache into here without a framebuffer. It
+> was left alone deliberately — caching it now would mean inventing an
+> invalidation rule before knowing what the profile says. Nothing else in the
+> renderer allocates per entity per frame, and no texture is created during a
+> frame at all. Atlas memory is currently **zero**: the shipped game runs on the
+> procedural skin and loads no atlas, so the mobile asset budget starts from
+> whatever artwork is added rather than from anything already present.
 
 > **Rule for this phase:** correctness and parity come first. Every optimisation
 > below touches an order-dependent algorithm, so none of them may be applied

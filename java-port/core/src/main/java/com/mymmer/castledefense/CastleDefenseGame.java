@@ -60,6 +60,7 @@ public class CastleDefenseGame extends ApplicationAdapter {
     /** The interface, built with it. Registered as the router's first consumer. */
     private volatile com.mymmer.castledefense.ui.UiRoot ui;
     private volatile com.mymmer.castledefense.render.UiRenderer uiRenderer;
+    private volatile com.mymmer.castledefense.render.WorldRenderer worldRenderer;
     private volatile com.mymmer.castledefense.render.UiDebugOverlay uiDebug;
 
     //  volatile: libGDX runs create()/render() on the application thread while
@@ -80,12 +81,12 @@ public class CastleDefenseGame extends ApplicationAdapter {
 
     /** The constructor a launcher uses, supplying its platform implementation. */
     public CastleDefenseGame(PlatformServices platform) {
-        this(new GameRendererFactory() {
-            @Override
-            public GameRenderer create() {
-                return new FoundationRenderer();
-            }
-        }, new Services(platform), true);
+        //  Phase 11: the real world renderer. It needs the run and the asset
+        //  system, which do not exist until create(), so the factory is a
+        //  closure over this game rather than a constant -- and the injecting
+        //  constructors below still get a renderer that draws nothing, which is
+        //  what lets the whole lifecycle be tested with no GL context.
+        this(null, new Services(platform), true);
     }
 
     /**
@@ -106,7 +107,7 @@ public class CastleDefenseGame extends ApplicationAdapter {
     private CastleDefenseGame(GameRendererFactory rendererFactory, Services services,
                               boolean paintUi) {
         this.paintUi = paintUi;
-        if (rendererFactory == null) {
+        if (rendererFactory == null && !paintUi) {
             throw new IllegalArgumentException("rendererFactory must not be null");
         }
         if (services == null) {
@@ -152,7 +153,22 @@ public class CastleDefenseGame extends ApplicationAdapter {
             inputRouter.setWorldHandler(run.cursor());
         }
 
-        renderer = rendererFactory.create();
+        if (rendererFactory != null) {
+            renderer = rendererFactory.create();
+        } else {
+            //  The world renderer, built now that the run and the assets exist.
+            worldRenderer = new com.mymmer.castledefense.render.WorldRenderer(
+                    run, services.rng(), services.skins(), services.assets());
+            worldRenderer.setQuality(services.quality());
+            renderer = worldRenderer;
+            //  One-shot visual events go to the renderer's particle system and
+            //  nowhere else.  Until this line the sink is VisualEvents.NONE and
+            //  the simulation behaves identically -- which is the property the
+            //  headless tests rely on.
+            if (run != null) {
+                run.setVisualEvents(worldRenderer.events());
+            }
+        }
         renderer.create(viewports);
         if (ui != null && paintUi) {
             //  The interface paints only once a GL context exists, and only then
@@ -165,6 +181,7 @@ public class CastleDefenseGame extends ApplicationAdapter {
                     uiRenderer.measurer()));
             uiDebug = new com.mymmer.castledefense.render.UiDebugOverlay(ui, input);
             uiDebug.create();
+            uiDebug.setWorldRenderer(worldRenderer);
         }
         // A backend may never call resize() before the first frame (the headless
         // one does not), so start from a defined layout.
@@ -220,6 +237,20 @@ public class CastleDefenseGame extends ApplicationAdapter {
                 run.setPointer(p.isDown(), p.worldX(), p.worldY());
             }
             input.endStep();
+            //  Interpolation history is recorded per simulation step, which is
+            //  the interval it exists to span.  It reads gameplay and writes
+            //  only into the renderer's own map.
+            if (worldRenderer != null) {
+                worldRenderer.onSimulationStep();
+            }
+        }
+
+        //  Particles and floating text are presentation, so they run on the
+        //  frame delta -- and only while the world itself is running, which is
+        //  the same rule that freezes the Endless armoury.
+        if (worldRenderer != null
+                && world.state() == com.mymmer.castledefense.game.GameState.PLAYING) {
+            worldRenderer.updatePresentation(delta);
         }
 
         if (ui != null) {
@@ -231,7 +262,14 @@ public class CastleDefenseGame extends ApplicationAdapter {
             renderer.render(viewports, simulation.alpha());
         }
         //  The interface last, over the world, and the overlay last of all.
+        //  The skill bar, the horn and the grab cursor shake with the world --
+        //  the source draws those three into the shaken surface and the HUD
+        //  panel and menus onto the unshaken screen.  See RENDERING.md.
         if (uiRenderer != null) {
+            if (worldRenderer != null) {
+                uiRenderer.setWorldShake(worldRenderer.shakeX(),
+                        worldRenderer.shakeY());
+            }
             uiRenderer.render(viewports);
         }
         if (uiDebug != null) {
@@ -240,6 +278,10 @@ public class CastleDefenseGame extends ApplicationAdapter {
     }
 
     /** The interface's debug overlay, or null before create(). */
+    public com.mymmer.castledefense.render.WorldRenderer getWorldRenderer() {
+        return worldRenderer;
+    }
+
     public com.mymmer.castledefense.render.UiDebugOverlay getUiDebugOverlay() {
         return uiDebug;
     }
@@ -287,6 +329,7 @@ public class CastleDefenseGame extends ApplicationAdapter {
             uiRenderer.dispose();
             uiRenderer = null;
         }
+        worldRenderer = null;       // disposed above, as `renderer`
         if (uiDebug != null) {
             uiDebug.dispose();
             uiDebug = null;
@@ -347,6 +390,12 @@ public class CastleDefenseGame extends ApplicationAdapter {
         //  start one.  A second entry point that called beginRun directly would
         //  land in a different state from the menu button -- and it did: it
         //  left the game PLAYING while the menu opens the first armoury.
+        if (worldRenderer != null) {
+            //  No particle, trail or interpolation history may cross a run
+            //  boundary; a fresh run must not blend an entity in from where the
+            //  last one's was.
+            worldRenderer.reset();
+        }
         if (ui != null) {
             if (!ui.navigation().chooseMode(mode, ui.preferredDifficulty())) {
                 return Long.MIN_VALUE;

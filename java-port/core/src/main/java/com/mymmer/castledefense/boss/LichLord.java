@@ -56,6 +56,26 @@ public final class LichLord extends Boss {
         this.boltTimer = fireDelay(2.0);
     }
 
+    @Override
+    public boolean regaliaAttached() {
+        return hasStaff();
+    }
+
+    @Override
+    public double wardStrength() {
+        return shield();
+    }
+
+    @Override
+    public float orbCharge() {
+        return orb();
+    }
+
+    @Override
+    public double disarmedFor() {
+        return disarm();
+    }
+
     public boolean hasStaff() {
         return hasStaff;
     }

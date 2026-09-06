@@ -171,3 +171,26 @@ target (`UiInputTest.armingDoesNotGrab`, `armThenCastThroughTheRouter`).
 **The bar has no timer.** Opening the Endless armoury freezes the world and the
 cooldown display freezes with it, to the bit, because the number displayed is the
 panel's own (`UiIntegrationTest.cooldownComesFromGameplay`).
+
+## Phase 11 — skill visuals
+
+Rendering draws what Phase 9 decided and duplicates none of it: no damage, no
+radius, no lifetime, no target selection.
+
+**FireZone** — seven flames along the ground, fading with the zone's own
+`fraction()`. There is deliberately no independent visual lifetime that could
+outlive the damage or burn a wider patch than it hurts.
+
+**Tornado** — thirteen stacked ellipse outlines and a core line at the tornado's
+own `x`. Filled ellipses would hide the mobs caught inside. The pull is computed
+by the `Tornado` from that same value; the drawn funnel is never consulted by the
+physics and could not be, since it does not exist outside the draw method.
+
+**Lightning** and **Meteor** are bursts and bolts at the positions gameplay chose.
+
+**The aiming reticle** shows the real radius including talent scaling, asked of
+gameplay, so the ring shows what the cast will actually cover.
+
+The skill bar itself shakes with the world — the source draws it into the shaken
+surface — while its hit rectangles stay where the layout put them. See
+[`RENDERING.md`](RENDERING.md) §5.

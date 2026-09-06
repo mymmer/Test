@@ -181,3 +181,28 @@ Phase 11 introduces the game's real typeface and the skinned entity renderer. Th
 UI's own look is deliberately plain until then: the point of Phase 10 is that the
 rectangles are in the right places, which is a claim `UiLayoutTest` can make
 without a single asset.
+
+## Phase 11 — the skin path in use
+
+The invariant above is unchanged and now exercised: artwork is drawn into the
+unit's own `width()`/`height()` box, which is gameplay's, so no picture can change
+how big a thing is to hit. `SkinIndependenceTest` passes unaltered.
+
+**Fallback is per visual, not per skin.** A skin with a Scout and a Dragon but no
+Siege Ram keeps its Scout and its Dragon and draws the Ram by hand, in the same
+frame. Abandoning a whole skin over one missing file would make every partial
+skin useless, and a partial skin is the normal state of one being made.
+
+Missing artwork is reported **once** per skin/visual/state by `MissingArtLog` —
+never per frame — naming all three so the report is actionable, then falls back
+silently. Malformed gameplay data remains a different and fatal category.
+
+**Static and animated skins are both first-class.** A single-frame skin answers
+every state with its one region; a missing state falls back to the default region
+and then to the procedural body. Nothing crashes because one optional animation
+is absent. **Animation timing is cosmetic**: gameplay decides when damage lands,
+and rendering only chooses which frame matches the state it is already in.
+
+One gap was found and fixed: `load("procedural")` used to fail once a real skin
+was active, because the built-in skin has no descriptor — which made switching
+*back* impossible. It is now special-cased, being the fallback.

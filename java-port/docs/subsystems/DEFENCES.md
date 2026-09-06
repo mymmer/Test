@@ -224,3 +224,31 @@ core/src/test/java/com/mymmer/castledefense/defence/
     DefenceIntegrationTest.java  (6)   seeded reproducibility, tracing, ordering
     FakeTarget.java  TestWorld.java  DefenceJson.java    (test doubles)
 ```
+
+## Phase 11 — the castle is its wall level
+
+`Castle.TIERS` pairs each level with a wall, mortar and trim colour, and the
+source rebuilds the keep from whichever is current. Reinforcing the wall is
+therefore a visible change, not only a bigger number:
+
+```
+   1  Wooden Palisade    small brickwork
+   2  Stone Keep         larger blocks, lit windows
+   3  Granite Bastion    a corner turret appears
+   4  Reinforced Iron    a portcullis in the gate
+   5  Blacksteel Hold    buttresses
+   6  Runed Obsidian     glowing runes along the wall
+```
+
+All six are implemented. Below two-thirds health, cracks appear in **fixed**
+places — the source seeds the global generator with 1337 to achieve that, which
+perturbs gameplay randomness; the port uses a private generator keyed the same
+way and perturbs nothing.
+
+Towers aim, recoil and show status from gameplay: `aim()` points the bow and the
+barrel at what the tower is about to shoot, `recoil()` kicks it with the shot, a
+wrecked tower draws an X and a hurt one a health bar. Spike rows are one per
+level; the barricade tints on `flash()` and leaves rubble where it stood.
+
+Everything is drawn into gameplay's own box, so no artwork and no skin can change
+what is where — the Phase 7 invariant is untouched.

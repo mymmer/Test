@@ -45,6 +45,19 @@ public final class UiDebugOverlay {
 
     private final UiRoot ui;
     private final GameInput input;
+    /** The world renderer, for the rendering numbers. May be null. */
+    private WorldRenderer world;
+
+    /**
+     * Attaches the world renderer, so the overlay can report on it.
+     *
+     * <p>Optional: the overlay works without one and simply omits that half.
+     * Phase 12 is what these numbers are for -- they are the input to the mobile
+     * budget, not a profiler.
+     */
+    public void setWorldRenderer(WorldRenderer world) {
+        this.world = world;
+    }
 
     private ShapeRenderer shapes;
     private SpriteBatch batch;
@@ -145,6 +158,35 @@ public final class UiDebugOverlay {
                 + "   pressed " + (ui.lastPressed() == null ? "-" : ui.lastPressed()),
                 safe.x + 6f, y - 16f);
         font.draw(batch, "owner " + ownerName(), safe.x + 6f, y - 32f);
+        if (world != null) {
+            //  Deliberately a handful of counters, not an instrumentation
+            //  framework: enough to answer "what is expensive right now", which
+            //  is the question Phase 12 will start from.
+            float fps = com.badlogic.gdx.Gdx.graphics == null ? 0f
+                    : com.badlogic.gdx.Gdx.graphics.getFramesPerSecond();
+            float frameMs = com.badlogic.gdx.Gdx.graphics == null ? 0f
+                    : com.badlogic.gdx.Gdx.graphics.getDeltaTime() * 1000f;
+            font.draw(batch, String.format(java.util.Locale.ROOT,
+                    "fps %.0f  frame %.1fms  alpha %.2f  quality %s",
+                    fps, frameMs, world.alpha(), world.quality()),
+                    safe.x + 6f, y - 48f);
+            EffectsSystem fx = world.effects();
+            font.draw(batch, "enemies " + world.drawnEnemies()
+                    + "   projectiles " + world.drawnProjectiles()
+                    + "   particles " + (fx == null ? 0 : fx.particleCount())
+                    + "/" + (fx == null ? 0 : fx.capacity())
+                    + "   texts " + (fx == null ? 0 : fx.textCount()),
+                    safe.x + 6f, y - 64f);
+            font.draw(batch, "skin " + world.skinId()
+                    + "   atlas " + world.atlasPath()
+                    + "   missing art " + MissingArtLog.reportedCount()
+                    + "   trails " + world.trails().tracked()
+                    + "   interp " + world.interpolator().tracked(),
+                    safe.x + 6f, y - 80f);
+            font.draw(batch, String.format(java.util.Locale.ROOT,
+                    "shake %.1f, %.1f", world.shakeX(), world.shakeY()),
+                    safe.x + 6f, y - 96f);
+        }
         if (clashes.size > 0) {
             font.setColor(BAD);
             font.draw(batch, clashes.toString(", "), safe.x + 6f, y - 48f);

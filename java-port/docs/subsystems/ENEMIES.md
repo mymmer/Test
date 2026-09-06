@@ -187,3 +187,30 @@ core/src/test/java/com/mymmer/castledefense/enemy/
     TestEnemyWorld.java  TestInteractionWorld.java  EnemyJson.java
 core/src/test/resources/parity/fixtures.json
 ```
+
+## Phase 11 — how a unit is drawn
+
+Every type has a hand-drawn body transcribed from its `draw_body`, and artwork
+replaces it per visual when a skin supplies one. The frame is the source's:
+shadow (airborne or held), body, regalia ward, then the health bars.
+
+Everything that varies comes from gameplay, not from a render clock:
+
+| Drawn | Read from |
+|---|---|
+| body tint | `hurtFlash()`, mixed toward white at 0.75 strength |
+| endgame tint | `tier()` — a Voidtouched Scout is dark because it *is* one |
+| leg bob | `anim()`, or `spin() * 3` while airborne or held |
+| Siege Ram plates | **one per `layers()`** — stripping one really removes a panel |
+| Ram log recoil | `ramPush()`, so the kick lands with the damage |
+| Volatile pulse | `fuse()` |
+| Assassin ghost | `cloaked()` — the translucent form *is* the untargetable state |
+| Necromancer orb | `glow()`, the cast phase |
+| Goblin hop and timer | `hop()` and `escapeTimer()` |
+| health bar | hidden at full health, and never drawn for a boss |
+| strip bar | `stripProgress()` |
+
+Draw order across the horde is `(flying, depth, x)` — flyers behind, ground
+back-to-front. `depth` is the per-enemy spawn-time offset in [-16, 16], which is
+what stops a crowd looking like a single line. The sort never touches the
+authoritative roster; see [`RENDERING.md`](RENDERING.md) §3.

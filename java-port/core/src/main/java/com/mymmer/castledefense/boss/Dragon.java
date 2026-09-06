@@ -54,6 +54,16 @@ public final class Dragon extends Boss {
         this.breathTimer = fireDelay(4.0);
     }
 
+    @Override
+    public boolean venting() {
+        return breathing();
+    }
+
+    @Override
+    public double reeling() {
+        return reel();
+    }
+
     public boolean breathing() {
         return breathing > 0d;
     }

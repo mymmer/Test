@@ -24,6 +24,7 @@ import com.mymmer.castledefense.platform.SafeAreaInsets;
  *   --frames N        quit after N rendered frames (smoke testing / CI)
  *   --screenshot FILE write a PNG of the last frame before quitting
  *   --screen NAME     open a screen before the screenshot (see below)
+ *   --scenario NAME   build a controlled visual state (see VisualScenarios)
  *   --ui-debug        draw the layout overlay: safe area, visual/hit bounds
  *   --no-vsync        uncap the frame rate
  * </pre>
@@ -83,7 +84,8 @@ public final class Lwjgl3Launcher {
 
         CastleDefenseGame game = options.frameLimit > 0
                 ? new FrameLimitedGame(options.frameLimit, options.screenshot,
-                        options.mode, options.screen, options.uiDebug, platform)
+                        options.mode, options.screen, options.scenario,
+                        options.uiDebug, platform)
                 : new CastleDefenseGame(platform);
         if (options.frameLimit <= 0 && options.uiDebug) {
             System.out.println("[ui] --ui-debug needs --frames to take effect on "
@@ -99,17 +101,19 @@ public final class Lwjgl3Launcher {
         private final String screenshotPath;
         private final GameMode mode;
         private final String screen;
+        private final String scenario;
         private final boolean uiDebug;
         private boolean staged;
 
         FrameLimitedGame(int limit, String screenshotPath, GameMode mode,
-                         String screen, boolean uiDebug,
+                         String screen, String scenario, boolean uiDebug,
                          DesktopPlatformServices platform) {
             super(platform);
             this.limit = limit;
             this.screenshotPath = screenshotPath;
             this.mode = mode;
             this.screen = screen;
+            this.scenario = scenario;
             this.uiDebug = uiDebug;
         }
 
@@ -150,6 +154,7 @@ public final class Lwjgl3Launcher {
             if (!staged) {
                 staged = true;
                 stageScreen();
+                stageScenario();
             }
             super.render();
             if (getRenderCount() < limit) {
@@ -233,6 +238,33 @@ public final class Lwjgl3Launcher {
                     + getRun().world().state());
         }
 
+        /**
+         * Builds a controlled visual state with the real game.
+         *
+         * <p>Needs a run in progress and the world PLAYING, because that is the
+         * only state in which a scene means anything. Everything the scenario
+         * does, it does through production gameplay calls.
+         */
+        private void stageScenario() {
+            if (scenario == null || getRun() == null) {
+                return;
+            }
+            ensureRun();
+            if (getUi() != null
+                    && getRun().world().state() == GameState.SHOP) {
+                getUi().navigation().startPlaying();
+            }
+            if (!com.mymmer.castledefense.devtools.VisualScenarios.build(
+                    getRun(), scenario)) {
+                System.out.println("[ui] unknown --scenario " + scenario
+                        + "; known: " + String.join(", ",
+                            com.mymmer.castledefense.devtools.VisualScenarios.NAMES));
+                return;
+            }
+            System.out.println("[ui] scenario " + scenario + " -> "
+                    + getRun().describeRun());
+        }
+
         private void ensureRun() {
             if (getRun().world().state() == GameState.MENU) {
                 startRun(mode != null ? mode : GameMode.ENDLESS);
@@ -271,6 +303,7 @@ public final class Lwjgl3Launcher {
         boolean vsync = true;
         GameMode mode = null;
         String screen = null;
+        String scenario = null;
         boolean uiDebug = false;
         SafeAreaInsets insets = SafeAreaInsets.NONE;
 
@@ -292,6 +325,8 @@ public final class Lwjgl3Launcher {
                     o.mode = GameMode.byId(args[++i].trim().toLowerCase(), null);
                 } else if ("--screen".equals(a) && i + 1 < args.length) {
                     o.screen = args[++i].trim().toLowerCase();
+                } else if ("--scenario".equals(a) && i + 1 < args.length) {
+                    o.scenario = args[++i].trim().toLowerCase();
                 } else if ("--ui-debug".equals(a)) {
                     o.uiDebug = true;
                 } else if ("--insets".equals(a) && i + 1 < args.length) {

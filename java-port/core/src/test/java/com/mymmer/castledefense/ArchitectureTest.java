@@ -337,6 +337,151 @@ class ArchitectureTest {
         }
     }
 
+    // ========================================================================
+    //  Phase 11: rendering reads, and only reads
+    // ========================================================================
+
+    /**
+     * The renderer may not call a gameplay mutator.
+     *
+     * <p>A scan rather than a proof, and deliberately a narrow one: it looks for
+     * the specific verbs that change the game. It cannot catch everything — but
+     * the thing it catches is the thing that actually gets written by accident,
+     * which is a painter "helpfully" advancing a timer or clearing a flag while
+     * it draws.
+     *
+     * <p>{@code RenderPurityTest} is the behavioural half of this: it runs the
+     * simulation, renders ten thousand frames, and asserts every position, every
+     * hit point and the generator's own stream position are unchanged.
+     */
+    @Test
+    @DisplayName("the render package calls no gameplay mutator")
+    void renderMutatesNothing() {
+        Array<String> violations = new Array<>();
+        scan(SOURCE_ROOT.resolve("render"), file -> {
+            String text = read(file);
+            for (String banned : new String[]{
+                    ".takeDamage(", ".die(", ".markDead(", ".setX(", ".setY(",
+                    ".addGold(", ".addScore(", ".addKill(", ".purchase(",
+                    ".buy(", ".upgrade(", ".advance(",
+                    ".spawnEnemy(", ".summonBoss(", ".setState(",
+                    //  Deliberately NOT ".update(" or ".step(": the particle
+                    //  system has its own update, which is presentation and must
+                    //  be allowed.  What a scan cannot separate,
+                    //  RenderPurityTest settles behaviourally.
+            }) {
+                if (text.contains(banned)) {
+                    violations.add(SOURCE_ROOT.relativize(file) + " -> " + banned);
+                }
+            }
+        });
+        if (violations.size > 0) {
+            fail("rendering must not change the game:\n  "
+                    + violations.toString("\n  "));
+        }
+    }
+
+    /**
+     * Rendering has no route to the gameplay generator.
+     *
+     * <p>The source draws its screen shake, its lightning bolts and its castle
+     * cracks from the global {@code random}, which makes the gameplay sequence
+     * depend on how many frames were drawn. Every generator the render package
+     * touches must be {@link com.mymmer.castledefense.render.VisualRng}, which
+     * wraps only the decoration stream and exposes no way to reach the other one.
+     */
+    @Test
+    @DisplayName("the render package cannot reach the gameplay Rng")
+    void renderHasNoGameplayRandomness() {
+        Array<String> violations = new Array<>();
+        scan(SOURCE_ROOT.resolve("render"), file -> {
+            if (file.getFileName().toString().equals("VisualRng.java")) {
+                return;         // the one class allowed to know Rng exists
+            }
+            String text = read(file);
+            for (String banned : new String[]{
+                    ".game()", "new RandomXS128(", "Math.random(",
+                    "import java.util.Random",
+            }) {
+                if (text.contains(banned)) {
+                    violations.add(SOURCE_ROOT.relativize(file) + " -> " + banned);
+                }
+            }
+        });
+        if (violations.size > 0) {
+            fail("rendering must draw only from decoration randomness:\n  "
+                    + violations.toString("\n  "));
+        }
+    }
+
+    /**
+     * Gameplay may not name the render package, with one deliberate exception.
+     *
+     * <p>{@code VisualEvents} is the presentation seam gameplay emits one-shot
+     * notices through, and it lives in {@code render} because that is what it is
+     * for. Everything else in that package must be invisible to the simulation —
+     * no painter, no context, no particle system.
+     */
+    @Test
+    @DisplayName("gameplay names nothing in render except the event seam")
+    void gameplayOnlySeesTheEventSeam() {
+        String[] gameplayPackages = {"enemy", "boss", "defence", "interaction",
+            "entity", "progress", "talent", "shop", "skill", "config"};
+        Array<String> violations = new Array<>();
+        for (String pkg : gameplayPackages) {
+            scan(SOURCE_ROOT.resolve(pkg), file -> {
+                String text = read(file);
+                final String PREFIX = "com.mymmer.castledefense.render.";
+                int at = text.indexOf(PREFIX);
+                while (at >= 0) {
+                    String tail = text.substring(at + PREFIX.length(),
+                            Math.min(text.length(),
+                                    at + PREFIX.length() + 20));
+                    if (!tail.startsWith("VisualEvents")) {
+                        violations.add(SOURCE_ROOT.relativize(file) + " -> render."
+                                + tail.split("[^A-Za-z]")[0]);
+                    }
+                    at = text.indexOf(PREFIX, at + 1);
+                }
+            });
+        }
+        if (violations.size > 0) {
+            fail("gameplay may only see VisualEvents:\n  "
+                    + violations.toString("\n  "));
+        }
+    }
+
+    /**
+     * The interface's own renderer stays out of the world.
+     *
+     * <p>Boss health bars are Phase 10 UI, drawn unshaken; boss bodies are world
+     * rendering, drawn shaken. If {@code UiRenderer} started drawing entities the
+     * two would end up in different coordinate spaces during a shake.
+     */
+    @Test
+    @DisplayName("the UI renderer draws no entity")
+    void uiRendererDrawsNoEntities() {
+        Array<String> violations = new Array<>();
+        scan(SOURCE_ROOT.resolve("render"), file -> {
+            if (!file.getFileName().toString().equals("UiRenderer.java")) {
+                return;
+            }
+            String text = read(file);
+            for (String banned : new String[]{
+                    "EnemyPainter", "BossPainter", "WorldPainters", "DefencePainter",
+                    "import com.mymmer.castledefense.enemy.Enemy;",
+            }) {
+                if (text.contains(banned)) {
+                    violations.add("UiRenderer.java -> " + banned);
+                }
+            }
+        });
+        if (violations.size > 0) {
+            fail("the UI renderer must not paint the world:\n  "
+                    + violations.toString("\n  "));
+        }
+    }
+
     @Test
     @DisplayName("comment stripping does not hide real code")
     void stripCommentsKeepsCode() {

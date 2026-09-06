@@ -272,6 +272,11 @@ public final class Castle {
         //  leaves the castle permanently tinted red
         flash = Math.min(1f, flash + amount / Math.max(1f, maxHp * 0.10f));
         ctx.trace().event(TraceEvent.CASTLE_DAMAGE, ctx.step(), 0L, amount, hp, null);
+        //  Dust off the wall, scaled to the blow.  A notice; the flash above is
+        //  the state a renderer reads for the tint.
+        ctx.visuals().burst(frontX(), 620f * 0.5f,
+                Math.min(18, 4 + (int) (amount / 12f)), com.mymmer.castledefense.render.VisualEvents.STONE, 220f, 0.45f, 4f,
+                900f, com.mymmer.castledefense.render.VisualEvents.Shape.RECT);
         if (hp <= 0f) {
             hp = 0f;
             ctx.onCastleDestroyed();

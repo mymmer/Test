@@ -281,3 +281,27 @@ stays spent for the whole run.
 | `ArchitectureTest` | no gameplay→ui, no Scene2D, no clock, no Rng, no routing outside `Navigation` |
 
 See also [`INPUT.md`](INPUT.md), [`TEXT_LOCALIZATION.md`](TEXT_LOCALIZATION.md).
+
+## Phase 11 — what changed under the interface
+
+Three things, and none of them touches the layout or the input model.
+
+**Three widgets now shake.** `Game.draw` paints the skill bar, the horn and the
+grab cursor into the world surface and only the stat panel and the menus onto the
+unshaken screen — so in the source those three move with a castle hit. That is
+reproduced: `UiRenderer.setWorldShake` applies the world's offset as a projection
+translate around exactly those widgets. **Only the drawing moves**; hit rectangles
+are the ones the layout produced, so a shaking button is still pressed where it
+was laid out, as in the source. Boss health bars stay put — a jittering health
+bar is unreadable exactly when it matters.
+
+**The world is drawn underneath.** `FoundationRenderer` is gone; `WorldRenderer`
+paints the game and the UI renderer draws over it, unchanged.
+
+**The debug overlay gained the rendering numbers**: fps, frame time, interpolation
+alpha, quality, drawn enemies and projectiles, live particles against the cap,
+active skin and atlas, missing-art count. A handful of counters, not a profiler.
+
+`ArchitectureTest.uiRendererDrawsNoEntities` keeps the split: the UI renderer may
+not import a painter or an `Enemy`, because boss bars are unshaken UI and boss
+bodies are shaken world, and the two must not end up in one coordinate space.

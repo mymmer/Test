@@ -63,6 +63,26 @@ public final class SkinManager {
         if (skinId.equals(activeSkinId)) {
             return true;
         }
+        if (PROCEDURAL_SKIN.equals(skinId)) {
+            //  The built-in skin has no descriptor and needs none: it IS the
+            //  fallback, so it must always be reachable.  Before Phase 11 this
+            //  fell through to the descriptor check below and failed, which made
+            //  switching BACK to procedural impossible once a real skin was
+            //  loaded -- found by ArtFallbackTest.skinSwitchingRoundTrips.
+            if (!activeAtlasPath.isEmpty()) {
+                atlases.unload(activeAtlasPath);
+            }
+            active.clear();
+            for (VisualId id : VisualId.values()) {
+                active.put(id, UnitVisual.procedural(id));
+            }
+            activeSkinId = PROCEDURAL_SKIN;
+            activeAtlasPath = "";
+            lastReport = new SkinValidationReport(PROCEDURAL_SKIN);
+            warnedMissing.clear();
+            log("skin '" + PROCEDURAL_SKIN + "' active: everything hand-drawn");
+            return true;
+        }
 
         SkinDefinition definition;
         try {

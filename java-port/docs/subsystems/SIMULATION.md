@@ -299,3 +299,24 @@ holds a timer or suppresses a step.
 `UiIntegrationTest.realtimeShopFreezesThroughTheUi` opens it the way a player
 does, runs 120 frames, and asserts play time, every enemy position, the tier
 ladder and the spawn timer are unchanged to the bit.
+
+## Phase 11 — the renderer participates in time even less
+
+Two clocks exist and neither is the renderer's.
+
+**Simulation time** drives everything gameplay: timers, cooldowns, animation
+phases (`enemy.anim()`, `castle.bannerPhase`, `fireZone.phase()`), and anything
+cosmetic that must freeze when the world does. **Frame time** drives particles,
+floating text and nothing else — they affect nothing, so tying them to the fixed
+step would only stutter them at 144 Hz for no benefit, and the loop simply does
+not advance them outside `PLAYING`.
+
+**Interpolation** spans the gap between steps: `previous + (current - previous) *
+alpha`. The previous positions live in the renderer, keyed by uid, never on the
+entities — gameplay cannot read them and cannot come to depend on them. A jump
+beyond 240 px in one step is a teleport and is drawn without blending, so a spawn
+does not slide in from where the last entity was.
+
+`RenderPurityTest` states the whole relationship in one assertion: ten thousand
+frames of render work leave the gameplay generator's stream position, every
+entity position, every hit point and the run clock exactly as they were.

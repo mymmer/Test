@@ -608,6 +608,29 @@ public final class RunWorld implements BossContext, DirectorContext, AllyFactory
         return banners;
     }
 
+    /**
+     * Where one-shot visual notices go.
+     *
+     * <p>{@link com.mymmer.castledefense.render.VisualEvents#NONE} until a
+     * renderer attaches one, so the whole simulation runs headlessly and
+     * behaves identically. Nothing gameplay does may depend on who is
+     * listening: every method returns void and none can fail.
+     */
+    private com.mymmer.castledefense.render.VisualEvents visuals =
+            com.mymmer.castledefense.render.VisualEvents.NONE;
+
+    /** Attaches the presentation sink. One-way; gameplay never reads it back. */
+    public void setVisualEvents(com.mymmer.castledefense.render.VisualEvents sink) {
+        this.visuals = sink == null
+                ? com.mymmer.castledefense.render.VisualEvents.NONE : sink;
+    }
+
+    /** The sink, for the systems that emit through it. */
+    @Override
+    public com.mymmer.castledefense.render.VisualEvents visuals() {
+        return visuals;
+    }
+
     @Override
     public ScreenShake shake() {
         return shake;
