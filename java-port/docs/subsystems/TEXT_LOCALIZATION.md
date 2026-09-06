@@ -105,12 +105,50 @@ Between them these cover the three ways long text breaks a layout: it overflows
 sideways, it pushes rows off the bottom, or it forces a control to shrink below
 the size of a thumb.
 
-## 6. What is not here
+## 6. The font, and what it can draw
 
-Right-to-left scripts, CJK glyph coverage and pluralisation rules. The built-in
-font has no CJK glyphs and Phase 10 does not add a font pipeline; the layout is
-direction-agnostic in that it positions boxes, but nothing has been mirrored. If
-a translation is ever commissioned these become Phase 11 work alongside the real
-typeface.
+**Decision (verified before Phase 11): the bundled libGDX font stays.**
+
+It is Liberation Sans at 15px, shipped inside the gdx jar as `lsans-15.fnt`. It
+carries 168 glyphs across codepoints 0..255 — the whole of Latin-1 — which covers
+every character a European localisation of this game realistically needs:
+
+```
+   a-z A-Z 0-9        the Nordic set   æ ø å  Æ Ø Å
+   é è ê ç à ù î ï    umlauts          ü ö ä  Ü Ö Ä
+   ß                  punctuation      . , : ; ! ? ' " ( ) [ ] { } - _ / \ + = * % & # @ < > | ~ ^ `
+   $ £ ¥ ¢
+```
+
+It needs no asset of ours, no FreeType dependency, no packing step and — the
+point that decides it — **no device-installed font**, so it renders identically on
+every device.
+
+What it lacks is a handful of typographic characters outside Latin-1: `€`, `…`,
+`–`, `—`, `°`, `×`. None is used. The game counts gold in "G", and
+`TextLayout.ellipsize` appends three ASCII dots rather than an ellipsis glyph —
+which `FontCoverageTest.ellipsisIsAscii` pins deliberately, because switching to
+`…` would put a missing-glyph box on the end of every truncated label and no
+other test would notice, the layout arithmetic being identical either way.
+
+Replacing it would mean bundling a font asset — a redistribution licence to
+verify and an atlas to pack — for characters the game does not use. If a
+translation ever needs the euro sign, `FontCoverageTest` is what fails first, and
+that is the moment to do it.
+
+`FontCoverageTest` checks libGDX's own parse of the real `.fnt`, not a
+transcription of it: the required set, **every character actually present in the
+shipped bundle**, and the metrics — that accented glyphs are not zero-width, that
+`ä` advances like `a` so an accented translation widens rather than reflows, that
+accents do not grow the line box (which would make the measured HUD stack taller),
+and that the smallest size the interface uses stays legible.
+
+## 7. What is not here
+
+Right-to-left scripts, CJK glyph coverage and pluralisation rules. The layout is
+direction-agnostic in that it positions boxes, but nothing has been mirrored, and
+no font in the project has CJK glyphs. If such a translation is ever commissioned
+these become work alongside a real typeface — a font pipeline, not a string
+file.
 
 See also [`UI.md`](UI.md).

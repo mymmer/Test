@@ -241,7 +241,12 @@ production seam — so what is being checked on a desk is the real path.
 screenshot: a picture of a state the game cannot route to would be a picture of
 something no player can reach.
 
-`tools/ui/screenshots.sh` renders the matrix. It asserts nothing: a screenshot
+`tools/ui/screenshots.sh` renders the matrix: **8 screens x 3 device frames = 24
+images, plus 1 more of the shop with the debug overlay on — 25 files.** (The
+overlay capture is the odd one out, and the reason the file count is not a clean
+multiple.)
+
+It asserts nothing: a screenshot
 suite that fails on a one-pixel difference gets switched off within a month. It
 proves every screen renders at every shape without throwing and leaves images a
 person can flip through. **The layout assertions live in `UiLayoutTest`**, which
