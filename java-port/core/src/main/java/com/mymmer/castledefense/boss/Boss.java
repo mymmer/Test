@@ -254,6 +254,16 @@ public abstract class Boss extends Enemy {
         return 0f;
     }
 
+    /**
+     * How far a hand-performed disruption has got, 0..1.
+     *
+     * <p>The Dragon's claw battering. Published here rather than reached for by
+     * a type test, for the reason in this section's header.
+     */
+    public float disruptionProgress() {
+        return 0f;
+    }
+
     /** Seconds left disarmed, 0 when armed. The Lich Lord's. */
     public double disarmedFor() {
         return 0d;

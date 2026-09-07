@@ -202,3 +202,94 @@ platform layer, and "unhandled" is not the same thing as "leave the app".
 Desktop and Android share one path: `DesktopInput` and `TouchInput` both feed
 `GameInput`, and below that there is one router and one `UiRoot`. See
 [`UI.md`](UI.md).
+
+## Phase 11.5 — the coordinate contract
+
+### What Python actually does
+
+Verified by reading the source before anything was changed:
+
+- `Game.draw` renders the world into `self.scene`, then
+  `self.screen.blit(s, (ox, oy))` where `ox, oy = random.uniform(-shake, shake)`
+  is drawn **inside `draw`** and never stored;
+- input is `self.mouse_pos = ev.pos` — the raw event position — and the main loop
+  re-reads `pygame.mouse.get_pos()` once a frame;
+- `mouse_hist`, which `mouse_velocity` samples ~90 ms back for a throw, records
+  that same screen position.
+
+So **shake is visual only, and input does not compensate for it.** While the
+screen is shaking the picture is offset by up to ±14 px from where clicks land, a
+stationary mouse has zero velocity, and `HORN_RECT` and `skill.rect` are fixed
+rectangles hit-tested unshaken while being drawn into the shaken surface.
+
+### The Java contract
+
+```
+   physical screen pixels          (GameInput.touchDown/Dragged/Up)
+        │  viewport unproject, against the UNSHAKEN camera
+        ├──────────────► UI viewport units      → SafeArea → UiRect hit bounds
+        └──────────────► world viewport units   → WorldGeometry.toDrawY
+                                                → gameplay world coordinates
+```
+
+Four rules hold it together:
+
+1. **One conversion path.** `DesktopInput` and `TouchInput` both feed
+   `GameInput`, which unprojects once per pointer into both spaces. There is no
+   second path for mouse, and a click and a tap are the same event by the time
+   anything decides what to do with it.
+2. **Shake is not in it.** `WorldShake` offsets the world camera for the world
+   pass and restores it before the frame returns, so every unprojection in the
+   next frame runs against an unshaken camera. Gameplay positions, hitboxes,
+   physics and the stored pointer velocities are never touched.
+3. **The simulation keeps Pygame's downward y.** 771 parity fixtures and every
+   ported constant depend on it. `WorldGeometry` converts at the single boundary
+   where the renderer reads a position — see [`RENDERING.md`](RENDERING.md) §2.
+4. **Safe-area insets reach the UI only.** A cutout shrinks the UI rectangle and
+   never moves what a screen pixel means in the world.
+
+### The invariants, and where they are held
+
+```
+   camera shake alone
+   → no gameplay movement
+   → no artificial throw velocity
+   → no unintended grab / strip / smack
+```
+
+`ShakeInputTest.stationaryFingerGainsNothingFromShake` presses through the real
+`GameInput` → `InputRouter`, holds the finger perfectly still for 200 frames of
+maximum shake, and asserts the pointer's world position is unchanged to 1e-3 and
+the released throw velocity is zero.
+
+```
+   same intentional virtual-world gesture
+   → same gameplay result, at any render frequency
+```
+
+`throwIsFrameRateIndependent` makes the identical flick three times — once with
+no shake, once shaking at one render per input step, once shaking at three — and
+asserts all three produce the same throw velocity.
+
+**No camera offset is ever injected into the drag tracker.** That was considered
+and rejected: it would give a stationary finger velocity from the camera, which
+is exactly the artefact the invariant forbids. The policy is simpler — the
+tracker only ever sees unshaken positions, so there is nothing to compensate for.
+
+### The shaken widgets
+
+The skill bar and the horn are drawn into the shaken world (the source paints
+them into `self.scene`); the stat panel, the Endless SHOP button, the boss bars
+and every modal screen are not. **Only the drawing moves** — hit rectangles are
+the ones the layout produced, exactly as `HORN_RECT` is fixed in the source.
+
+Usability at the ceiling: the gameplay maximum is 14 units and the smallest
+shaken widget is 58×60, so a fully displaced button still overlaps its own touch
+box by more than three quarters, and tapping what the player sees lands inside
+it. `shakeCannotWalkAWidgetOffItsTouchBox` asserts both the margin and the
+displaced-centre hit, so a future widget small enough to be a problem fails the
+test rather than shipping.
+
+`theShakenSetIsExactlyTheSourceSet` reads `UiRenderer`'s own source for what lies
+between `beginShaken()` and `endShaken()` — a list kept beside the code is what
+let the SHOP button drift into the shaken block unnoticed in the first place.

@@ -36,59 +36,101 @@ public final class WorldPainters {
     // ========================================================================
 
     /**
-     * Sky, hills, ground and scattered scenery.
+     * Sky, moon, stars, three ridges of hills, ground and grass.
      *
-     * <p>The source builds this once into a surface at startup. Here it is drawn
-     * each frame, and every decorative position comes from
-     * {@link VisualRng#stable} keyed to a fixed seed — so the same stars and the
-     * same tufts of grass appear in the same places every frame and every run,
-     * and none of it touches the gameplay generator.
+     * <p>Transcribed from {@code Game._build_background} after the Phase 11.5
+     * image comparison, which showed the first attempt had invented sharp
+     * triangular hills, dropped the moon and thinned the stars. Reading a draw
+     * method is not the same as looking at what it draws.
+     *
+     * <p>The source builds this once into a surface at startup and seeds the
+     * global generator with 7 to place the stars and grass. Here it is drawn
+     * each frame from {@link VisualRng#stable}, which gives the same fixed
+     * scatter without perturbing any shared stream.
      */
     public void paintBackground(RenderContext ctx) {
         float w = GameConfig.WORLD_WIDTH;
-        float h = GameConfig.WORLD_HEIGHT;
 
-        //  Sky: one gradient quad rather than a stack of bands.  Banding it
-        //  left visible seams where adjacent rows met -- and ShapeRenderer
-        //  interpolates per vertex, so the smooth version is also one draw call
-        //  instead of twenty-four.
-        ctx.kit.gradientRect(0f, GROUND_Y, w, h - GROUND_Y,
-                Palette.SKY_BOT, Palette.SKY_TOP);
-        RandomXS128 r = ctx.rng.stable(90210L);
-        for (int i = 0; i < 60; i++) {
-            float sx = VisualRng.uniform(r, 0f, w);
-            float sy = VisualRng.uniform(r, GROUND_Y + 140f, h - 8f);
-            float b = VisualRng.uniform(r, 0.35f, 0.9f);
-            ctx.kit.circle(sx, sy, VisualRng.uniform(r, 0.8f, 1.8f),
-                    ctx.alpha(Palette.WHITE, b));
+        //  Sky: mix(TOP, BOT, t^0.85) with t running from the top down.  The
+        //  exponent matters -- it keeps the horizon warm and the zenith dark,
+        //  and a linear ramp reads noticeably washed out.
+        final int bands = 96;
+        for (int i = 0; i < bands; i++) {
+            float t0 = i / (float) bands;
+            float t1 = (i + 1) / (float) bands;
+            float yTop = GameConfig.WORLD_HEIGHT - t0 * 620f;
+            float yBot = GameConfig.WORLD_HEIGHT - t1 * 620f;
+            ctx.kit.gradientRect(0f, yBot, w, yTop - yBot,
+                    ctx.mix(Palette.SKY_TOP, Palette.SKY_BOT,
+                            (float) Math.pow(t1, 0.85f)),
+                    ctx.shade2(ctx.mix(Palette.SKY_TOP, Palette.SKY_BOT,
+                            (float) Math.pow(t0, 0.85f)), 1f));
         }
-        //  Distant hills, two ridges, darker at the back.
-        hills(ctx, r, GROUND_Y + 96f, 0.55f, 7);
-        hills(ctx, r, GROUND_Y + 54f, 0.75f, 9);
 
-        //  Ground.
-        ctx.kit.rect(0f, 0f, w, GROUND_Y, Palette.GROUND_DARK);
-        ctx.kit.rect(0f, GROUND_Y - 26f, w, 26f, Palette.GROUND);
-        ctx.kit.rect(0f, GROUND_Y - 4f, w, 4f, Palette.DIRT);
-        for (int i = 0; i < 120; i++) {
-            float gx = VisualRng.uniform(r, 0f, w);
-            float gy = VisualRng.uniform(r, 4f, GROUND_Y - 8f);
-            ctx.kit.line(gx, gy, gx + VisualRng.uniform(r, -2f, 2f), gy + 5f, 1f,
-                    ctx.shade(Palette.GROUND, VisualRng.uniform(r, 0.8f, 1.25f)));
+        //  Moon, with its two craters.
+        float moonY = WorldGeometry.toDrawY(110f);
+        ctx.kit.circle(1080f, moonY, 44f, Palette.rgb(238, 236, 214));
+        ctx.kit.circle(1064f, WorldGeometry.toDrawY(100f), 8f,
+                Palette.rgb(216, 214, 196));
+        ctx.kit.circle(1098f, WorldGeometry.toDrawY(126f), 6f,
+                Palette.rgb(216, 214, 196));
+
+        //  Stars: 140 of them, in the top 380 pixels, from the source's seed 7.
+        RandomXS128 r = ctx.rng.stable(7L);
+        for (int i = 0; i < 140; i++) {
+            float sx = VisualRng.range(r, 0, (int) w);
+            float sy = WorldGeometry.toDrawY(VisualRng.range(r, 0, 380));
+            float radius = (i % 4 == 3) ? 2f : 1f;
+            int c = VisualRng.range(r, 150, 235);
+            ctx.kit.circle(sx, sy, radius, Palette.rgb(c, c, Math.max(0, c - 10)));
+        }
+
+        //  Three ridges, each a sum of two sines sampled every 40 px.  Drawn as
+        //  quads down to the ground because a fan-filled polygon of this shape
+        //  is concave and would tear.
+        hills(ctx, Palette.rgb(44, 48, 72), 470f, 60f, 0);
+        hills(ctx, Palette.rgb(38, 44, 62), 520f, 44f, 1);
+        hills(ctx, Palette.rgb(32, 40, 50), 560f, 30f, 2);
+
+        //  Ground: a lighter band above the line, darker below, with the source's
+        //  3 px rim on top.
+        ctx.kit.rect(0f, 0f, w, GROUND_Y + 18f, Palette.GROUND);
+        ctx.kit.rect(0f, 0f, w, GROUND_Y - 6f, Palette.GROUND_DARK);
+        ctx.kit.rect(0f, GROUND_Y + 18f - 3f, w, 3f, Palette.rgb(86, 104, 66));
+        for (int i = 0; i < 260; i++) {
+            float gx = VisualRng.range(r, 0, (int) w);
+            float gy = WorldGeometry.toDrawY(
+                    VisualRng.range(r, (int) 620f - 16, (int) GameConfig.WORLD_HEIGHT - 4));
+            ctx.kit.line(gx, gy, gx + VisualRng.range(r, -2, 2), gy + 5f, 2f,
+                    ctx.shade(Palette.GROUND, VisualRng.uniform(r, 0.7f, 1.3f)));
         }
     }
 
-    private void hills(RenderContext ctx, RandomXS128 r, float baseY, float shade,
-                       int count) {
-        Color col = ctx.shade2(Palette.GROUND_DARK, shade);
-        float w = GameConfig.WORLD_WIDTH;
-        float step = w / count;
-        for (int i = 0; i < count; i++) {
-            float cx = i * step + VisualRng.uniform(r, -20f, 20f);
-            float peak = VisualRng.uniform(r, 26f, 74f);
-            ctx.kit.triangle(cx - step * 0.75f, GROUND_Y, cx + step * 0.75f, GROUND_Y,
-                    cx, baseY + peak, col);
+    /**
+     * One ridge: {@code base + sin(x*0.006 + layer*2.1)*amp + sin(x*0.017 + layer)*amp*0.35}.
+     *
+     * <p>Two sines at different frequencies is what makes the silhouette read as
+     * rolling hills rather than as a repeating wave — and nothing like the
+     * triangles the first attempt used.
+     */
+    private void hills(RenderContext ctx, Color col, float base, float amp,
+                       int layer) {
+        float prevX = 0f;
+        float prevY = ridge(0f, base, amp, layer);
+        for (float x = 40f; x <= GameConfig.WORLD_WIDTH + 40f; x += 40f) {
+            float y = ridge(x, base, amp, layer);
+            //  A quad from the ground up to the ridge, one per sample step.
+            ctx.kit.quadFill(prevX, 0f, x, 0f, x, y, prevX, prevY, col);
+            prevX = x;
+            prevY = y;
         }
+    }
+
+    private static float ridge(float x, float base, float amp, int layer) {
+        float y = base
+                + MathUtils.sin(x * 0.006f + layer * 2.1f) * amp
+                + MathUtils.sin(x * 0.017f + layer) * amp * 0.35f;
+        return WorldGeometry.toDrawY(y);
     }
 
     // ========================================================================

@@ -161,15 +161,16 @@ public class CastleDefenseGame extends ApplicationAdapter {
                     run, services.rng(), services.skins(), services.assets());
             worldRenderer.setQuality(services.quality());
             renderer = worldRenderer;
-            //  One-shot visual events go to the renderer's particle system and
-            //  nowhere else.  Until this line the sink is VisualEvents.NONE and
-            //  the simulation behaves identically -- which is the property the
-            //  headless tests rely on.
-            if (run != null) {
-                run.setVisualEvents(worldRenderer.events());
-            }
         }
         renderer.create(viewports);
+        //  One-shot visual events go to the renderer's particle system and
+        //  nowhere else.  Attached AFTER create(), because the particle system
+        //  is built there -- doing it before captured VisualEvents.NONE and the
+        //  game silently had no particles or floating text at all.  Found by the
+        //  Phase 11.5 image comparison: thirty kills, no sparks.
+        if (worldRenderer != null && run != null) {
+            run.setVisualEvents(worldRenderer.events());
+        }
         if (ui != null && paintUi) {
             //  The interface paints only once a GL context exists, and only then
             //  can it be measured with the font that will draw it.  Until this

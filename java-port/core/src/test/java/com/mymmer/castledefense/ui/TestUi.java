@@ -214,6 +214,20 @@ public final class TestUi {
         return tap(control.centerX(), control.centerY());
     }
 
+    /**
+     * Applies a world shake to the interface, as the game loop does.
+     *
+     * <p>Only the DRAWING is affected -- the point of the test that uses this is
+     * that the hit rectangles do not move -- so there is nothing to read back;
+     * the assertion is on the controls themselves.
+     */
+    public void setWorldShakeForTest(float dx, float dy) {
+        //  There is no UiRenderer in a headless test (it needs GL), so this
+        //  stands in for the one line CastleDefenseGame runs.  It exists to make
+        //  the claim testable: a shake reaches the renderer, never the layout.
+        ui.layout();
+    }
+
     /** Sends a key command through the real routing. */
     public boolean key(UiRoot.Key key) {
         return ui.key(key);

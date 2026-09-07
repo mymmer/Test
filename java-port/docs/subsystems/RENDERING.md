@@ -356,3 +356,41 @@ Everything else is the source's behaviour.
 | `EffectsAndQualityTest` | pool integrity, bounds, reset, LOW≡MEDIUM≡HIGH gameplay |
 | `ArtFallbackTest` | per-visual fallback, warn-once, skin round trip, atlas lifecycle |
 | `ArchitectureTest` | the structural half of §1 |
+
+## Phase 11.5 — what the image comparison found
+
+Phase 11's painters were written by reading Python's draw methods. That was
+useful and it was not sufficient. Putting the two renderers' output side by side
+found eight defects that source-reading had missed, several of them serious.
+
+| Defect | How it looked | Cause |
+|---|---|---|
+| **No particles or floating text, anywhere** | thirty kills, no sparks, no gold numbers | the event sink was attached from `worldRenderer.events()` **before** `create()` built the particle system, so it captured `VisualEvents.NONE` permanently |
+| **Effects drawn mirrored about the horizon** | sparks in the sky | `VisualEvents` takes gameplay coordinates; `EffectsSystem` stored them unconverted. Now converted once on entry, so the whole system's maths is in draw space |
+| **The keep was almost black** | a dark tower beside a brown wall | `ctx.shade()` returns a **shared scratch** `Color`; passing it as `base` to `brickwork`, which shades again per block, aliased the two and darkened the base cumulatively |
+| **Hills were sharp triangles** | a jagged skyline | invented rather than transcribed. `_build_background` uses three ridges, each a sum of two sines sampled every 40 px |
+| **No moon, too few stars** | an empty sky | simply missing |
+| **Boss bars across the top** | wrong half of the screen | the source draws them along the **bottom**, at most two, 620 wide alone or 400 each in a pair, with the name above and the numbers on the bar |
+| **The horn was a labelled rectangle in the top-right** | "CHALLE..." clipped, and overlapping the new field readout | `draw_horn` is a brass **disc** with a curled horn glyph at `HORN_RECT = (170, 452, 58, 60)` — on the castle wall — with the word underneath |
+| **The Endless SHOP button shook** | jitter on a stat-panel row | it is row 7 of the panel, and `draw_hud` paints the panel on the unshaken screen |
+
+Two things that were missing rather than wrong:
+
+- **The whole field readout** — enemies left, kills, throw damage, the wind
+  indicator, the storm label. The only place a player sees any of it.
+- **The announcement banners.** Phase 8 built `Announcements` and stored ids
+  rather than English; nothing ever drew them, so every wave name, weather
+  change and boss arrival went unseen.
+
+And one layer named in `DrawOrder.Layer` that Phase 11 never implemented: the
+**grab cursor** — the overcharge slingshot with its predicted arc, the claw-smack
+ring, and the prompts that are the only way the crown, staff, stripping and
+overcharge mechanics are discoverable at all.
+
+### The lesson, recorded
+
+Reading a draw method tells you what it draws. It does not tell you whether what
+you wrote draws the same thing, and it cannot tell you about a layer you forgot
+or an object graph wired in the wrong order. The comparison is cheap — the
+Python side is a 200-line helper that imports the game unmodified — and it found
+more in one pass than the whole of Phase 11's own review.

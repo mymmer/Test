@@ -59,6 +59,9 @@ public final class DefencePainter {
     private static final float GROUND = up(620f);          // GROUND_Y
 
     private final float[] poly = new float[12];
+    /** Own storage for a shaded base, so it cannot alias the scratch. */
+    private final Color keepColour = new Color();
+    private final Color turretColour = new Color();
 
     /** Pygame y (down from the top) to draw y. See {@link WorldGeometry}. */
     private static float up(float pygameY) {
@@ -79,8 +82,14 @@ public final class DefencePainter {
         //  curtain wall, then the keep in front of it
         brickwork(ctx, 0f, GROUND, FRONT, WALL_TOP_Y - GROUND, wall, mortar,
                 lvl <= 1 ? 22f : 30f, lvl <= 1 ? 14f : 20f);
+        //  Materialised into its own Color first.  ctx.shade() hands back a
+        //  SHARED scratch instance, and brickwork() calls ctx.shade() again for
+        //  every block -- so passing the scratch as `base` meant each block
+        //  darkened the base for the next one, and the keep came out nearly
+        //  black.  Found by the Phase 11.5 image comparison.
+        keepColour.set(ctx.shade(wall, 1.06f));
         brickwork(ctx, 0f, GROUND, KEEP_RIGHT, KEEP_TOP_Y - GROUND,
-                ctx.shade(wall, 1.06f), mortar, 26f, 18f);
+                keepColour, mortar, 26f, 18f);
 
         merlons(ctx, 0f, FRONT, WALL_TOP_Y, 18f, 12f, 18f, wall, mortar);
         merlons(ctx, 0f, KEEP_RIGHT, KEEP_TOP_Y, 18f, 12f, 18f, wall, mortar);
@@ -182,7 +191,8 @@ public final class DefencePainter {
         if (lvl >= 3) {
             float tx = FRONT - 46f;
             float ty = WALL_TOP_Y;
-            brickwork(ctx, tx, ty, 44f, 66f, ctx.shade(wall, 1.1f), mortar, 20f, 16f);
+            turretColour.set(ctx.shade(wall, 1.1f));
+            brickwork(ctx, tx, ty, 44f, 66f, turretColour, mortar, 20f, 16f);
             merlons(ctx, tx, tx + 44f, ty + 66f, 12f, 8f, 12f, wall, mortar);
             ctx.kit.rect(tx, ty + 62f, 44f, 4f, trim);
         }

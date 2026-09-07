@@ -9,6 +9,7 @@ import com.badlogic.gdx.utils.Array;
 import com.mymmer.castledefense.boss.Boss;
 import com.mymmer.castledefense.game.GameState;
 import com.mymmer.castledefense.game.RunWorld;
+import com.mymmer.castledefense.progress.Announcements;
 import com.mymmer.castledefense.shop.Shop;
 import com.mymmer.castledefense.shop.ShopItemDef;
 import com.mymmer.castledefense.skill.SkillId;
@@ -69,7 +70,8 @@ public final class UiRenderer {
     private static final Color TEXT_DIM = new Color(0.55f, 0.58f, 0.66f, 1f);
     private static final Color HEALTH = new Color(0.42f, 0.72f, 0.35f, 1f);
     private static final Color HEALTH_LOW = new Color(0.78f, 0.28f, 0.24f, 1f);
-    private static final Color BOSS = new Color(0.72f, 0.24f, 0.55f, 1f);
+    /** The source's boss bar red, from draw_bar(..., (208, 62, 60)). */
+    private static final Color BOSS = Palette.rgb(208, 62, 60);
     private static final Color SHADE = new Color(0f, 0f, 0f, 0.62f);
 
     /** The size the built-in font was designed at. Scaling is relative to it. */
@@ -98,6 +100,8 @@ public final class UiRenderer {
     private SpriteBatch batch;
     private BitmapFont font;
     private final GlyphLayout glyphs = new GlyphLayout();
+    /** Scratch for a banner's fade, so a frame allocates no Color. */
+    private final Color fade = new Color();
     private final com.badlogic.gdx.math.Matrix4 baseMatrix =
             new com.badlogic.gdx.math.Matrix4();
     private final com.badlogic.gdx.math.Matrix4 shakeMatrix =
@@ -180,20 +184,26 @@ public final class UiRenderer {
                 PANEL, PANEL_EDGE);
         drawStatRows(hud);
 
-        //  These two shake with the world; everything above does not.
+        //  The skill bar and the horn shake with the world; the stat panel,
+        //  the SHOP button and the boss bars do not.  See RENDERING.md §5.
         beginShaken();
         for (int i = 0; i < hud.skillSlots().size; i++) {
             drawSkillSlot(hud.skillSlots().get(i), SkillId.values()[i]);
         }
         if (hud.hornButton().visible()) {
-            boolean spent = run.session().hornUsed();
-            button(hud.hornButton(), Strings.get(spent ? "hud.hornSpent" : "hud.horn"),
-                    spent ? BUTTON_DISABLED : BUTTON, spent ? TEXT_DIM : GOLD, 15f);
+            drawHorn(hud.hornButton());
         }
+        endShaken();
+        drawFieldReadout();
+        drawBanners();
+        drawHint();
+        //  The Endless SHOP button is row 7 of the stat panel, and draw_hud
+        //  paints the whole panel onto the UNSHAKEN screen -- so it must not
+        //  move.  It was inside the shaken block until the Phase 11.5 audit
+        //  read draw_clock and found it there.
         if (hud.shopButton().visible()) {
             button(hud.shopButton(), Strings.get("hud.shop"), BUTTON, GOLD, 13f);
         }
-        endShaken();
         //  Boss bars are Phase 10 UI and stay put: the source draws them on the
         //  unshaken screen, and a health bar that jitters is unreadable exactly
         //  when it matters most.
@@ -311,6 +321,214 @@ public final class UiRenderer {
                 12f, false, true);
     }
 
+    /**
+     * The top-right readout: what is left, what has been killed, what it cost.
+     *
+     * <p>Missing entirely until the Phase 11.5 image comparison — the source
+     * draws it in {@code draw_hud} and it is the only place the player sees
+     * enemies remaining, kills, throw damage and the wind. Right-aligned to the
+     * safe rectangle rather than to the screen edge, so a cutout does not eat it.
+     */
+    private void drawFieldReadout() {
+        GameState state = run.world().state();
+        if (state != GameState.PLAYING && state != GameState.PAUSED) {
+            return;
+        }
+        SafeArea safe = ui.safeArea();
+        float right = safe.x + safe.width - 20f;
+        float y = safe.top() - 18f;
+
+        //  What is on the field plus what is still queued to walk on, which
+        //  is what "enemies left" means to a player in Classic.
+        int queued = run.director() == null ? 0 : run.director().pendingSpawns();
+        text(right, y, Strings.format("hud.enemiesLeft",
+                run.aliveEnemyCount() + queued), TEXT_DIM, 22f, true);
+        text(right, y - 24f, Strings.format("hud.kills", run.session().kills()),
+                TEXT_DIM, 20f, true);
+        text(right, y - 46f, Strings.format("hud.throwDamage",
+                (int) run.session().thrownDamage()), Palette.rgb(255, 190, 120),
+                20f, true);
+        float wy = y - 92f;
+        float wind = run.weather().wind();
+        if (Math.abs(wind) > 40f) {
+            //  The player cannot feel the wind until a throw goes wrong; this
+            //  label is the warning, and it was absent.
+            text(right, wy, Strings.get(wind > 0f ? "hud.tailwind" : "hud.headwind"),
+                    wind > 0f ? Palette.rgb(150, 220, 255) : Palette.rgb(255, 180, 140),
+                    20f, true);
+            wy -= 22f;
+        }
+        if (run.weather().storm()) {
+            text(right, wy, Strings.get("hud.thunderstorm"),
+                    Palette.rgb(200, 220, 255), 20f, true);
+        }
+    }
+
+    /**
+     * The announcement banners, centred below the top of the screen.
+     *
+     * <p>Phase 8 built {@code Announcements} and nothing ever drew it. Every
+     * wave name, weather change and boss arrival went unseen. They fade with
+     * {@code min(1, a * 2.2)} — the source holds them at full opacity for most
+     * of their life and drops them quickly at the end.
+     */
+    private void drawBanners() {
+        Announcements banners = run.banners();
+        if (banners == null) {
+            return;
+        }
+        SafeArea safe = ui.safeArea();
+        float y = safe.top() - 130f;
+        for (int i = 0; i < banners.size(); i++) {
+            Announcements.Banner b = banners.get(i);
+            //  min(1, a * 2.2): held at full opacity for most of its life and
+            //  dropped quickly at the end, as the source fades them.
+            float a = (float) Math.min(1d,
+                    b.remaining() / Math.max(0.001d, b.life) * 2.2d);
+            text(safe.centerX(), y, textFor(b), Palette.alpha(colourFor(b.id), a, fade), 34f,
+                    false, true);
+            y -= 40f;
+        }
+    }
+
+    /**
+     * A banner's text.
+     *
+     * <p>Phase 8 deliberately stored an {@code Id} and its arguments rather than
+     * a finished string, so the wording is a localisation concern and the
+     * gameplay never holds English. This is where the two meet.
+     */
+    private String textFor(Announcements.Banner b) {
+        String key = bannerKey(b.id);
+        if (!b.subject.isEmpty()) {
+            //  A subject is an enemy, boss or skill id -- localise it too, so a
+            //  banner never shows a raw identifier.
+            return Strings.format(key, Strings.get(subjectKey(b)));
+        }
+        return b.amount != 0 ? Strings.format(key, b.amount) : Strings.get(key);
+    }
+
+    private String subjectKey(Announcements.Banner b) {
+        switch (b.id) {
+            case BOSS_APPROACHES:
+            case BOSS_ARRIVES:
+                return "boss." + b.subject;
+            case SKILL_UNLOCKED:
+                return "skill." + b.subject + ".name";
+            case NEW_FOE:
+                return "enemy." + b.subject + ".name";
+            default:
+                return b.subject;
+        }
+    }
+
+    /** {@code WAVE_START} to {@code banner.waveStart}. */
+    private static String bannerKey(Announcements.Id id) {
+        StringBuilder out = new StringBuilder("banner.");
+        boolean upper = false;
+        String name = id.name();
+        for (int i = 0; i < name.length(); i++) {
+            char c = name.charAt(i);
+            if (c == '_') {
+                upper = true;
+                continue;
+            }
+            out.append(upper ? Character.toUpperCase(c) : Character.toLowerCase(c));
+            upper = false;
+        }
+        return out.toString();
+    }
+
+    private Color colourFor(Announcements.Id id) {
+        switch (id) {
+            case WEATHER_HEADWIND:
+            case BOSS_APPROACHES:
+            case BOSS_ARRIVES:
+            case HORN_CALLED:
+            case HORN_ELITES:
+                return Palette.rgb(255, 180, 140);
+            case WEATHER_TAILWIND:
+            case WEATHER_STORM:
+                return Palette.rgb(150, 220, 255);
+            case SKILL_UNLOCKED:
+            case TALENT_POINTS:
+            case WAVE_CLEARED:
+                return Palette.GOLD;
+            default:
+                return TEXT;
+        }
+    }
+
+    /** The one-line control hint along the bottom, PLAYING only. */
+    private void drawHint() {
+        if (run.world().state() != GameState.PLAYING) {
+            return;
+        }
+        SafeArea safe = ui.safeArea();
+        text(safe.centerX(), safe.y + 24f, Strings.get("hud.hint"), TEXT_DIM, 18f,
+                false, true);
+    }
+
+    /**
+     * {@code draw_horn}: a brass disc with a curled horn on it.
+     *
+     * <p>Phase 10 drew this as a labelled rectangle, which the Phase 11.5 image
+     * comparison showed both differs from the source and cannot fit its own
+     * label in the source's 58x60 box — it rendered as "CHALLE...". The source
+     * draws an icon and puts the word underneath.
+     */
+    private void drawHorn(UiRect r) {
+        boolean spent = run.session().hornUsed();
+        Color base = spent ? Palette.rgb(96, 84, 60) : Palette.rgb(168, 138, 78);
+        Color ink = spent ? Palette.rgb(130, 120, 100) : Palette.rgb(250, 238, 206);
+        float cx = r.centerX();
+        float cy = r.centerY();
+
+        com.badlogic.gdx.Gdx.gl.glEnable(com.badlogic.gdx.graphics.GL20.GL_BLEND);
+        shapes.begin(ShapeRenderer.ShapeType.Filled);
+        shapes.setColor(Palette.rgb(54, 48, 40));
+        shapes.circle(cx, cy, 26f, 28);
+        shapes.setColor(base);
+        shapes.circle(cx, cy, 23f, 28);
+        //  The curled horn glyph: an arc band with a flared bell at its end.
+        shapes.setColor(ink);
+        for (int i = 0; i < 18; i++) {
+            float a0 = (28f + 212f * i / 18f) * com.badlogic.gdx.math.MathUtils.degRad;
+            float a1 = (28f + 212f * (i + 1) / 18f)
+                    * com.badlogic.gdx.math.MathUtils.degRad;
+            float inner = 11f;
+            float outer = 16f;
+            shapes.triangle(
+                    cx + com.badlogic.gdx.math.MathUtils.cos(a0) * inner,
+                    cy + com.badlogic.gdx.math.MathUtils.sin(a0) * inner,
+                    cx + com.badlogic.gdx.math.MathUtils.cos(a0) * outer,
+                    cy + com.badlogic.gdx.math.MathUtils.sin(a0) * outer,
+                    cx + com.badlogic.gdx.math.MathUtils.cos(a1) * outer,
+                    cy + com.badlogic.gdx.math.MathUtils.sin(a1) * outer);
+            shapes.triangle(
+                    cx + com.badlogic.gdx.math.MathUtils.cos(a0) * inner,
+                    cy + com.badlogic.gdx.math.MathUtils.sin(a0) * inner,
+                    cx + com.badlogic.gdx.math.MathUtils.cos(a1) * outer,
+                    cy + com.badlogic.gdx.math.MathUtils.sin(a1) * outer,
+                    cx + com.badlogic.gdx.math.MathUtils.cos(a1) * inner,
+                    cy + com.badlogic.gdx.math.MathUtils.sin(a1) * inner);
+        }
+        shapes.triangle(cx + 9f, cy + 11f, cx + 19f, cy + 17f, cx + 14f, cy + 4f);
+        shapes.end();
+
+        shapes.begin(ShapeRenderer.ShapeType.Line);
+        shapes.setColor(Palette.shade(base, 0.6f, hornEdge));
+        shapes.circle(cx, cy, 23f, 28);
+        shapes.end();
+
+        //  The word goes UNDER the disc, as the source puts it, which is why the
+        //  icon does not have to carry a label it cannot fit.
+        text(cx, r.visualY() - 4f, Strings.get(spent ? "hud.hornSpent" : "hud.horn"),
+                spent ? TEXT_DIM : GOLD, 15f, false, true);
+    }
+
+    private final Color hornEdge = new Color();
+
     private void drawBossBar(UiRect bar, int index) {
         Array<Boss> live = run.bossRegistry().liveBosses();
         if (index >= live.size) {
@@ -318,12 +536,20 @@ public final class UiRenderer {
         }
         Boss boss = live.get(index);
         float frac = Math.max(0f, Math.min(1f, boss.hp() / Math.max(1f, boss.maxHp())));
+        //  The source's own colours: a red bar on the dark backing, the name
+        //  ABOVE it and the numbers ON it.  Phase 10 had a magenta bar with the
+        //  name inside and no numbers.
         fill(bar.visualX(), bar.visualY(), bar.visualWidth(), bar.visualHeight(),
-                PANEL, PANEL_EDGE);
+                Palette.BAR_BACK, Palette.BAR_BORDER);
         fill(bar.visualX() + 2f, bar.visualY() + 2f,
-                (bar.visualWidth() - 4f) * frac, bar.visualHeight() - 4f, BOSS, null);
-        text(bar.centerX(), bar.centerY() + 5f,
-                Strings.get("boss." + boss.bossType().id()), TEXT, 14f, false, true);
+                (bar.visualWidth() - 4f) * frac, bar.visualHeight() - 4f,
+                BOSS, null);
+        text(bar.centerX(), bar.visualY() + bar.visualHeight() + 24f,
+                Strings.get("boss." + boss.bossType().id()),
+                Palette.rgb(255, 210, 130), 24f, false, true);
+        text(bar.centerX(), bar.visualY() + 2f,
+                ((int) boss.hp()) + " / " + ((int) boss.maxHp()), TEXT, 18f,
+                false, true);
     }
 
     // --- the modal screens --------------------------------------------------

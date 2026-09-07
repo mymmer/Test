@@ -9,6 +9,20 @@ import com.badlogic.gdx.math.MathUtils;
  *
  * <h2>Pooled, with a complete reset</h2>
  *
+ * <h2>Coordinates</h2>
+ *
+ * <p>Callers are gameplay, so every position arriving here is in the
+ * simulation's downward-y space. It is converted <b>once, on entry</b>, and
+ * everything after that — the velocities, the gravity, the drawing — is in draw
+ * space with y upward. That is why {@code vy -= grav} reads correctly and why
+ * the source's upward launch bias appears here with the opposite sign.
+ *
+ * <p>Converting on entry rather than on draw matters because a particle is drawn
+ * many times and created once. It also means a burst emitted at a mob's feet is
+ * at that mob's feet, which is not what happened before the Phase 11.5 image
+ * comparison: every spark and every damage number was appearing mirrored about
+ * the horizon.
+ *
  * <p>Both arrays are allocated once at their cap and never grow. A particle is
  * taken from the free list, <b>every field written</b> in {@link Particle#set},
  * and returned on death. That "every field" is the whole contract: a pooled
@@ -141,6 +155,7 @@ public final class EffectsSystem implements VisualEvents {
     @Override
     public void burst(float x, float y, int count, int rgb, float speed,
                       float life, float size, float grav, Shape shape) {
+        y = WorldGeometry.toDrawY(y);       // see the class note on coordinates
         int room = Math.min(cap - live.size, freeCount);
         int n = MathUtils.clamp(count, 0, Math.max(0, room));
         for (int i = 0; i < n; i++) {
@@ -159,6 +174,7 @@ public final class EffectsSystem implements VisualEvents {
     @Override
     public void ring(float x, float y, int count, int rgb, float speed,
                      float life, float size) {
+        y = WorldGeometry.toDrawY(y);
         int room = Math.min(cap - live.size, freeCount);
         int n = MathUtils.clamp(count, 0, Math.max(0, room));
         for (int i = 0; i < n; i++) {
@@ -175,6 +191,7 @@ public final class EffectsSystem implements VisualEvents {
         if (message == null || freeTexts <= 0 || liveTexts.size >= MAX_TEXTS) {
             return;
         }
+        y = WorldGeometry.toDrawY(y);
         FloatingText t = textPool[--freeTexts];
         t.set(x, y, message, rgb, size, life);
         liveTexts.add(t);

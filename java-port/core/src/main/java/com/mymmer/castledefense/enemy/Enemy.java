@@ -412,6 +412,13 @@ public abstract class Enemy extends Entity implements Target {
         ctx.addPlatesTorn();
         ctx.trace().event(TraceEvent.ARMOUR_STRIPPED, ctx.step(), uid(),
                 layers, armor, config.typeId);
+        //  The source shouts about it -- "ARMOR TORN!" while plates remain,
+        //  "FULLY EXPOSED!" on the last one.  Absent until the Phase 11.5 image
+        //  comparison, which left a stripped Ram with no feedback at all.
+        ctx.visuals().text(x, y - height() / 2f - 24f,
+                layers > 0 ? "ARMOR TORN!" : "FULLY EXPOSED!", 0xFFD25A, 22f, 1.1f);
+        ctx.visuals().burst(x, y, 12, com.mymmer.castledefense.render.VisualEvents.STONE, 260f, 0.45f, 4f, 900f,
+                com.mymmer.castledefense.render.VisualEvents.Shape.RECT);
         return true;
     }
 

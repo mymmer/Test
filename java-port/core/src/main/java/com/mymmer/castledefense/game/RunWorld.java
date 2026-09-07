@@ -516,6 +516,26 @@ public final class RunWorld implements BossContext, DirectorContext, AllyFactory
         return cursor;
     }
 
+    /**
+     * Where the pointer is, in gameplay world coordinates.
+     *
+     * <p>Read-only, for the cursor prompts. This is the value the simulation
+     * itself works at -- sampled once per step from an <b>unshaken</b>
+     * unprojection -- so a prompt drawn from it points at the same thing the
+     * interaction will act on. See {@code INPUT.md}, "the coordinate contract".
+     */
+    public float pointerX() {
+        return pointerX;
+    }
+
+    public float pointerY() {
+        return pointerY;
+    }
+
+    public boolean pointerDown() {
+        return pointerDown;
+    }
+
     public void setPointer(boolean down, float worldX, float worldY) {
         this.pointerDown = down;
         this.pointerX = worldX;

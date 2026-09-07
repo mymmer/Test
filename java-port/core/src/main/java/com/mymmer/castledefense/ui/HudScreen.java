@@ -57,9 +57,19 @@ public final class HudScreen implements UiScreen {
     public static final float SKILL_SLOT = 62f;
     public static final float SKILL_GAP = 12f;
 
-    /** The horn, from {@code HORN_RECT}. */
-    public static final float HORN_WIDTH = 132f;
-    public static final float HORN_HEIGHT = 46f;
+    /**
+     * The horn, from {@code HORN_RECT = Rect(170, 452, 58, 60)}.
+     *
+     * <p>Its size and its place on the castle wall are the source's. Phase 10
+     * had guessed a 132x46 button in the top-right corner, which the Phase 11.5
+     * image comparison showed both differs from the source and collides with the
+     * field readout that lives up there.
+     */
+    public static final float HORN_WIDTH = 58f;
+    public static final float HORN_HEIGHT = 60f;
+    /** Source position, from the left and (converted) from the bottom. */
+    public static final float HORN_X = 170f;
+    public static final float HORN_Y = 720f - 452f - HORN_HEIGHT;
 
     private final RunWorld run;
 
@@ -235,8 +245,10 @@ public final class HudScreen implements UiScreen {
         if (!playing) {
             return;
         }
-        hornButton.setBounds(safe.right() - HORN_WIDTH - PANEL_X,
-                safe.top() - HORN_HEIGHT - PANEL_X, HORN_WIDTH, HORN_HEIGHT);
+        //  The source's own place for it, offset into the safe rectangle so a
+        //  cutout cannot eat it on a phone.
+        hornButton.setBounds(safe.x + HORN_X, safe.y + HORN_Y,
+                HORN_WIDTH, HORN_HEIGHT);
         TouchTargets.apply(hornButton);
         //  Pressable even when spent, so the press is consumed rather than
         //  falling through and grabbing a mob behind the button.  Whether it
@@ -264,13 +276,23 @@ public final class HudScreen implements UiScreen {
         if (!playing) {
             return;
         }
-        float barWidth = Math.min(520f, safe.width * 0.5f);
+        //  The source puts these along the BOTTOM -- draw_bar at HEIGHT-50 with
+        //  the name at HEIGHT-78 -- and shows at most two, side by side: 620
+        //  wide for a lone boss, 400 each for a pair.  The first attempt put
+        //  them across the top, which the Phase 11.5 image comparison caught.
+        int shown = Math.min(2, live.size);
+        if (shown == 0) {
+            return;
+        }
         float barHeight = 20f;
-        float x = safe.centerX() - barWidth / 2f;
-        float y = safe.top() - 34f;
-        for (int i = 0; i < live.size; i++) {
+        float barWidth = shown == 1 ? Math.min(620f, safe.width - 40f)
+                : Math.min(400f, (safe.width - 64f) / 2f);
+        float step = barWidth + 24f;
+        float x0 = safe.centerX() - (shown * step - 24f) / 2f;
+        float y = safe.y + 50f;
+        for (int i = 0; i < shown; i++) {
             bossBars.get(i).setVisible(true)
-                    .setBounds(x, y - i * (barHeight + 22f), barWidth, barHeight);
+                    .setBounds(x0 + i * step, y, barWidth, barHeight);
         }
     }
 

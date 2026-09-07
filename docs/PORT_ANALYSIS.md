@@ -699,6 +699,44 @@ that could not be avoided — each with what was preserved instead.
 
 ---
 
+### 14.5 Shake and input: what the source actually does (Phase 11.5)
+
+Established by reading the source before anything was changed, because the
+question "does Python compensate input for shake?" has a definite answer and
+guessing it either way would have produced the wrong port.
+
+| | |
+|---|---|
+| **Where the offset is applied** | `Game.draw` only: `self.screen.blit(s, (ox, oy))` with `ox, oy = random.uniform(-shake, shake)` computed inside `draw` and never stored |
+| **Where input comes from** | `self.mouse_pos = ev.pos`, the raw event position, plus a `pygame.mouse.get_pos()` re-read each loop |
+| **Whether input compensates** | **No.** Nothing outside `draw` has ever seen `ox, oy` |
+| **Throw velocity** | `mouse_hist` records screen positions, so a stationary mouse has zero velocity while the screen shakes |
+| **The shaken widgets** | the skill bar, the horn and the grab cursor are drawn into `self.scene`; the HUD panel and every menu are drawn onto `self.screen` |
+| **Their hit rectangles** | `HORN_RECT` and `skill.rect` are fixed and tested unshaken, so a widget is visibly offset from where it must be clicked, by up to ±14 px |
+
+The port matches all of it. Its one structural difference is that the offset is a
+camera translation restored before the frame ends, rather than a blit position —
+which gives the same picture and the same input behaviour without a second
+surface.
+
+### 14.6 Port defects Phase 11.5 found
+
+The visual comparison was worth more than the code review that preceded it. Eight
+defects and three whole missing layers, none of which source-reading had caught:
+
+| Defect | Detail |
+|---|---|
+| **The game had no particles or floating text at all** | `run.setVisualEvents(worldRenderer.events())` ran *before* `renderer.create(viewports)`, and `events()` returns the particle system — which `create` builds. So it captured `VisualEvents.NONE` permanently. Every burst, every damage number and every gold pickup was silently discarded |
+| **Effects were mirrored about the horizon** | `VisualEvents` is called by gameplay, so its coordinates are the simulation's downward-y; `EffectsSystem` stored them without conversion. Now converted once on entry, which also makes the pool's own `vy -= grav` correct |
+| **A shared scratch `Color` aliased itself** | `RenderContext.shade()` hands back a reused instance. `paintCastle` passed it to `brickwork`, which shades again per block — so each block darkened the base for the next and the keep came out nearly black. A reminder that "no allocation" has a cost that has to be paid attention to |
+| **Boss bars on the wrong edge** | the source draws them along the bottom, at most two, 620 wide alone or 400 each paired, red, with the name above and the hit points on the bar |
+| **The horn was the wrong shape, in the wrong place** | `draw_horn` is a brass disc with a curled horn glyph at `HORN_RECT = (170, 452, 58, 60)` on the castle wall, labelled underneath. Phase 10 had guessed a 132x46 labelled rectangle in the top-right, which could not fit its own label and collided with the field readout |
+| **The Endless SHOP button shook** | it is a stat-panel row, and `draw_hud` paints the panel unshaken |
+| **Hills, moon and stars** | the ridges are three layers of summed sines, not triangles; the moon and most of the stars were missing entirely |
+| **Three missing layers** | the field readout, the announcement banners (Phase 8 state that nothing had ever drawn), and the grab cursor — which carries every discovery prompt in the game |
+
+---
+
 ## 15. Phase plan
 
 | Phase | Content | Exit criterion |

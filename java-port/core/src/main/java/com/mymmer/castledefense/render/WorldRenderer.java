@@ -81,6 +81,7 @@ public final class WorldRenderer implements GameRenderer {
     private final BossPainter bosses = new BossPainter();
     private final DefencePainter defences = new DefencePainter();
     private final WorldPainters painters = new WorldPainters();
+    private final CursorPainter cursor = new CursorPainter();
     private final ProjectileTrails trails = new ProjectileTrails();
     private final Interpolator interpolator = new Interpolator();
     private EffectsSystem effects;
@@ -324,6 +325,11 @@ public final class WorldRenderer implements GameRenderer {
         }
         effects.paintParticles(ctx);                                  // EFFECTS
         painters.paintWeather(ctx, run.weather(), ctx.worldTime);      // WEATHER
+        if (state == GameState.PLAYING) {
+            //  GRAB_CURSOR -- PLAYING only, exactly as the source gates it.
+            cursor.paint(ctx, run.cursor(), run.pointerX(), run.pointerY(),
+                    run.pointerDown());
+        }
         ctx.kit.end();
 
         //  The text pass: every label the shape pass could not draw, in the same
@@ -344,6 +350,10 @@ public final class WorldRenderer implements GameRenderer {
         }
         defences.paintStructureLabels(ctx, run.outpost(), run.barricade());
         effects.paintTexts(ctx);
+        if (state == GameState.PLAYING) {
+            cursor.paintLabels(ctx, run.cursor(), run, run.pointerX(),
+                    run.pointerY());
+        }
         batch.end();
     }
 

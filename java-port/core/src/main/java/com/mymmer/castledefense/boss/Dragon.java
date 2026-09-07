@@ -76,6 +76,11 @@ public final class Dragon extends Boss {
         return breathTimer;
     }
 
+    @Override
+    public float disruptionProgress() {
+        return clawProgress();
+    }
+
     public float clawProgress() {
         return clawProgress;
     }

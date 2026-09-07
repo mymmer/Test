@@ -305,3 +305,29 @@ active skin and atlas, missing-art count. A handful of counters, not a profiler.
 `ArchitectureTest.uiRendererDrawsNoEntities` keeps the split: the UI renderer may
 not import a painter or an `Enemy`, because boss bars are unshaken UI and boss
 bodies are shaken world, and the two must not end up in one coordinate space.
+
+## Phase 11.5 — corrections from the visual audit
+
+Three fixes, all from putting the Java and Python renders side by side:
+
+- **The Endless SHOP button no longer shakes.** It is row 7 of the stat panel and
+  `draw_hud` paints the panel onto the unshaken screen. It had drifted inside the
+  shaken block. `ShakeInputTest.theShakenSetIsExactlyTheSourceSet` now reads
+  `UiRenderer`'s own source for what is between `beginShaken()` and
+  `endShaken()`, rather than trusting a list kept beside the code.
+- **The Challenge Horn moved to the source's position** — a 58x60 brass disc on
+  the castle wall at `HORN_RECT = (170, 452)`, with the word underneath, instead
+  of a 132x46 labelled rectangle in the top-right corner. The old one could not
+  fit its own label (it rendered as "CHALLE...") and collided with the field
+  readout. Offset into the safe rectangle so a cutout cannot eat it.
+- **Boss bars moved to the bottom**, at most two, 620 units wide alone or 400
+  each in a pair, red rather than magenta, with the boss's name above the bar and
+  the hit points on it — all as `draw_hud` does it.
+
+Added, having been absent since Phase 10: the top-right field readout (enemies
+left, kills, throw damage, wind, storm), the announcement banners, and the
+one-line control hint along the bottom.
+
+Shake usability is now asserted rather than assumed: the ceiling is 14 units, the
+smallest shaken widget is 58x60, and the test fails if a future widget is ever
+small enough for the offset to walk it off its own touch box.

@@ -785,16 +785,83 @@ Two defects this phase found and fixed:
 Not in Phase 11, by the brief: the Phase 12 optimisation rewrite, spatial
 broadphase, cluster grids, target caches, gameplay pooling changes, audio.
 
-### Deferred with a reason
+### The visual reference task — closed in Phase 11.5
 
-- **Python↔Java visual reference captures.** Attempted and set aside. The Python
-  game has no headless or screenshot mode, and adding one means either modifying
-  the authoritative source — which the brief forbids — or writing a harness that
-  drives Pygame's event loop and window, which is a larger and more fragile piece
-  of software than the renderer it would be checking. The parity that matters
-  (silhouette, relative size, placement, layers, colours) is verifiable by reading
-  the source's draw methods beside the Java painters, which is how every body in
-  this phase was written. Recorded here rather than half-built.
+Phase 11 deferred it on the belief that the Python game had no headless mode.
+**That was wrong.** `Game.__init__` already takes a `screen` and always renders
+into its own offscreen `self.scene` surface, so a plain `pygame.Surface` plus
+SDL's dummy video driver captures a frame with no window at all. See Phase 11.5
+below; the four authoritative files were not touched.
+
+## Phase 11.5 — Shake/input audit and visual reference review
+
+A verification and hardening checkpoint between the renderer and the optimisation
+phase. No architecture was redesigned and no Phase 12 work was started.
+
+### A. Shake, input coordinates and touch usability
+
+- [T] **Python's actual behaviour established first.** `Game.draw` blits the
+      scene at `random.uniform(-shake, shake)` computed inside `draw` and never
+      stored; input is `self.mouse_pos = ev.pos`, the raw event position, and
+      `mouse_hist` records that same value. **Shake is visual only and input does
+      not compensate.** The port already matched; the audit confirmed it rather
+      than assuming a bug
+- [T] One coordinate contract, written down in
+      [`INPUT.md`](java-port/docs/subsystems/INPUT.md): screen → UI/safe-area →
+      world → gameplay, with the shake transform outside all of it. One
+      conversion path for mouse and touch
+- [T] `ShakeInputTest` — 13 tests through the real `GameInput` → `InputRouter`:
+      picking unaffected at 16:9 and 20:9, at both shake extremes, with insets;
+      a stationary finger gains no world movement and no throw velocity across
+      200 shaking frames; the same flick throws identically at 1x and 3x render
+      rate; ownership survives shake through drag, release and cancel; a modal
+      opening mid-shake does not steal a live gesture; a skill button over an
+      enemy arms and does not grab; no double activation
+- [x] **No camera offset is injected into the drag tracker** — considered and
+      rejected, because it would give a stationary finger velocity from the
+      camera. The tracker only ever sees unshaken positions
+- [T] Touch usability at the ceiling: shake is 14 units, the smallest shaken
+      widget is 58x60, and the test fails if a future widget ever shrinks enough
+      for the offset to walk it off its own touch box
+- [T] **Fixed: the Endless SHOP button was shaking.** It is row 7 of the stat
+      panel, which `draw_hud` paints on the unshaken screen. The test that guards
+      this now reads `UiRenderer`'s own source rather than a list beside it
+
+### B. Visual reference review
+
+- [x] **Python reference captures — done, not deferred.**
+      `tools/visual/python_reference.py` imports the unmodified game, builds 12
+      scenes through its own `reset`/`begin_play`/`spawn_enemy`/`apply_strip`
+      calls, and saves what `Game.draw` produced. 12 of 12 captured
+- [x] Paired contact sheet — `tools/visual/contact_sheet.py`, one image per scene
+      with Python above and Java below, plus an overview sheet.
+      `build/visual-review/`
+- [x] Reviewed by looking at the images, which found **eight defects and three
+      omissions** that reading the draw methods had missed:
+
+| Found | Cause |
+|---|---|
+| no particles or floating text anywhere in the game | the event sink was captured from `worldRenderer.events()` *before* `create()` built the particle system, so it held `VisualEvents.NONE` for ever |
+| effects drawn mirrored about the horizon | `VisualEvents` takes gameplay coordinates and `EffectsSystem` stored them unconverted |
+| the keep rendered almost black | `ctx.shade()` returns a shared scratch `Color`; passing it as a base that is then shaded per block aliased the two |
+| hills were sharp triangles | invented rather than transcribed; the source uses three ridges of summed sines |
+| no moon, too few stars | missing |
+| boss bars across the top | the source draws them along the bottom, at most two, with the name above and the numbers on the bar, in red |
+| the horn was a clipped label in the corner | it is a 58x60 brass disc on the castle wall with the word underneath |
+| the SHOP button shook | see A above |
+| **missing:** the whole field readout | enemies left, kills, throw damage, wind, storm — the only place a player sees any of it |
+| **missing:** the announcement banners | Phase 8 built `Announcements`; nothing ever drew it, so every wave name, weather change and boss arrival went unseen |
+| **missing:** the grab-cursor layer | named in `DrawOrder.Layer` and never implemented — the overcharge slingshot, the claw-smack ring, and the prompts that make the crown, staff, stripping and overcharge mechanics discoverable at all |
+
+- [x] Deliberate differences kept: Pygame and libGDX differ in font metrics,
+      anti-aliasing and primitive rasterisation, and no gameplay geometry was
+      altered to make the pictures agree
+
+### Still open
+
+- **Manual review.** The captures exist and have been inspected by the port
+  author; they have **not** been approved by the repository owner. That approval
+  is the gate on Phase 12, and this document does not claim it.
 
 ## Phase 12 — Mobile optimisation
 
