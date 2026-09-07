@@ -474,6 +474,33 @@ public abstract class Enemy extends Entity implements Target {
         return tier;
     }
 
+    /**
+     * The endgame tier's colour tint, packed 0xRRGGBB, or -1 for none.
+     *
+     * <p>Published from the tier data rather than left for a renderer to look up
+     * by index. The index is 0-based with -1 for "no tier", and the renderer had
+     * been reading it as 1-based — which tinted a Voidtouched horde Frostbound
+     * blue and left Bloodied units untinted entirely. Handing over the answer
+     * instead of the index removes the chance to make that mistake, and removes
+     * the duplicated colour table with it.
+     */
+    public int tierTint() {
+        if (tier < 0) {
+            return -1;
+        }
+        EndgameTier[] tiers = ctx.endgameTiers();
+        return tier < tiers.length ? tiers[tier].tint : -1;
+    }
+
+    /** How strongly the tier tint is mixed in, 0 when there is no tier. */
+    public float tierTintStrength() {
+        if (tier < 0) {
+            return 0f;
+        }
+        EndgameTier[] tiers = ctx.endgameTiers();
+        return tier < tiers.length ? tiers[tier].tintStrength : 0f;
+    }
+
     public String tierName() {
         return tierName;
     }

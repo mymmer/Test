@@ -253,9 +253,9 @@ public final class UiRenderer {
         for (int i = 0; i < rows.size; i++) {
             String row = rows.get(i);
             if ("hud.row.title".equals(row)) {
-                y -= line(x, y, titleText(), TEXT, 30f);
+                y -= line(x, y, titleText(), TEXT, 30f, true);
                 text(right, y + 30f, String.valueOf(run.session().gold()) + " G",
-                        GOLD, 26f, true);
+                        GOLD, 26f, true, false, true);
             } else if ("hud.row.badge".equals(row)) {
                 y -= HudScreen.ROW_GAP + line(x, y, badgeText(), TEXT_DIM, 17f);
             } else if ("hud.row.wall".equals(row)) {
@@ -273,13 +273,14 @@ public final class UiRenderer {
                 drawHealth(x, y, right - x);
             } else if ("hud.row.score".equals(row)) {
                 y -= HudScreen.ROW_GAP + line(x, y, Strings.format("hud.score",
-                        run.session().score()), TEXT, 28f);
+                        run.session().score()), TEXT, 28f, true);
             } else if ("hud.row.talents".equals(row)) {
                 y -= HudScreen.ROW_GAP + line(x, y, Strings.format("hud.talentPoints",
                         run.talentTree().availablePoints()), TEXT_DIM, 19f);
             } else if ("hud.row.clock".equals(row)) {
                 y -= HudScreen.ROW_GAP + 26f;
-                text(x, y + 20f, clockText(), TEXT, 22f, false);
+                text(x, y + 20f, clockText(), Palette.rgb(150, 220, 255), 24f,
+                    false, false, true);
             }
         }
     }
@@ -347,7 +348,7 @@ public final class UiRenderer {
                 TEXT_DIM, 20f, true);
         text(right, y - 46f, Strings.format("hud.throwDamage",
                 (int) run.session().thrownDamage()), Palette.rgb(255, 190, 120),
-                20f, true);
+                20f, true, false, true);
         float wy = y - 92f;
         float wind = run.weather().wind();
         if (Math.abs(wind) > 40f) {
@@ -355,12 +356,12 @@ public final class UiRenderer {
             //  label is the warning, and it was absent.
             text(right, wy, Strings.get(wind > 0f ? "hud.tailwind" : "hud.headwind"),
                     wind > 0f ? Palette.rgb(150, 220, 255) : Palette.rgb(255, 180, 140),
-                    20f, true);
+                    20f, true, false, true);
             wy -= 22f;
         }
         if (run.weather().storm()) {
             text(right, wy, Strings.get("hud.thunderstorm"),
-                    Palette.rgb(200, 220, 255), 20f, true);
+                    Palette.rgb(200, 220, 255), 20f, true, false, true);
         }
     }
 
@@ -385,8 +386,8 @@ public final class UiRenderer {
             //  dropped quickly at the end, as the source fades them.
             float a = (float) Math.min(1d,
                     b.remaining() / Math.max(0.001d, b.life) * 2.2d);
-            text(safe.centerX(), y, textFor(b), Palette.alpha(colourFor(b.id), a, fade), 34f,
-                    false, true);
+            text(safe.centerX(), y, textFor(b),
+                    Palette.alpha(colourFor(b.id), a, fade), 34f, false, true, true);
             y -= 40f;
         }
     }
@@ -439,34 +440,62 @@ public final class UiRenderer {
         return out.toString();
     }
 
+    /**
+     * A banner's colour, from the source's own {@code announce} call sites.
+     *
+     * <p>Not invented: every one of these is the literal triple Python passes.
+     * The colour is half of what a banner communicates — a cyan TAILWIND reads
+     * as good news and a red boss arrival as bad, before the words are read.
+     */
     private Color colourFor(Announcements.Id id) {
         switch (id) {
-            case WEATHER_HEADWIND:
+            case WEATHER_TAILWIND:  return Palette.rgb(150, 220, 255);
+            case WEATHER_HEADWIND:  return Palette.rgb(255, 180, 140);
+            case WEATHER_STORM:     return Palette.rgb(200, 220, 255);
+            case ENDLESS_BEGIN:     return Palette.rgb(120, 214, 240);
+            case ENDLESS_SUBTITLE:  return Palette.DIM;
             case BOSS_APPROACHES:
-            case BOSS_ARRIVES:
+            case BOSS_ARRIVES:      return Palette.rgb(255, 120, 100);
+            case BOSS_HINT:         return Palette.rgb(255, 190, 150);
+            case WAVE_START:
+            case TIER_REACHED:
+            case ENDGAME_TIER:
             case HORN_CALLED:
             case HORN_ELITES:
-                return Palette.rgb(255, 180, 140);
-            case WEATHER_TAILWIND:
-            case WEATHER_STORM:
-                return Palette.rgb(150, 220, 255);
             case SKILL_UNLOCKED:
             case TALENT_POINTS:
-            case WAVE_CLEARED:
-                return Palette.GOLD;
-            default:
-                return TEXT;
+            case WAVE_CLEARED:      return Palette.GOLD;
+            default:                return TEXT;
         }
     }
 
-    /** The one-line control hint along the bottom, PLAYING only. */
+    /**
+     * The control hint along the bottom, PLAYING only.
+     *
+     * <p>Two versions of it. The source's line names the left mouse button and
+     * the P key, neither of which exists on a phone; a touch device gets the
+     * same three instructions in its own vocabulary. Nothing is dropped —
+     * pausing is still mentioned, because Back is how it is done — and the
+     * choice follows the platform, not the build.
+     */
     private void drawHint() {
         if (run.world().state() != GameState.PLAYING) {
             return;
         }
         SafeArea safe = ui.safeArea();
-        text(safe.centerX(), safe.y + 24f, Strings.get("hud.hint"), TEXT_DIM, 18f,
-                false, true);
+        text(safe.centerX(), safe.y + 24f,
+                Strings.get(touch ? "hud.hint.touch" : "hud.hint.desktop"),
+                TEXT_DIM, 18f, false, true);
+    }
+
+    /** Whether this device is driven by fingers rather than a mouse. */
+    private boolean touch = com.badlogic.gdx.Gdx.app != null
+            && com.badlogic.gdx.Gdx.app.getType()
+                    == com.badlogic.gdx.Application.ApplicationType.Android;
+
+    /** Forces the touch or desktop instruction set. For tests and the launcher. */
+    public void setTouchInstructions(boolean touch) {
+        this.touch = touch;
     }
 
     /**
@@ -544,10 +573,13 @@ public final class UiRenderer {
         fill(bar.visualX() + 2f, bar.visualY() + 2f,
                 (bar.visualWidth() - 4f) * frac, bar.visualHeight() - 4f,
                 BOSS, null);
-        text(bar.centerX(), bar.visualY() + bar.visualHeight() + 24f,
+        //  Anchored exactly where draw_hud puts them: the name at HEIGHT-78
+        //  and the hit points at HEIGHT-48, both centred on the bar.
+        SafeArea safe = ui.safeArea();
+        text(bar.centerX(), safe.y + HudScreen.BOSS_NAME_TOP,
                 Strings.get("boss." + boss.bossType().id()),
-                Palette.rgb(255, 210, 130), 24f, false, true);
-        text(bar.centerX(), bar.visualY() + 2f,
+                Palette.rgb(255, 210, 130), 24f, false, true, true);
+        text(bar.centerX(), safe.y + HudScreen.BOSS_HP_TOP,
                 ((int) boss.hp()) + " / " + ((int) boss.maxHp()), TEXT, 18f,
                 false, true);
     }
@@ -728,7 +760,12 @@ public final class UiRenderer {
 
     /** Returns the line height consumed, so a row stack can walk downward. */
     private float line(float x, float y, String s, Color color, float size) {
-        text(x, y, s, color, size, false);
+        return line(x, y, s, color, size, false);
+    }
+
+    private float line(float x, float y, String s, Color color, float size,
+                       boolean bold) {
+        text(x, y, s, color, size, false, false, bold);
         return measurer.lineHeight(size);
     }
 
@@ -739,22 +776,43 @@ public final class UiRenderer {
 
     private void text(float x, float y, String s, Color color, float size,
                       boolean rightAligned, boolean centred) {
+        text(x, y, s, color, size, rightAligned, centred, false);
+    }
+
+    /**
+     * One string.
+     *
+     * <p>{@code bold} draws a second pass a fraction of a unit across, which is
+     * exactly how pygame synthesises bold for a face that has none — so a label
+     * the source marks {@code bold=True} is thickened the same way here, with no
+     * second font to bundle or license. The source uses it for almost every HUD
+     * value and every banner, and without it the interface reads noticeably
+     * lighter than the original.
+     */
+    private void text(float x, float y, String s, Color color, float size,
+                      boolean rightAligned, boolean centred, boolean bold) {
         if (s == null || s.isEmpty()) {
             return;
         }
-        font.getData().setScale(size / BASE_FONT);
+        //  A source size, converted once.  See TextLayout's calibration note.
+        font.getData().setScale(TextLayout.glyph(size) / BASE_FONT);
         font.setColor(color);
         batch.begin();
+        float drawX = x;
         if (rightAligned || centred) {
             glyphs.setText(font, s);
-            float drawX = rightAligned ? x - glyphs.width : x - glyphs.width / 2f;
-            font.draw(batch, s, drawX, y);
-        } else {
-            font.draw(batch, s, x, y);
+            drawX = rightAligned ? x - glyphs.width : x - glyphs.width / 2f;
+        }
+        font.draw(batch, s, drawX, y);
+        if (bold) {
+            font.draw(batch, s, drawX + BOLD_OFFSET, y);
         }
         batch.end();
         font.getData().setScale(1f);
     }
+
+    /** How far the faux-bold pass is offset, in UI units. */
+    private static final float BOLD_OFFSET = 0.7f;
 
     private void fill(float x, float y, float w, float h, Color face, Color edge) {
         if (w <= 0f || h <= 0f) {
@@ -816,7 +874,7 @@ public final class UiRenderer {
             if (text == null || text.isEmpty()) {
                 return 0f;
             }
-            font.getData().setScale(size / BASE_FONT);
+            font.getData().setScale(TextLayout.glyph(size) / BASE_FONT);
             layout.setText(font, text);
             float w = layout.width;
             font.getData().setScale(1f);
@@ -825,8 +883,12 @@ public final class UiRenderer {
 
         @Override
         public float lineHeight(float size) {
-            font.getData().setScale(size / BASE_FONT);
-            float h = font.getLineHeight();
+            //  Both calibrations: the glyphs are scaled to pygame's, and then the
+            //  line advance is scaled again because lsans leaves more air around
+            //  a glyph than pygame's default face does.  Without the second one
+            //  the HUD's measured row stack comes out a third too tall.
+            font.getData().setScale(TextLayout.glyph(size) / BASE_FONT);
+            float h = font.getLineHeight() * TextLayout.LINE;
             font.getData().setScale(1f);
             return h;
         }

@@ -9,6 +9,7 @@ import com.mymmer.castledefense.assets.AnimationState;
 import com.mymmer.castledefense.assets.SkinManager;
 import com.mymmer.castledefense.assets.UnitVisual;
 import com.mymmer.castledefense.assets.VisualId;
+import com.mymmer.castledefense.ui.TextLayout;
 import com.mymmer.castledefense.config.QualityConfig;
 
 /**
@@ -64,8 +65,21 @@ public final class RenderContext {
     /** Cosmetic detail budget. Never changes anything gameplay can feel. */
     public QualityConfig quality = QualityConfig.HIGH;
 
-    /** The size the built-in font was authored at; text scales relative to it. */
+    /**
+     * The size the built-in font was authored at.
+     *
+     * <p>A source size is converted through {@link TextLayout#GLYPH} first, so
+     * the number reaching {@code setScale} is a libGDX size rather than a pygame
+     * one. See the calibration note on {@code TextLayout}.
+     */
     private static final float BASE_FONT = 15f;
+
+    /** How far the faux-bold pass is offset. Pygame synthesises bold the same way. */
+    private static final float BOLD_OFFSET = 0.7f;
+
+    private void setSize(float sourceSize) {
+        font.getData().setScale(TextLayout.glyph(sourceSize) / BASE_FONT);
+    }
 
     public RenderContext(ShapeKit kit, SpriteBatch batch, BitmapFont font,
                          SkinManager skins, VisualRng rng) {
@@ -139,10 +153,23 @@ public final class RenderContext {
     /** {@code sprites.draw_text} with {@code align="center"} and a shadow. */
     public void textCentered(float cx, float topY, String s, float size, Color c,
                              boolean shadow) {
+        textCentered(cx, topY, s, size, c, shadow, false);
+    }
+
+    /**
+     * {@code sprites.draw_text} with {@code align="center"}.
+     *
+     * <p>{@code bold} draws a second pass a fraction of a unit to the side,
+     * which is how pygame synthesises bold for a font that has no bold face —
+     * so a "bold" label here is thickened the same way the source's is, with no
+     * second font to bundle or license.
+     */
+    public void textCentered(float cx, float topY, String s, float size, Color c,
+                             boolean shadow, boolean bold) {
         if (s == null || s.isEmpty()) {
             return;
         }
-        font.getData().setScale(size / BASE_FONT);
+        setSize(size);
         glyphs.setText(font, s);
         float x = cx - glyphs.width / 2f;
         //  Python measures from the top of the glyph box; libGDX draws from the
@@ -151,9 +178,15 @@ public final class RenderContext {
         if (shadow) {
             font.setColor(0f, 0f, 0f, c.a);
             font.draw(batch, s, x + 2f, y - 2f);        // world y grows upward
+            if (bold) {
+                font.draw(batch, s, x + 2f + BOLD_OFFSET, y - 2f);
+            }
         }
         font.setColor(c);
         font.draw(batch, s, x, y);
+        if (bold) {
+            font.draw(batch, s, x + BOLD_OFFSET, y);
+        }
         font.getData().setScale(1f);
     }
 
@@ -161,7 +194,7 @@ public final class RenderContext {
         if (s == null || s.isEmpty()) {
             return;
         }
-        font.getData().setScale(size / BASE_FONT);
+        setSize(size);
         glyphs.setText(font, s);
         font.setColor(0f, 0f, 0f, c.a);
         font.draw(batch, s, x + 2f, topY + glyphs.height - 2f);

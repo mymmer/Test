@@ -331,3 +331,29 @@ one-line control hint along the bottom.
 Shake usability is now asserted rather than assumed: the ceiling is 14 units, the
 smallest shaken widget is 58x60, and the test fails if a future widget is ever
 small enough for the offset to walk it off its own touch box.
+
+## Phase 11.5 polish — HUD, boss bars and instructions
+
+**HUD panel geometry is now the source's own constants.** Phase 10 had guessed
+300/16/12/8; the real values are `HUD_W = 372`, `HUD_X, HUD_Y = 14, 12`,
+`HUD_PAD = 14`, `HUD_ROW_GAP = 6`. A 372-wide panel is why the source fits the
+wall name and the gold on one row without either being cramped.
+
+**Boss bars follow `draw_hud` exactly** — 620 wide for a lone boss, 400 each for
+a pair, 24 apart, centred as a group, bottom edge 30 above the floor, red
+`(208, 62, 60)`, with the name at `HEIGHT - 78` above the bar and the hit points
+at `HEIGHT - 48` inside it. At most two, as `current_bosses()[:2]` gives.
+`BossBarLayoutTest` holds all of it, including that a third boss gets no bar and
+that a death rearranges the survivor to the full width.
+
+**Two instruction sets, deliberately.** The source's line reads *"LMB a mob to
+fling it - LMB-drag a Siege Ram to rip its armour - P to pause"*. A phone has
+neither a left mouse button nor a P key, so a touch device gets the same three
+instructions in its own vocabulary — *"Drag a mob to fling it - drag a Siege Ram
+to rip its armour - Back to pause"*. **Nothing is dropped**: pausing is still
+mentioned, because Back is how it is done. The choice follows the platform, not
+the build, and either set can be forced with
+`UiRenderer.setTouchInstructions(boolean)`.
+
+Typography across the whole interface is now calibrated against pygame's — see
+[`TEXT_LOCALIZATION.md`](TEXT_LOCALIZATION.md).

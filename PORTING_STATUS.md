@@ -857,6 +857,46 @@ phase. No architecture was redesigned and no Phase 12 work was started.
       anti-aliasing and primitive rasterisation, and no gameplay geometry was
       altered to make the pictures agree
 
+### C. Presentation polish (second comparison pass)
+
+The first pass fixed structure; a second pass on the reviewed pairs fixed
+presentation.
+
+- [T] **Boss bars** — `(208, 62, 60)` red, name above the bar, `hp / maxHp`
+      inside it, 620 wide alone and 400 each in a pair 24 apart, capped at two,
+      bottom edge 30 above the floor. `BossBarLayoutTest`, 7 tests
+- [x] **Typography calibrated.** A pygame size and a libGDX size are different
+      units: measured across nine strings and twelve sizes, libGDX draws 1.364x
+      wider and leaves more air per line. `TextLayout.GLYPH` and
+      `TextLayout.LINE` convert once, so the source's relative hierarchy is
+      preserved exactly and no call site is tuned by hand
+- [x] **Bold** — the source marks most HUD values and every banner bold; pygame
+      synthesises it for a face that has none, and so does the port, with a
+      second offset draw pass. No new font, no licence to verify
+- [x] **HUD panel** — the source's own `HUD_W = 372`, `HUD_X, HUD_Y = 14, 12`,
+      `HUD_PAD = 14`, `HUD_ROW_GAP = 6`, replacing Phase 10's guesses
+- [x] **Banner colours** — every one is now the literal triple from the matching
+      `announce` call, rather than invented
+- [T] **Endgame tier tint** — the painter kept a duplicate colour table indexed
+      1-based against a 0-based tier, so a Voidtouched horde rendered Frostbound
+      blue and Bloodied units were untinted. The tint now comes from the tier
+      data through `Enemy.tierTint()` and the duplicate is gone
+- [x] **Instruction line** — the source's wording on desktop, a touch equivalent
+      on a phone. Nothing is dropped: pausing is still named, because Back is how
+      it is done. Documented as a deliberate platform adaptation
+
+### Captures
+
+`build/visual-review/` — 12 `compare-*.png` pairs, the Python and Java halves
+alone, `contact-sheet.png`, and `MANIFEST.md`.
+
+**Every pair is representative-state, not exact-state.** The two sides are
+independent programs on independent seeds, so gold, wind, storm and timers differ
+by design. `MANIFEST.md` records that for each scene, because a reader who takes
+a different gold total for a parity failure is being misled by the artefact
+rather than informed by it. Gameplay parity is the 771 fixtures and the unit
+suite.
+
 ### Still open
 
 - **Manual review.** The captures exist and have been inspected by the port

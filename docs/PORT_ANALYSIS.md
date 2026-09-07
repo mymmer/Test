@@ -737,6 +737,42 @@ defects and three whole missing layers, none of which source-reading had caught:
 
 ---
 
+### 14.7 Typography: pygame sizes are not libGDX sizes (Phase 11.5)
+
+The port copied every font size from the source, where each is an argument to
+`pygame.font.Font(None, size)`, and assumed the two libraries meant the same
+thing by that number. They do not.
+
+Measured across nine representative strings and twelve sizes:
+
+| | |
+|---|---|
+| libGDX advance width / pygame advance width | **1.364** |
+| pygame `get_height()` / nominal size | 0.6676 |
+| libGDX `lineHeight` / nominal size | 1.2 |
+
+So `TextLayout` carries two conversion constants — `GLYPH = 0.7333` for the
+glyphs and `LINE = 0.7587` for the line advance. Two rather than one because the
+faces disagree about the glyph size *and* about how much air to leave around it;
+one constant fixes the widths and leaves a measured row stack a third too tall.
+
+It is a **unit conversion**, not a design decision: every size scales by the same
+factor, so the source's hierarchy is preserved exactly. Bold is synthesised with
+a second offset draw pass, which is how pygame does it for a face with no bold
+weight — no font was added.
+
+### 14.8 One more indexing defect (Phase 11.5)
+
+`Enemy.tier()` is a **0-based index with -1 for "no tier"**. `EnemyPainter` kept
+its own copy of the endgame tint table and read the index as 1-based, so a
+Voidtouched horde rendered Frostbound blue and Bloodied units were untinted
+entirely. Fixed by publishing `Enemy.tierTint()` from the tier data and deleting
+the duplicate table — the same lesson as §14.4's coordinate flip: a value with a
+convention should be handed over already interpreted, not re-derived by every
+reader.
+
+---
+
 ## 15. Phase plan
 
 | Phase | Content | Exit criterion |

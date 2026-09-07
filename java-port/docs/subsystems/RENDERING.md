@@ -394,3 +394,27 @@ you wrote draws the same thing, and it cannot tell you about a layer you forgot
 or an object graph wired in the wrong order. The comparison is cheap — the
 Python side is a 200-line helper that imports the game unmodified — and it found
 more in one pass than the whole of Phase 11's own review.
+
+## Phase 11.5 polish — the second comparison pass
+
+The first pass fixed structure; this one fixed presentation. Five scenes were
+recaptured and re-examined.
+
+| Fixed | Detail |
+|---|---|
+| **Boss bars** | were magenta, name inside, no hit points. Now `(208, 62, 60)` red with the name above and `hp / maxHp` inside, at the source's exact anchors, capped at two |
+| **Typography scale** | every size was ~1.36x too large, because a pygame size and a libGDX size are different units. Two measured constants now convert them; the hierarchy is untouched. See `TEXT_LOCALIZATION.md` |
+| **Font weight** | the source marks most HUD values and every banner bold; the port drew everything at one weight. Now synthesised the same way pygame does it, with a second offset pass |
+| **HUD panel** | was 300 wide with guessed padding; the source's own constants are 372/14/12/14/6 |
+| **Banner colours** | were invented; every one is now the literal triple from the matching `announce` call |
+| **Endgame tier tint** | the painter kept its own colour table indexed 1-based against a 0-based tier, so a Voidtouched horde rendered Frostbound blue and Bloodied units were untinted. The tint now comes from the tier data through `Enemy.tierTint()`, and the duplicate table is gone |
+| **Instruction line** | was a shortened paraphrase; now the source's line on desktop and a touch equivalent on a phone, with nothing dropped |
+
+### On reading captures
+
+Each pair is **representative-state, not exact-state** — two programs, two seeds,
+so gold, wind, storm and timers differ by design. `build/visual-review/MANIFEST.md`
+says so for every scene, because the alternative is someone reading a different
+gold total as a parity failure. Gameplay parity is the 771 fixtures and the unit
+suite; these images are for silhouette, size, placement, layer order, visible
+state and colour.

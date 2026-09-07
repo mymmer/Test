@@ -59,6 +59,7 @@ public final class EnemyPainter {
     /** Reused rectangle: left, bottom, width, height, in world units. */
     private final float[] frame = new float[4];
     private final Color body = new Color();
+    private final Color tintColour = new Color();
     private final float[] poly = new float[16];
 
     // ========================================================================
@@ -457,34 +458,26 @@ public final class EnemyPainter {
      * <p>The tint is a property of the unit's tier, which gameplay assigns at
      * spawn, so a Voidtouched Scout is dark because it <em>is</em> one.
      */
+    /**
+     * {@code body_color}, plus the endgame tier tint.
+     *
+     * <p>Both the colour and its strength come from the unit's own tier data via
+     * {@code e.tierTint()}, so there is one table and it is the gameplay one. The
+     * painter previously kept a copy indexed 1-based against a 0-based tier,
+     * which showed a Voidtouched horde in Frostbound blue.
+     */
     private Color bodyColor(RenderContext ctx, Enemy e, Color base) {
         body.set(base);
-        Color tint = tierTint(e.tier());
-        if (tint != null) {
-            Palette.mix(body, tint, tierStrength(e.tier()), body);
+        int tint = e.tierTint();
+        if (tint >= 0) {
+            tintColour.set(((tint >> 16) & 0xFF) / 255f, ((tint >> 8) & 0xFF) / 255f,
+                    (tint & 0xFF) / 255f, 1f);
+            Palette.mix(body, tintColour, e.tierTintStrength(), body);
         }
         if (e.hurtFlash() > 0f) {
             Palette.mix(body, Color.WHITE, e.hurtFlash() * 0.75f, body);
         }
         return body;
-    }
-
-    private static Color tierTint(int tier) {
-        switch (tier) {
-            case 1:  return Palette.TIER_BLOODIED;
-            case 2:  return Palette.TIER_FROSTBOUND;
-            case 3:  return Palette.TIER_VOIDTOUCHED;
-            default: return null;
-        }
-    }
-
-    private static float tierStrength(int tier) {
-        switch (tier) {
-            case 1:  return 0.42f;
-            case 2:  return 0.46f;
-            case 3:  return 0.55f;
-            default: return 0f;
-        }
     }
 
     public static Color baseColor(EnemyType type) {

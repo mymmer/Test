@@ -152,3 +152,47 @@ these become work alongside a real typeface — a font pipeline, not a string
 file.
 
 See also [`UI.md`](UI.md).
+
+## Phase 11.5 polish — pygame sizes are not libGDX sizes
+
+Every font size in this port is a number copied from the source, where it is an
+argument to `pygame.font.Font(None, size)`. The port originally assumed pygame
+and libGDX meant the same thing by that number. They do not, and the result was
+that every string on screen was noticeably larger than the original — the
+announcements sprawling across the middle of the scene was the visible symptom.
+
+Measured rather than guessed. Nine representative strings at their real sizes,
+rendered by pygame and measured against the same strings through libGDX's
+built-in font:
+
+```
+   libGDX advance width / pygame advance width  =  1.364   (mean of 9 strings)
+   pygame get_height()  / nominal size          =  0.6676  (mean of 12 sizes)
+   libGDX lineHeight    / nominal size          =  1.2
+```
+
+So `TextLayout` carries two constants:
+
+```java
+   GLYPH = 0.7333f   // a source size, as a libGDX size
+   LINE  = 0.7587f   // extra line-advance factor for a measured row stack
+```
+
+Two rather than one because the fonts disagree about the glyph size **and**
+about how much air to leave around it; folding them together would fix the
+widths and leave the HUD's measured row stack a third too tall.
+
+**This is a unit conversion, not a design decision.** It scales every size by the
+same factor, so the source's relative hierarchy — a 34-point banner over a
+24-point boss name over an 18-point hint — is preserved exactly. Nothing should
+ever be tuned per call site: if one label looks wrong, its source size is wrong.
+
+### Bold, without a second font
+
+The source marks almost every HUD value and every banner `bold=True`, and pygame
+synthesises that for a face with no bold weight. The port does the same: a second
+draw pass 0.7 units across. No font to bundle, no licence to verify, and the same
+thickening the original gets. Without it the interface reads noticeably lighter
+than the source's.
+
+The built-in font's coverage decision in §6 is unchanged — no new font was needed.

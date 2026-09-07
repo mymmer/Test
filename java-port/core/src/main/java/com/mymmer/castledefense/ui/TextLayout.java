@@ -35,6 +35,49 @@ import com.badlogic.gdx.utils.Array;
  */
 public final class TextLayout {
 
+    // ========================================================================
+    //  Pygame sizes to libGDX sizes
+    // ========================================================================
+    //
+    //  Every font size in this port is a number copied from the Python source,
+    //  where it is an argument to `pygame.font.Font(None, size)`.  Pygame and
+    //  libGDX disagree about what that number means, and the port originally
+    //  assumed they agreed -- which made every string on screen noticeably
+    //  larger than the source's, with the announcements sprawling across the
+    //  middle of the scene.
+    //
+    //  Measured, not guessed.  Nine representative strings at their real sizes
+    //  were rendered with pygame and measured against the same strings through
+    //  libGDX's built-in font:
+    //
+    //      libGDX advance width / pygame advance width  =  1.364  (mean of 9)
+    //      pygame get_height() / nominal size           =  0.6676 (mean of 12)
+    //      libGDX lineHeight   / nominal size           =  1.2
+    //
+    //  So a source size N is drawn at N * GLYPH, and one line of it advances by
+    //  N * GLYPH * 1.2 * LINE.  Two constants rather than one because the two
+    //  fonts disagree about the glyph size AND about how much air to leave
+    //  around it; folding them together would fix the widths and leave the HUD's
+    //  measured row stack a third too tall.
+    //
+    //  This is a UNIT CONVERSION, not a design decision.  It scales every size
+    //  by the same factor, so the source's relative hierarchy -- a 34-point
+    //  banner over a 24-point boss name over an 18-point hint -- is preserved
+    //  exactly.  Nothing here should ever be tuned per call site; if one label
+    //  looks wrong, its source size is wrong.
+
+    /** A source font size, as a libGDX size. Measured; see above. */
+    public static final float GLYPH = 0.7333f;
+
+    /** Extra line-advance factor, so a measured row stack matches pygame's. */
+    public static final float LINE = 0.7587f;
+
+    /** A source size as the size to hand libGDX. */
+    public static float glyph(float sourceSize) {
+        return sourceSize * GLYPH;
+    }
+
+
     /** Real font metrics, or a test's stand-in for them. */
     public interface Measurer {
         /** Width of one line of text at a size, in UI units. */

@@ -80,10 +80,11 @@ public final class Palette {
     public static final Color FLAME_OUTER = rgb(255, 150, 60);
     public static final Color FLAME_INNER = rgb(255, 226, 140);
 
-    // --- endgame tier tints, from ENDGAME_TIERS -------------------------------
-    public static final Color TIER_BLOODIED = rgb(214, 58, 52);
-    public static final Color TIER_FROSTBOUND = rgb(74, 148, 230);
-    public static final Color TIER_VOIDTOUCHED = rgb(24, 20, 34);
+    //  The endgame tier tints used to be duplicated here.  They are not any
+    //  more: they live in the tier data and reach the painter through
+    //  Enemy.tierTint(), because a second copy indexed by hand is a second copy
+    //  that can be indexed wrongly -- and was, showing a Voidtouched horde in
+    //  Frostbound blue.
 
     // ========================================================================
     //  The source's own colour maths

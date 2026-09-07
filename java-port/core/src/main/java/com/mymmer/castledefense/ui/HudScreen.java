@@ -47,15 +47,41 @@ import com.mymmer.castledefense.skill.SkillId;
  */
 public final class HudScreen implements UiScreen {
 
-    /** Panel geometry, in UI units. From the source's HUD constants. */
-    public static final float PANEL_X = 16f;
-    public static final float PANEL_WIDTH = 300f;
-    public static final float PANEL_PAD = 12f;
-    public static final float ROW_GAP = 8f;
+    /**
+     * Panel geometry, in UI units. The source's own {@code HUD_*} constants.
+     *
+     * <p>Phase 10 had guessed 300/16/12/8; the real values are
+     * {@code HUD_W = 372}, {@code HUD_X, HUD_Y = 14, 12}, {@code HUD_PAD = 14},
+     * {@code HUD_ROW_GAP = 6}. A 372-wide panel is why the source can fit the
+     * wall name and the gold on one row without either being cramped.
+     */
+    public static final float PANEL_WIDTH = 372f;
+    public static final float PANEL_X = 14f;
+    public static final float PANEL_TOP_GAP = 12f;
+    public static final float PANEL_PAD = 14f;
+    public static final float ROW_GAP = 6f;
+    /** {@code HUD_GAP}: the least space between two items sharing a row. */
+    public static final float ROW_ITEM_GAP = 16f;
 
     /** The skill bar's slots, from {@code SkillPanel.SLOT}/{@code GAP}. */
     public static final float SKILL_SLOT = 62f;
     public static final float SKILL_GAP = 12f;
+
+    /**
+     * Boss bar geometry, from {@code draw_hud}'s boss-bar block.
+     *
+     * <p>{@code HEIGHT - 50} with height 20 leaves the bar's bottom edge 30
+     * above the floor; the name sits at {@code HEIGHT - 78} and the hit points
+     * at {@code HEIGHT - 48}, i.e. just inside the bar's top.
+     */
+    public static final float BOSS_BAR_WIDE = 620f;
+    public static final float BOSS_BAR_PAIR = 400f;
+    public static final float BOSS_BAR_HEIGHT = 20f;
+    public static final float BOSS_BAR_GAP = 24f;
+    public static final float BOSS_BAR_BOTTOM = 30f;
+    /** Name baseline above the bar, and the hit points inside it. */
+    public static final float BOSS_NAME_TOP = 78f;
+    public static final float BOSS_HP_TOP = 48f;
 
     /**
      * The horn, from {@code HORN_RECT = Rect(170, 452, 58, 60)}.
@@ -184,7 +210,7 @@ public final class HudScreen implements UiScreen {
         panelWidth = PANEL_WIDTH;
         panelHeight = total + PANEL_PAD * 2f;
         panelX = safe.x + PANEL_X;
-        panelY = safe.top() - panelHeight - PANEL_X;
+        panelY = safe.top() - panelHeight - PANEL_TOP_GAP;
 
         //  The armoury button rides in the clock row, and only in Endless.
         shopButton.setVisible(false);
@@ -276,20 +302,27 @@ public final class HudScreen implements UiScreen {
         if (!playing) {
             return;
         }
-        //  The source puts these along the BOTTOM -- draw_bar at HEIGHT-50 with
-        //  the name at HEIGHT-78 -- and shows at most two, side by side: 620
-        //  wide for a lone boss, 400 each for a pair.  The first attempt put
-        //  them across the top, which the Phase 11.5 image comparison caught.
+        //  The source's exact arrangement:
+        //
+        //      bw   = 620 for one boss, 400 each for two
+        //      step = bw + 24
+        //      x0   = WIDTH/2 - (n * step - 24) / 2
+        //      bar  at y = HEIGHT - 50, height 20
+        //
+        //  which puts the bar's BOTTOM edge 30 units up from the floor.  Widths
+        //  are clamped to the safe rectangle so a narrow phone does not push a
+        //  pair off the sides.
         int shown = Math.min(2, live.size);
         if (shown == 0) {
             return;
         }
-        float barHeight = 20f;
-        float barWidth = shown == 1 ? Math.min(620f, safe.width - 40f)
-                : Math.min(400f, (safe.width - 64f) / 2f);
-        float step = barWidth + 24f;
-        float x0 = safe.centerX() - (shown * step - 24f) / 2f;
-        float y = safe.y + 50f;
+        float barHeight = BOSS_BAR_HEIGHT;
+        float barWidth = shown == 1
+                ? Math.min(BOSS_BAR_WIDE, safe.width - 40f)
+                : Math.min(BOSS_BAR_PAIR, (safe.width - 40f - BOSS_BAR_GAP) / 2f);
+        float step = barWidth + BOSS_BAR_GAP;
+        float x0 = safe.centerX() - (shown * step - BOSS_BAR_GAP) / 2f;
+        float y = safe.y + BOSS_BAR_BOTTOM;
         for (int i = 0; i < shown; i++) {
             bossBars.get(i).setVisible(true)
                     .setBounds(x0 + i * step, y, barWidth, barHeight);
