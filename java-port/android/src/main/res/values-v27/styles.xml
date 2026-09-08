@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- API 27+ only: draw into the display cutout, and let Phase 10's
+         SafeAreaInsets seam keep the interface out of it.  Without this the
+         system letterboxes the game away from the notch and the safe-area work
+         has nothing to do. -->
+    <style name="GdxTheme" parent="android:Theme.Material.NoActionBar.Fullscreen">
+        <item name="android:windowLayoutInDisplayCutoutMode">shortEdges</item>
+    </style>
+</resources>

@@ -1,7 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- The game needs no permissions: no network, no storage, no location. -->
+    <!-- No network, no storage, no location.  VIBRATE is the one thing the
+         game does ask for: Phase 3's haptics call Vibrator.vibrate, and without
+         the permission that call fails on a real device.  Android lint caught
+         it the moment an SDK made this module part of the build. -->
+    <uses-permission android:name="android.permission.VIBRATE" />
+
+    <!-- Haptics are a nicety, not a requirement: a device with no vibrator
+         still installs and runs, and PlatformServices reports it unavailable. -->
+    <uses-feature
+        android:name="android.hardware.vibrate"
+        android:required="false" />
 
     <application
         android:allowBackup="true"

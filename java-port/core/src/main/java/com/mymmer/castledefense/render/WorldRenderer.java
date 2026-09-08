@@ -82,6 +82,7 @@ public final class WorldRenderer implements GameRenderer {
     private final DefencePainter defences = new DefencePainter();
     private final WorldPainters painters = new WorldPainters();
     private final CursorPainter cursor = new CursorPainter();
+    private final BackgroundCache background = new BackgroundCache();
     private final ProjectileTrails trails = new ProjectileTrails();
     private final Interpolator interpolator = new Interpolator();
     private EffectsSystem effects;
@@ -160,6 +161,7 @@ public final class WorldRenderer implements GameRenderer {
             font.dispose();
             font = null;
         }
+        background.dispose();
     }
 
     /** The sink gameplay sends one-shot visual events to. */
@@ -177,6 +179,18 @@ public final class WorldRenderer implements GameRenderer {
 
     public ProjectileTrails trails() {
         return trails;
+    }
+
+    /**
+     * The GL context may have been thrown away while the app was backgrounded.
+     *
+     * <p>Nothing cached survives across that, and at present nothing IS cached —
+     * the background cache was measured and removed. The hook stays because the
+     * game's {@code resume} should have somewhere to say so, and the next thing
+     * that caches GPU state will need it.
+     */
+    public void onResume() {
+        background.invalidate();
     }
 
     /** Called on a new run so nothing from the last one is drawn or blended. */
@@ -271,15 +285,36 @@ public final class WorldRenderer implements GameRenderer {
         drawnProjectiles = 0;
         GameState state = run.world().state();
 
-        ctx.kit.fillBegin();
-        painters.paintBackground(ctx);                                // BACKGROUND
+        long t0 = LayerTimes.now();
+        LayerTimes.layer(0);
+        //  BACKGROUND -- one textured quad instead of 1188 shape primitives
+        //  of entirely static content.  Measured on a fixed-roster scene: 541 us
+        //  per frame with it, 598 us without.  See BackgroundCache.
+        background.ensure(ctx, painters);
+        if (background.isReady()) {
+            batch.begin();
+            background.draw(batch);
+            batch.end();
+            ctx.kit.fillBegin();
+        } else {
+            ctx.kit.fillBegin();
+            painters.paintBackground(ctx);
+        }
+        t0 = LayerTimes.mark(0, t0);
+        LayerTimes.layer(1);
         defences.paintOutpost(ctx, run.outpost());                    // OUTPOST
+        t0 = LayerTimes.mark(1, t0);
+        LayerTimes.layer(2);
         defences.paintCastle(ctx, run.castle(), run.spikes());        // CASTLE + spikes
+        t0 = LayerTimes.mark(2, t0);
+        LayerTimes.layer(3);
         for (int i = 0; i < run.castle().towers().size; i++) {
             defences.paintTower(ctx, run.castle().towers().get(i));   // ...and towers
         }
         defences.paintBarricade(ctx, run.barricade());                // BARRICADE
+        t0 = LayerTimes.mark(3, t0);
 
+        LayerTimes.layer(4);
         Array<Enemy> horde = order.sortedEnemies(run.horde());        // ENEMIES
         for (int i = 0; i < horde.size; i++) {
             Enemy e = horde.get(i);
@@ -293,7 +328,9 @@ public final class WorldRenderer implements GameRenderer {
             enemies.paintHealth(ctx, e, at[0], at[1]);
             drawnEnemies++;
         }
+        t0 = LayerTimes.mark(4, t0);
         drawAllies();                                                 // ALLIES
+        LayerTimes.layer(5);
         for (int i = 0; i < run.droppedItems().size(); i++) {         // ITEMS
             DroppedItem it = run.droppedItems().get(i);
             if (it == null || !it.isAlive()) {
@@ -323,6 +360,8 @@ public final class WorldRenderer implements GameRenderer {
             painters.paintProjectile(ctx, p, at[0], WorldGeometry.toDrawY(at[1]));
             drawnProjectiles++;
         }
+        t0 = LayerTimes.mark(5, t0);
+        LayerTimes.layer(6);
         effects.paintParticles(ctx);                                  // EFFECTS
         painters.paintWeather(ctx, run.weather(), ctx.worldTime);      // WEATHER
         if (state == GameState.PLAYING) {
@@ -330,6 +369,7 @@ public final class WorldRenderer implements GameRenderer {
             cursor.paint(ctx, run.cursor(), run.pointerX(), run.pointerY(),
                     run.pointerDown());
         }
+        LayerTimes.mark(6, t0);
         ctx.kit.end();
 
         //  The text pass: every label the shape pass could not draw, in the same

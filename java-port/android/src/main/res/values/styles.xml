@@ -1,8 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- Fullscreen, no action bar: the game owns the whole surface and the
-         safe-area abstraction (Phase 10) keeps the HUD clear of cutouts. -->
-    <style name="GdxTheme" parent="android:Theme.Material.NoActionBar.Fullscreen">
-        <item name="android:windowLayoutInDisplayCutoutMode">shortEdges</item>
-    </style>
+         safe-area abstraction (Phase 10) keeps the HUD clear of cutouts.
+
+         The cutout mode itself lives in values-v27/, because
+         android:windowLayoutInDisplayCutoutMode arrived in API 27 and minSdk
+         here is 21.  Declaring it in the base style made lint fail the build,
+         and rightly: on 21-26 it is an attribute the platform has never heard
+         of.  Devices that old have no cutout to lay out around anyway. -->
+    <style name="GdxTheme" parent="android:Theme.Material.NoActionBar.Fullscreen" />
 </resources>

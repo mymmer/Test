@@ -41,7 +41,20 @@ class UiTextTest {
 
     @BeforeEach
     void setUp() {
-        Strings.load(Locale.ENGLISH);
+        //  Gdx.files does not exist in a headless test, so Strings.load falls
+        //  back to raw keys -- silently.  Loading through an explicit handle,
+        //  and then ASSERTING the bundle is really there, is what stops every
+        //  assertion in this file from being vacuous.  They were, until an
+        //  Android emulator showed "!difficulty.normal.name!" on the menu.
+        java.io.File base = new java.io.File("../assets/i18n/strings");
+        if (!new java.io.File(base.getPath() + ".properties").exists()) {
+            base = new java.io.File("assets/i18n/strings");
+        }
+        Strings.loadFrom(new com.badlogic.gdx.files.FileHandle(base), Locale.ENGLISH);
+        assertTrue(Strings.isLoaded(),
+                "the string bundle did not load, so every check below would "
+                        + "pass against nothing. Looked for "
+                        + base.getAbsolutePath() + ".properties");
         run = new TestRun();
     }
 
@@ -112,7 +125,9 @@ class UiTextTest {
         DifficultyTable table = run.difficulties;
         Array<com.mymmer.castledefense.config.DifficultyConfig> all = table.all();
         for (int i = 0; i < all.size; i++) {
-            require("difficulty." + all.get(i).id() + ".name", missing);
+            //  The display name is "difficulty.<id>"; there is no ".name"
+            //  suffix, and asking for one is what put a raw key on the menu.
+            require("difficulty." + all.get(i).id(), missing);
         }
         assertNoneMissing(missing);
     }
@@ -318,10 +333,23 @@ class UiTextTest {
         }
     }
 
+    /**
+     * Whether a key resolves to real text.
+     *
+     * <p>{@code Strings.get} answers a missing key with {@code !key!}, and this
+     * check used to look for {@code ???} — a marker nothing produces. So it
+     * matched nothing, and every "is this key present" assertion in this file
+     * was quietly vacuous. It was an Android emulator that found out, by
+     * displaying {@code DIFFICULTY: !difficulty.normal.name!} on the menu.
+     *
+     * <p>The literal-key scan did once report nine missing keys, which is what
+     * made this look like it worked: those were caught by the separate check
+     * against the properties file, not by this.
+     */
     private static void require(String key, Array<String> missing) {
         String value = Strings.get(key);
         if (value == null || value.isEmpty() || value.equals(key)
-                || value.startsWith("???")) {
+                || (value.startsWith("!") && value.endsWith("!"))) {
             missing.add(key);
         }
     }

@@ -26,6 +26,7 @@ import com.mymmer.castledefense.platform.SafeAreaInsets;
  *   --screen NAME     open a screen before the screenshot (see below)
  *   --scenario NAME   build a controlled visual state (see VisualScenarios)
  *   --ui-debug        draw the layout overlay: safe area, visual/hit bounds
+ *   --bench           time every frame and print percentiles before exiting
  *   --no-vsync        uncap the frame rate
  * </pre>
  *
@@ -85,7 +86,7 @@ public final class Lwjgl3Launcher {
         CastleDefenseGame game = options.frameLimit > 0
                 ? new FrameLimitedGame(options.frameLimit, options.screenshot,
                         options.mode, options.screen, options.scenario,
-                        options.uiDebug, platform)
+                        options.uiDebug, options.bench, platform)
                 : new CastleDefenseGame(platform);
         if (options.frameLimit <= 0 && options.uiDebug) {
             System.out.println("[ui] --ui-debug needs --frames to take effect on "
@@ -103,11 +104,16 @@ public final class Lwjgl3Launcher {
         private final String screen;
         private final String scenario;
         private final boolean uiDebug;
+        private final boolean bench;
+        /** Per-frame times in microseconds, for --bench. Sized at the limit. */
+        private double[] frameMicros;
+        private int frameCount;
+        private long lastFrameStart;
         private boolean staged;
 
         FrameLimitedGame(int limit, String screenshotPath, GameMode mode,
                          String screen, String scenario, boolean uiDebug,
-                         DesktopPlatformServices platform) {
+                         boolean bench, DesktopPlatformServices platform) {
             super(platform);
             this.limit = limit;
             this.screenshotPath = screenshotPath;
@@ -115,6 +121,8 @@ public final class Lwjgl3Launcher {
             this.screen = screen;
             this.scenario = scenario;
             this.uiDebug = uiDebug;
+            this.bench = bench;
+            this.frameMicros = new double[Math.max(1, limit)];
         }
 
         /**
@@ -156,12 +164,29 @@ public final class Lwjgl3Launcher {
                 stageScreen();
                 stageScenario();
             }
+            //  Timed around super.render(), which is the whole frame: the
+            //  simulation steps the loop decides to run, the world pass and the
+            //  interface.  The simulation half is measured separately and
+            //  headlessly by :core:benchmark; the difference between the two is
+            //  what rendering costs.
+            long frameStart = System.nanoTime();
             super.render();
+            if (bench && frameCount < frameMicros.length) {
+                frameMicros[frameCount++] = (System.nanoTime() - frameStart) / 1000.0;
+            }
             if (getRenderCount() < limit) {
                 return;
             }
             if (mode != null && getRun() != null) {
                 System.out.println("[smoke] " + getRun().describeRun());
+            }
+            if (bench) {
+                reportFrames();
+                String layers = com.mymmer.castledefense.render.LayerTimes.report();
+                if (!layers.isEmpty()) {
+                    System.out.println(layers);
+                    System.out.println(com.mymmer.castledefense.render.LayerTimes.ops());
+                }
             }
             if (screenshotPath != null) {
                 saveScreenshot(screenshotPath);
@@ -278,6 +303,58 @@ public final class Lwjgl3Launcher {
             }
         }
 
+        /**
+         * Frame-time percentiles for the measured window.
+         *
+         * <p>The first handful of frames include shader compilation, texture
+         * upload and JIT warm-up, and are discarded -- they are real costs but
+         * they are startup costs, and averaging them into a steady-state figure
+         * hides what the game actually does per frame.
+         */
+        private void reportFrames() {
+            final int warmup = Math.min(60, frameCount / 4);
+            int n = frameCount - warmup;
+            if (n < 10) {
+                System.out.println("[bench] too few frames to report");
+                return;
+            }
+            double[] m = new double[n];
+            System.arraycopy(frameMicros, warmup, m, 0, n);
+            double total = 0;
+            for (double v : m) {
+                total += v;
+            }
+            java.util.Arrays.sort(m);
+            System.out.printf(java.util.Locale.ROOT,
+                    "[bench] scenario=%s frames=%d mean=%.0fus p50=%.0fus "
+                            + "p95=%.0fus p99=%.0fus max=%.0fus%n",
+                    scenario == null ? (screen == null ? "play" : screen) : scenario,
+                    n, total / n, pct(m, 0.50), pct(m, 0.95), pct(m, 0.99),
+                    m[n - 1]);
+            //  The number that matters on a phone: how much of a 60 Hz frame is
+            //  already spent before the platform gets any.
+            System.out.printf(java.util.Locale.ROOT,
+                    "[bench] p99 is %.1f%% of a 16667us frame%n",
+                    pct(m, 0.99) / 16667.0 * 100.0);
+            if (getWorldRenderer() != null) {
+                System.out.printf(java.util.Locale.ROOT,
+                        "[bench] drew enemies=%d projectiles=%d particles=%d "
+                                + "quality=%s skin=%s atlas=%s%n",
+                        getWorldRenderer().drawnEnemies(),
+                        getWorldRenderer().drawnProjectiles(),
+                        getWorldRenderer().effects() == null ? 0
+                                : getWorldRenderer().effects().particleCount(),
+                        getWorldRenderer().quality(),
+                        getWorldRenderer().skinId(),
+                        getWorldRenderer().atlasPath());
+            }
+        }
+
+        private static double pct(double[] sorted, double q) {
+            return sorted[(int) Math.min(sorted.length - 1,
+                    Math.round(q * (sorted.length - 1)))];
+        }
+
         private void saveScreenshot(String path) {
             byte[] pixels = ScreenUtils.getFrameBufferPixels(
                     0, 0, Gdx.graphics.getBackBufferWidth(),
@@ -305,6 +382,7 @@ public final class Lwjgl3Launcher {
         String screen = null;
         String scenario = null;
         boolean uiDebug = false;
+        boolean bench = false;
         SafeAreaInsets insets = SafeAreaInsets.NONE;
 
         static Options parse(String[] args) {
@@ -329,6 +407,9 @@ public final class Lwjgl3Launcher {
                     o.scenario = args[++i].trim().toLowerCase();
                 } else if ("--ui-debug".equals(a)) {
                     o.uiDebug = true;
+                } else if ("--bench".equals(a)) {
+                    o.bench = true;
+                    o.vsync = false;        // vsync would measure the display
                 } else if ("--insets".equals(a) && i + 1 < args.length) {
                     String[] edges = args[++i].split(",");
                     if (edges.length == 4) {

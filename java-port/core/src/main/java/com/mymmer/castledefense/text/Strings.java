@@ -47,6 +47,25 @@ public final class Strings {
         }
     }
 
+    /**
+     * Loads from an explicit handle, for callers with no {@code Gdx.files}.
+     *
+     * <p>A headless test has no file backend, so {@code Gdx.files.internal}
+     * throws and {@link #load(Locale)} falls back to raw keys — silently, which
+     * is right for the game and was disastrous for the tests: every
+     * localisation-completeness assertion passed for months against a bundle
+     * that had never loaded. This is the door those tests use, and they assert
+     * {@link #isLoaded()} afterwards so it can never go quiet again.
+     */
+    public static void loadFrom(FileHandle baseName, Locale requested) {
+        locale = requested != null ? requested : Locale.ENGLISH;
+        try {
+            bundle = I18NBundle.createBundle(baseName, locale);
+        } catch (RuntimeException e) {
+            bundle = null;
+        }
+    }
+
     /** Loads the platform's default locale. */
     public static void load() {
         load(Locale.getDefault());

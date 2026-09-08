@@ -773,6 +773,67 @@ reader.
 
 ---
 
+### 14.9 The hotspots were not hotspots (Phase 12)
+
+Section 3 lists the algorithms transcribed verbatim from Python that are
+quadratic or near it, on the assumption they would need attention. They were all
+measured, and none of them does.
+
+| Flagged algorithm | Scenario | Median cost |
+|---|---|---|
+| crowd separation, every alive pair | 70 packed enemies | 46 us |
+| crowd separation | 160 enemies (beyond real play) | 110 us |
+| Cannon cluster scoring, per candidate per enemy | 8 Cannons, 59 enemies | 90 us |
+| projectile collision, every shot x every enemy | 60 enemies | 16 us |
+| airborne slam pairs | 45 mobs in the air at once | 8.6 us |
+| Endless director scheduling | 5 minutes in | 25 us |
+
+A 60 Hz step has 16 667 us for everything. The worst realistic case uses 0.5% of
+it. **Do not optimise something because it looks expensive**: the whole of Phase
+12's simulation work was proving none of this needed doing, which is a better
+outcome than a broadphase nobody can prove equivalent.
+
+The frame's real cost is rendering, and it is linear in shape primitives at about
+0.1 us each. That reduced the phase to one question -- how to submit fewer -- and
+answered it three times for a 38% cut.
+
+### 14.10 Two ways a benchmark lies
+
+Both were hit in Phase 12, and both produced confident wrong numbers.
+
+**Timing a no-op.** The first simulation run reported a 0.1 us median for every
+scenario -- 100 nanoseconds for a 160-enemy step. A crowd that size flattens a
+wooden castle in seconds, and a step entered in `GAMEOVER` returns immediately.
+The benchmark now fails loudly if fewer than 90% of a window's steps actually
+simulated.
+
+**Benchmarking a moving workload.** The background cache's first A/B ran on a
+scenario that keeps simulating while it is measured; its entity count drifts and
+its frame times swing 40%. It reported no difference, so the cache was deleted.
+Repeating it on a fixed-roster scene showed a clean 13% and it was restored. **A
+benchmark whose workload moves cannot resolve a 10% change, and will tell you
+confidently that there isn't one.**
+
+### 14.11 Four Android defects, and one the emulator found
+
+The Android gate stayed open from Phase 2 to Phase 12 for want of an SDK. Every
+day it was open the `:android` module was excluded from the build -- and it did
+not configure, let alone compile, when it finally entered. The details are in
+`PORTING_STATUS.md`; the one worth repeating is that **`Vibrator.vibrate` was
+being called with no `VIBRATE` permission declared**, so Phase 3's haptics would
+have failed on every real device, and nothing but Android lint could have said
+so.
+
+Running it on an emulator then found a defect of its own: the menu read
+`DIFFICULTY: !difficulty.normal.name!`. The renderer asked for a key shape the
+bundle does not use -- and the localisation-completeness tests that exist to
+catch exactly that **had been vacuous since they were written**, because
+`Strings.load` needs `Gdx.files`, which a headless test does not have, so the
+bundle silently never loaded and every key "passed". A test that cannot fail is
+worse than no test: it is a claim nobody re-examines.
+
+---
+
 ## 15. Phase plan
 
 | Phase | Content | Exit criterion |

@@ -35,8 +35,33 @@ import com.badlogic.gdx.math.MathUtils;
  */
 public final class ShapeKit {
 
-    /** Segments per 90° of corner. Enough to read as round at UI scale. */
-    private static final int CORNER_SEGMENTS = 6;
+    /**
+     * Segments per 90° of corner, chosen from the corner's own radius.
+     *
+     * <p>A fixed six was costing far more than it looked. One {@code roundRect}
+     * is three rectangles plus four arcs, and one {@code roundRectOutline} is
+     * four bars plus four arc bands of two triangles each — so a single small
+     * enemy body, which draws both, was around ninety triangles. Across a wave
+     * that made the enemy layer 58% of the frame, measured, and by a wide margin
+     * the largest single cost in the renderer.
+     *
+     * <p>A four-pixel corner does not need six segments to read as round; it
+     * needs two. Scaling with the radius keeps a 28-unit shop card's corners
+     * exactly as smooth as before and cuts a 4-unit enemy corner to a third of
+     * the work. Nothing above 12 units changes at all.
+     */
+    private static int cornerSegments(float radius) {
+        if (radius <= 3f) {
+            return 2;
+        }
+        if (radius <= 6f) {
+            return 3;
+        }
+        if (radius <= 12f) {
+            return 4;
+        }
+        return 6;
+    }
 
     private final ShapeRenderer shapes;
     private final Color tmp = new Color();
@@ -89,6 +114,7 @@ public final class ShapeKit {
      * silently draws opaque. Every glow, veil and fading particle needs this.
      */
     public static void enableBlend() {
+        LayerTimes.glCall();
         if (com.badlogic.gdx.Gdx.gl != null) {
             com.badlogic.gdx.Gdx.gl.glEnable(GL20.GL_BLEND);
             com.badlogic.gdx.Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA,
@@ -126,6 +152,7 @@ public final class ShapeKit {
     }
 
     public void rect(float x, float y, float w, float h, Color c) {
+        LayerTimes.op();
         shapes.setColor(c);
         shapes.rect(x, y, w, h);
     }
@@ -156,14 +183,16 @@ public final class ShapeKit {
             rect(x, y, w, h, c);
             return;
         }
+        LayerTimes.op(3 + 4 * cornerSegments(r));
         shapes.setColor(c);
         shapes.rect(x + r, y, w - 2f * r, h);           // the vertical bar
         shapes.rect(x, y + r, r, h - 2f * r);           // left
         shapes.rect(x + w - r, y + r, r, h - 2f * r);   // right
-        shapes.arc(x + r, y + r, r, 180f, 90f, CORNER_SEGMENTS);
-        shapes.arc(x + w - r, y + r, r, 270f, 90f, CORNER_SEGMENTS);
-        shapes.arc(x + r, y + h - r, r, 90f, 90f, CORNER_SEGMENTS);
-        shapes.arc(x + w - r, y + h - r, r, 0f, 90f, CORNER_SEGMENTS);
+        int seg = cornerSegments(r);
+        shapes.arc(x + r, y + r, r, 180f, 90f, seg);
+        shapes.arc(x + w - r, y + r, r, 270f, 90f, seg);
+        shapes.arc(x + r, y + h - r, r, 90f, 90f, seg);
+        shapes.arc(x + w - r, y + h - r, r, 0f, 90f, seg);
     }
 
     /**
@@ -177,6 +206,7 @@ public final class ShapeKit {
                                  float thickness, Color c) {
         float r = Math.min(radius, Math.min(w, h) / 2f);
         float t = Math.max(1f, thickness);
+        LayerTimes.op(4);
         shapes.setColor(c);
         shapes.rect(x + r, y, w - 2f * r, t);
         shapes.rect(x + r, y + h - t, w - 2f * r, t);
@@ -188,10 +218,37 @@ public final class ShapeKit {
         arcBand(x + w - r, y + h - r, r, t, 0f, 90f);
     }
 
+    /**
+     * A filled rounded rectangle with an inset border, in one construction.
+     *
+     * <p>The source's ubiquitous pair —
+     * {@code rect(col, r, border_radius=4)} then
+     * {@code rect(edge, r, 2, border_radius=4)} — drawn as two nested filled
+     * rounded rectangles instead of a fill plus four arc bands.
+     *
+     * <p><b>Measured:</b> the fill-then-outline pair was 51 primitives for one
+     * small body (15 for the fill, 36 for the outline's four arc bands). Nested
+     * fills are 30, and the border is still <em>inset</em> — the outer edge stays
+     * exactly where it was, so nothing changes size. The enemy layer was 58% of
+     * the frame and every body drew this pair at least once.
+     *
+     * <p>Only correct for an opaque border over an opaque fill, which is what
+     * every call site here is. A translucent one would show the fill through the
+     * border and must keep using {@link #roundRectOutline}.
+     */
+    public void roundRectOutlined(float x, float y, float w, float h, float radius,
+                                  float thickness, Color face, Color edge) {
+        float t = Math.max(1f, thickness);
+        roundRect(x, y, w, h, radius, edge);
+        roundRect(x + t, y + t, w - 2f * t, h - 2f * t,
+                Math.max(0f, radius - t), face);
+    }
+
     public void circle(float cx, float cy, float radius, Color c) {
         if (radius <= 0f) {
             return;
         }
+        LayerTimes.op(segmentsFor(radius));
         shapes.setColor(c);
         shapes.circle(cx, cy, radius, segmentsFor(radius));
     }
@@ -257,6 +314,7 @@ public final class ShapeKit {
     /** A line of a given thickness. Pygame's line width, in pixels. */
     public void line(float x1, float y1, float x2, float y2, float thickness,
                      Color c) {
+        LayerTimes.op();
         shapes.setColor(c);
         shapes.rectLine(x1, y1, x2, y2, Math.max(1f, thickness));
     }
@@ -286,6 +344,7 @@ public final class ShapeKit {
     /** A filled triangle — the source's most common polygon by far. */
     public void triangle(float x1, float y1, float x2, float y2, float x3, float y3,
                          Color c) {
+        LayerTimes.op();
         shapes.setColor(c);
         shapes.triangle(x1, y1, x2, y2, x3, y3);
     }
@@ -324,7 +383,8 @@ public final class ShapeKit {
     public void arcBand(float cx, float cy, float radius, float thickness,
                         float start, float degrees) {
         float t = Math.max(1f, thickness);
-        int seg = Math.max(3, (int) (degrees / 90f * CORNER_SEGMENTS) + 2);
+        int seg = Math.max(2, (int) (degrees / 90f * cornerSegments(radius)) + 1);
+        LayerTimes.op(seg * 2);
         float inner = Math.max(0f, radius - t);
         for (int i = 0; i < seg; i++) {
             float a0 = (start + degrees * i / seg) * MathUtils.degRad;
@@ -380,6 +440,13 @@ public final class ShapeKit {
 
     /** Circle segments that stay smooth without being wasteful at small sizes. */
     private static int segmentsFor(float radius) {
+        //  Eight was the floor for every circle, however tiny -- and an enemy's
+        //  eye is a two-pixel dot.  Six is indistinguishable at that size and a
+        //  quarter cheaper across a crowd; anything with a real radius is
+        //  unchanged.
+        if (radius <= 3f) {
+            return 6;
+        }
         return Math.max(8, Math.min(48, (int) (radius * 1.6f) + 8));
     }
 }

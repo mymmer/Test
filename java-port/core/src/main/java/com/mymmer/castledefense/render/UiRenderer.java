@@ -596,7 +596,7 @@ public final class UiRenderer {
         button(ui.menu().endlessButton(), Strings.get("mode.endless"));
         button(ui.menu().settingsButton(), Strings.get("menu.settings"));
         text(safe.centerX(), safe.y + 40f, Strings.format("menu.difficulty",
-                Strings.get("difficulty." + ui.preferredDifficulty().id() + ".name")),
+                Strings.get("difficulty." + ui.preferredDifficulty().id())),
                 TEXT_DIM, 18f, false, true);
     }
 
@@ -608,7 +608,7 @@ public final class UiRenderer {
         for (int i = 0; i < ui.settings().difficultyButtons().size; i++) {
             UiRect b = ui.settings().difficultyButtons().get(i);
             button(b, Strings.get("difficulty."
-                    + ui.difficulties().all().get(i).id() + ".name"));
+                    + ui.difficulties().all().get(i).id()));
         }
         button(ui.settings().clearScoreButton(), Strings.get("settings.clearScore"));
         button(ui.settings().backButton(), Strings.get("common.back"));
@@ -844,7 +844,8 @@ public final class UiRenderer {
     }
 
     private String badgeText() {
-        return Strings.get("difficulty." + run.session().difficulty().id() + ".name");
+        //  "difficulty.<id>" -- there is no ".name" suffix in the bundle.
+        return Strings.get("difficulty." + run.session().difficulty().id());
     }
 
     private String clockText() {

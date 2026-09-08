@@ -31,6 +31,16 @@ application {
 def assetsDir = rootProject.file('assets')
 
 run {
+    //  Pass -Dcastledefense.layerTimes=true straight through to the game, so a
+    //  layer breakdown can be asked for from the command line.
+    if (System.getProperty('castledefense.noBgCache') != null) {
+        systemProperty 'castledefense.noBgCache',
+                System.getProperty('castledefense.noBgCache')
+    }
+    if (System.getProperty('castledefense.layerTimes') != null) {
+        systemProperty 'castledefense.layerTimes',
+                System.getProperty('castledefense.layerTimes')
+    }
     workingDir = assetsDir
     // so `gradle :lwjgl3:run --args="--frames 120"` reaches the launcher
     setIgnoreExitValue(true)

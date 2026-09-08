@@ -10,8 +10,13 @@ Legend: `[ ]` not started · `[~]` in progress · `[x]` ported (compiles, believ
 Nothing is complete merely because it compiles. A row may only reach `[T]` when a named
 test exercises it.
 
-**Phase status: Phases 1, 3, 4, 5, 6, 7, 8, 9, 10 and 11 complete, plus the
-pre-Phase-8 time-domain hardening. Phase 2 implemented and hardened but NOT fully tested —
+**Phase status: Phases 1 through 12 complete, plus the pre-Phase-8 time-domain
+hardening and the Phase 11.5 audit. The Android assembly gate, open since Phase
+2, is now CLOSED: an SDK was installed, `verifyAndroid` passes, and the debug APK
+builds, installs and runs. Android verification on a PHYSICAL device remains
+outstanding.**
+
+**(superseded) Earlier phase status: Phase 2 implemented and hardened but NOT fully tested —
 the Android assembly gate is still open because Google's Maven is unreachable
 from the build environment, and stays open until `./gradlew verifyAndroid`
 succeeds on a machine with the SDK.**
@@ -903,7 +908,106 @@ suite.
   author; they have **not** been approved by the repository owner. That approval
   is the gate on Phase 12, and this document does not claim it.
 
-## Phase 12 — Mobile optimisation
+## Phase 12 — Measured performance and mobile readiness
+
+Contract: [`PERFORMANCE.md`](java-port/docs/subsystems/PERFORMANCE.md).
+
+**The headline: the simulation is not a bottleneck, and none of the algorithms
+`PORT_ANALYSIS` flagged as theoretically expensive costs anything at this game's
+densities.** Worst simulation p99 is 661 us at 160 enemies -- 4% of a step's
+budget, at a density the game never reaches. So no broadphase, no candidate
+cache, no cluster grid and no gameplay pooling was built. Each was measured
+first, and each would have been solving a problem that is not there.
+
+### Measurement
+
+- [x] `:core:benchmark` -- ten seeded scenarios, fixed-step, headless, no
+      sleeping; at least one per flagged hotspot
+- [x] `--bench` on the desktop launcher -- whole-frame percentiles on a real
+      backend, startup frames discarded
+- [x] `-Dcastledefense.layerTimes=true` -- per-layer times and primitive counts,
+      free when off
+- [T] The benchmark **fails loudly** if fewer than 90% of a window's steps really
+      simulated. The first run reported a 0.1 us median for everything: a crowd
+      flattens the castle, a step in GAMEOVER advances nothing, and it was timing
+      an early return
+
+### Retained optimisations, all in the renderer
+
+| | change | result |
+|---|---|---|
+| 1 | corner tessellation scales with radius | enemies 2326 -> 2211 primitives |
+| 2 | `roundRectOutlined` -- nested fills instead of fill + four arc bands | 2211 -> 1836 |
+| 3 | static background cached to a `FrameBuffer` | 1188 -> 3 primitives; **p50 532 us vs 614 us, -13%** |
+
+**4400 -> 2719 primitives per frame, -38%.** Frame cost is linear in primitives
+at ~0.1 us each, which is the measurement the whole phase turned on.
+
+Phase 11 predicted the castle's brickwork would be the first thing to fix. It was
+wrong: the castle is a third of the background's cost and an eighth of the
+enemies'.
+
+### Not done, on evidence
+
+Projectile broadphase (16 us median), slam broadphase (8.6 us), crowd-separation
+broadphase (46 us at 70 packed enemies), Cannon cluster grid (90 us -- the
+dearest scenario, still 0.5% of a frame), shared candidate cache, projectile
+pooling, entity pooling, castle brickwork cache. Every one is order-sensitive
+gameplay; not touching them is also the cheapest way to keep the parity fixtures
+honest.
+
+### Parity
+
+**No simulation code was changed at all.** Insertion order, crowd traversal, hit
+order, pierce semantics, splash order, Cannon scoring and ties, slam cooldown
+identity, snapshot iteration and RNG order are untouched by construction rather
+than by argument. 926 tests green, including the Python fixture suites, render
+purity, quality equivalence, skin independence, shake/input and the seeded
+smokes.
+
+### The Android gate -- CLOSED
+
+An SDK was installed with approval. The `:android` module entered the build for
+the first time since Phase 2 and did not configure, let alone compile. Four real
+defects, every one invisible while the module was excluded:
+
+| Defect | Detail |
+|---|---|
+| `configurations { natives }` below the `dependencies` block using it | Gradle evaluates top to bottom, so `natives "..."` was an unknown method |
+| `gdx-backend-android` pulls `androidx.core` unpinned -> 1.17.0 | It demands compileSdk 36 and AGP 8.9.1. The toolchain is pinned deliberately, so the DEPENDENCY was pinned to 1.15.0 -- with `strictly`, since a plain constraint is a floor and gdx asks for 1.17.0 outright |
+| `copyAndroidNatives` used `tokenize('-').last()` for the ABI | `...natives-armeabi-v7a.jar` became `v7a`, not an ABI; `mergeDebugNativeLibs` rejected the build. x86 and x86_64 happened to work, which made it look plausible |
+| **`Vibrator.vibrate` with no `VIBRATE` permission** | Phase 3's haptics would have failed on every real device. Found by Android lint the moment the module was in the build. `windowLayoutInDisplayCutoutMode` also moved to `values-v27/`, being API 27+ against minSdk 21 |
+
+Result: `android-debug.apk`, 4.90 MB, minSdk 21 / targetSdk 35 / compileSdk 35,
+all four ABIs, lint clean. It installs on an emulator, launches and renders.
+
+### One defect only the emulator could find
+
+The menu displayed `DIFFICULTY: !difficulty.normal.name!`. Two faults behind it:
+the renderer asked for `difficulty.<id>.name` where the bundle has
+`difficulty.<id>`; and **the entire localisation-completeness suite had been
+vacuous since it was written** -- `Strings.load` needs `Gdx.files`, which does
+not exist headlessly, so it silently fell back to raw keys, and the test's
+missing-key check looked for a `???` marker nothing produces. `Strings.loadFrom`
+now gives tests an explicit handle, the test asserts the bundle really loaded,
+and the check recognises `!key!`.
+
+### Verified, and not
+
+| | |
+|---|---|
+| Desktop performance | **Verified**, with noise bounds stated |
+| Android assembly | **Verified** -- verifyAndroid passes, APK builds, lint clean |
+| Android emulator runs | **Verified** -- installs, launches, renders, no crash |
+| Android emulator performance | **Not measured** -- SwiftShader software GL says nothing about a phone's GPU |
+| Physical device | **Not verified** -- none available. Performance, touch, real cutouts, pause/resume, backgrounding and context loss all untested on hardware |
+
+**No mobile performance target has been met, because none has been measured on a
+device.**
+
+### Superseded Phase 11 note
+
+
 
 > **Input from Phase 11.** The first thing to profile is the castle's brickwork:
 > a few hundred small rectangles redrawn every frame, because the source caches it

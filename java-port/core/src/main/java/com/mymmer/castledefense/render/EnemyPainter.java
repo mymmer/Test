@@ -192,15 +192,14 @@ public final class EnemyPainter {
 
     /** The base body, for a type with no bespoke painter. */
     private void generic(RenderContext ctx, Color col) {
-        ctx.kit.roundRect(l(), b(), w(), h(), 4f, col);
-        ctx.kit.roundRectOutline(l(), b(), w(), h(), 4f, 2f, ctx.shade(col, 0.5f));
+        ctx.kit.roundRectOutlined(l(), b(), w(), h(), 4f, 2f,
+                col, ctx.shade(col, 0.5f));
     }
 
     private void scout(RenderContext ctx, Enemy e, Color col) {
         legs(ctx, e, ctx.shade(col, 0.6f), 6f, 8f);
-        ctx.kit.roundRect(l(), b() + 2f, w(), h() - 8f, 4f, col);
-        ctx.kit.roundRectOutline(l(), b() + 2f, w(), h() - 8f, 4f, 2f,
-                ctx.shade(col, 0.5f));
+        ctx.kit.roundRectOutlined(l(), b() + 2f, w(), h() - 8f, 4f, 2f,
+                col, ctx.shade(col, 0.5f));
         ctx.kit.circle(cx(), t() - 5f, 6f, Palette.rgb(232, 202, 164));
         ctx.kit.line(l() - 4f, cy(), l() - 12f, cy() - 6f, 2f,
                 Palette.rgb(198, 194, 186));
@@ -208,9 +207,8 @@ public final class EnemyPainter {
 
     private void footSoldier(RenderContext ctx, Enemy e, Color col) {
         legs(ctx, e, Palette.rgb(58, 62, 84), 6f, 8f);
-        ctx.kit.roundRect(l(), b() + 2f, w(), h() - 10f, 3f, col);
-        ctx.kit.roundRectOutline(l(), b() + 2f, w(), h() - 10f, 3f, 2f,
-                ctx.shade(col, 0.5f));
+        ctx.kit.roundRectOutlined(l(), b() + 2f, w(), h() - 10f, 3f, 2f,
+                col, ctx.shade(col, 0.5f));
         ctx.kit.circle(cx(), t() - 7f, 7f, Palette.SKIN);
         ctx.kit.roundRect(l() + 2f, t() - 6f, w() - 4f, 6f, 2f,
                 Palette.rgb(150, 156, 172));                       // helmet
@@ -226,9 +224,8 @@ public final class EnemyPainter {
         //  The shield on the leading edge -- the visual reason arrows bounce.
         float sx = l() - 6f;
         float sy = b();
-        ctx.kit.roundRect(sx, sy, 14f, h() - 2f, 4f, Palette.rgb(150, 156, 168));
-        ctx.kit.roundRectOutline(sx, sy, 14f, h() - 2f, 4f, 3f,
-                Palette.rgb(98, 104, 116));
+        ctx.kit.roundRectOutlined(sx, sy, 14f, h() - 2f, 4f, 3f,
+                Palette.rgb(150, 156, 168), Palette.rgb(98, 104, 116));
         ctx.kit.circle(sx + 7f, sy + (h() - 2f) / 2f, 5f, Palette.rgb(206, 176, 96));
     }
 
@@ -284,9 +281,8 @@ public final class EnemyPainter {
                     wx + MathUtils.cos(ang) * 8f, wy + MathUtils.sin(ang) * 8f, 2f,
                     Palette.rgb(140, 118, 88));                    // spoke
         }
-        ctx.kit.roundRect(l(), bottom, w(), h() - 10f, 4f, col);
-        ctx.kit.roundRectOutline(l(), bottom, w(), h() - 10f, 4f, 3f,
-                ctx.shade(col, 0.55f));
+        ctx.kit.roundRectOutlined(l(), bottom, w(), h() - 10f, 4f, 3f,
+                col, ctx.shade(col, 0.55f));
         poly[0] = l() - 6f;      poly[1] = t() - 10f;
         poly[2] = l() + w() + 6f; poly[3] = t() - 10f;
         poly[4] = l() + w() - 6f; poly[5] = t() + 6f;
@@ -354,6 +350,9 @@ public final class EnemyPainter {
         if (((com.mymmer.castledefense.enemy.Assassin) e).cloaked()) {
             //  Untargetable and nearly invisible: a translucent ghost, which is
             //  the player's only warning that one is out there.
+            //  Left as a separate fill and outline on purpose: this body is
+            //  TRANSLUCENT, and roundRectOutlined nests two opaque fills, which
+            //  would show the border through the ghost.
             ShapeKit.enableBlend();
             ctx.kit.roundRect(l(), b(), w(), h(), 5f,
                     ctx.alpha(ctx.shade(col, 1.6f), 70f / 255f));
@@ -362,9 +361,8 @@ public final class EnemyPainter {
             return;
         }
         legs(ctx, e, Palette.rgb(40, 44, 62), 6f, 8f);
-        ctx.kit.roundRect(l(), b() + 2f, w(), h() - 8f, 5f, col);
-        ctx.kit.roundRectOutline(l(), b() + 2f, w(), h() - 8f, 5f, 2f,
-                Palette.rgb(36, 38, 54));
+        ctx.kit.roundRectOutlined(l(), b() + 2f, w(), h() - 8f, 5f, 2f,
+                col, Palette.rgb(36, 38, 54));
         ctx.kit.circle(cx(), t() - 5f, 6f, Palette.rgb(44, 46, 66));
         ctx.kit.line(cx() - 4f, t() - 4f, cx() + 4f, t() - 4f, 2f,
                 Palette.rgb(232, 96, 96));                          // the eye slit

@@ -41,3 +41,25 @@ test {
         exceptionFormat 'full'
     }
 }
+
+
+// ============================================================================
+//  The Phase 12 simulation benchmark
+// ============================================================================
+//
+//  A JavaExec rather than a test task: these are numbers a person reads and
+//  compares against a recorded baseline, not assertions.  A timing that fails
+//  the build on a busy machine is a timing everyone learns to ignore.
+tasks.register('benchmark', JavaExec) {
+    group = 'verification'
+    description = 'Times the simulation across the Phase 12 scenarios.'
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'com.mymmer.castledefense.bench.BenchmarkMain'
+    //  Deterministic conditions: the same heap every run, and no JIT surprises
+    //  from a shrinking one mid-measurement.
+    //  Same working directory as the test task: the data tables are resolved
+    //  relative to assets/, and a benchmark that cannot load enemies.json is
+    //  not measuring the game.
+    workingDir = rootProject.file('assets')
+    jvmArgs = ['-Xms512m', '-Xmx512m', '-XX:+UseSerialGC']
+}

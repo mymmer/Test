@@ -117,21 +117,38 @@ public final class Benchmark {
         t.begin(GameMode.ENDLESS, "normal");
         scenario.build(t);
 
+        //  survivingStep, not step: a crowd of 160 flattens a wooden castle in
+        //  seconds, and a step entered in GAMEOVER advances nothing.  The first
+        //  run of this benchmark reported a 0.1 us median for every scenario --
+        //  it was timing a no-op.  Reviving the castle keeps the world in
+        //  PLAYING so what is measured is a real step.
         for (int i = 0; i < warmupSteps; i++) {
-            t.step();
+            t.survivingStep();
         }
 
         double[] micros = new double[measuredSteps];
         long allocBefore = allocatedBytes();
         long start = System.nanoTime();
+        int played = 0;
         for (int i = 0; i < measuredSteps; i++) {
             long s = System.nanoTime();
-            t.step();
+            t.survivingStep();
             micros[i] = (System.nanoTime() - s) / 1000.0;
+            if (t.state() == com.mymmer.castledefense.game.GameState.PLAYING) {
+                played++;
+            }
         }
         long total = System.nanoTime() - start;
         long allocAfter = allocatedBytes();
 
+        //  Guard against measuring nothing again: if the world was not PLAYING
+        //  for essentially the whole window, the numbers are meaningless and
+        //  saying so is better than printing them.
+        if (played < measuredSteps * 0.9) {
+            throw new IllegalStateException(name + ": only " + played + " of "
+                    + measuredSteps + " steps were actually simulated -- the run "
+                    + "ended, so these timings would be of a no-op");
+        }
         java.util.Arrays.sort(micros);
         return new Result(name, seed, measuredSteps, total, micros,
                 t.aliveEnemies(), t.run.projectiles().size(),

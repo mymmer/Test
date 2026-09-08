@@ -310,6 +310,11 @@ public class CastleDefenseGame extends ApplicationAdapter {
 
     @Override
     public void resume() {
+        if (worldRenderer != null) {
+            //  A backgrounded Android app loses its GL context; the
+            //  cached background must be redrawn, not reused.
+            worldRenderer.onResume();
+        }
         resumeCount++;
         paused = false;
         // A pause can last hours. The frame delta after it is clamped, but the

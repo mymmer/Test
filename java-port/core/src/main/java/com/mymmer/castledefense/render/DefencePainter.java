@@ -330,8 +330,8 @@ public final class DefencePainter {
     private void bowman(RenderContext ctx, DefenceTower t, float left, float y, float w,
                         float h) {
         Color body = t.disabled() ? Palette.rgb(70, 62, 52) : Palette.rgb(96, 84, 66);
-        ctx.kit.roundRect(left, y, w, h, 4f, body);
-        ctx.kit.roundRectOutline(left, y, w, h, 4f, 2f, ctx.shade(body, 0.6f));
+        ctx.kit.roundRectOutlined(left, y, w, h, 4f, 2f,
+                body, ctx.shade(body, 0.6f));
         if (t.disabled()) {
             return;
         }
@@ -351,8 +351,8 @@ public final class DefencePainter {
     private void ballista(RenderContext ctx, DefenceTower t, float left, float y, float w,
                           float h) {
         Color base = t.disabled() ? Palette.rgb(74, 60, 44) : Palette.rgb(104, 82, 58);
-        ctx.kit.roundRect(left, y, w, h - 12f, 3f, base);
-        ctx.kit.roundRectOutline(left, y, w, h - 12f, 3f, 2f, ctx.shade(base, 0.6f));
+        ctx.kit.roundRectOutlined(left, y, w, h - 12f, 3f, 2f,
+                base, ctx.shade(base, 0.6f));
         if (t.disabled()) {
             return;
         }
@@ -373,8 +373,8 @@ public final class DefencePainter {
     private void cannon(RenderContext ctx, DefenceTower t, float left, float y, float w,
                         float h) {
         Color base = t.disabled() ? Palette.rgb(54, 56, 64) : Palette.rgb(72, 76, 88);
-        ctx.kit.roundRect(left, y, w, h - 10f, 4f, base);
-        ctx.kit.roundRectOutline(left, y, w, h - 10f, 4f, 2f, ctx.shade(base, 0.6f));
+        ctx.kit.roundRectOutlined(left, y, w, h - 10f, 4f, 2f,
+                base, ctx.shade(base, 0.6f));
         ctx.kit.circle(left + w / 2f, y + 6f, 7f, Palette.rgb(40, 42, 50));
         if (t.disabled()) {
             return;
