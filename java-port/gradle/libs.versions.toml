@@ -38,6 +38,12 @@ desugarJdkLibs = "2.1.5"    # core-library desugaring: Java 8+ APIs on API 21+
 androidCompileSdk = "35"
 androidTargetSdk = "35"
 androidMinSdk = "21"
+#  gdx-backend-android pulls androidx.core transitively and unpinned,
+#  which resolves to 1.17.0 -- a version that demands compileSdk 36 and
+#  AGP 8.9.1.  The toolchain here is pinned deliberately, so the
+#  dependency is pinned to the newest release that works with it rather
+#  than the toolchain being moved to suit a transitive dependency.
+androidxCore = "1.15.0"
 
 [libraries]
 gdx-core = { module = "com.badlogicgames.gdx:gdx", version.ref = "gdx" }

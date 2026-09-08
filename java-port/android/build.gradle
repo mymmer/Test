@@ -74,7 +74,29 @@ tasks.withType(JavaCompile).configureEach {
     }
 }
 
+//  Declared BEFORE the dependencies block that uses it: Gradle evaluates a
+//  build script top to bottom, so `natives "..."` below is only a known method
+//  once this exists.  It was underneath, which meant the :android module could
+//  not even be configured -- the first thing the Android gate found when an SDK
+//  finally made the module part of the build.
+configurations { natives }
+
 dependencies {
+    //  Pin the transitive androidx.core that gdx-backend-android brings in.
+    //  Unpinned it resolves to 1.17.0, which requires compileSdk 36 and AGP
+    //  8.9.1; this project's AGP 8.7.3 / compileSdk 35 pairing is intentional
+    //  and is not moved to accommodate a transitive dependency.  1.15.0 is the
+    //  newest release that compiles against 35.
+    //  `strictly`, not a plain constraint: a constraint is a FLOOR, and
+    //  gdx-backend-android asks for 1.17.0 outright, so a floor of 1.15.0 leaves
+    //  1.17.0 winning.  strictly caps it.
+    constraints {
+        implementation("androidx.core:core") {
+            version { strictly libs.versions.androidxCore.get() }
+            because 'AGP 8.7.3 and compileSdk 35 are pinned deliberately'
+        }
+    }
+
     implementation project(':core')
     implementation libs.gdx.backend.android
     coreLibraryDesugaring libs.android.desugar.jdk.libs
@@ -86,8 +108,6 @@ dependencies {
     natives "com.badlogicgames.gdx:gdx-platform:${libs.versions.gdx.get()}:natives-x86_64"
 }
 
-configurations { natives }
-
 // Unpacks the per-ABI .so files libGDX needs into libs/<abi>/.
 tasks.register('copyAndroidNatives') {
     group = 'build'
@@ -96,7 +116,12 @@ tasks.register('copyAndroidNatives') {
     outputs.dir(outputDir)
     doFirst {
         configurations.natives.files.each { jar ->
-            def abi = jar.name.tokenize('-').last().replace('.jar', '')
+            //  Everything after "natives-", not the last hyphenated token:
+            //  gdx-platform-1.14.2-natives-armeabi-v7a.jar tokenises to "v7a",
+            //  which is not an ABI directory name and made mergeDebugNativeLibs
+            //  reject the whole build.  arm64-v8a had the same problem; x86 and
+            //  x86_64 happened to work, which is why it looked fine.
+            def abi = jar.name.replaceAll(/^.*natives-/, '').replace('.jar', '')
             def dest = new File(outputDir, abi)
             dest.mkdirs()
             copy {
