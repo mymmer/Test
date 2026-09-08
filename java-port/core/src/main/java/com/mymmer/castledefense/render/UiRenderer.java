@@ -247,40 +247,42 @@ public final class UiRenderer {
     private void drawStatRows(HudScreen hud) {
         float x = hud.panelX() + HudScreen.PANEL_PAD;
         float right = hud.panelX() + hud.panelWidth() - HudScreen.PANEL_PAD;
-        float y = hud.panelY() + hud.panelHeight() - HudScreen.PANEL_PAD;
 
+        //  Every row is drawn at the TOP edge the layout assigned it, rather
+        //  than by walking a running y.  The walk had the gap applied AFTER the
+        //  text was drawn, so each text row abutted the one above it -- which is
+        //  why SCORE sat on the castle health bar.  Reading the layout's own
+        //  rectangles also makes the spacing something a test can assert.
         Array<String> rows = hud.rows();
         for (int i = 0; i < rows.size; i++) {
             String row = rows.get(i);
+            float top = hud.rowTop(row);
             if ("hud.row.title".equals(row)) {
-                y -= line(x, y, titleText(), TEXT, 30f, true);
-                text(right, y + 30f, String.valueOf(run.session().gold()) + " G",
+                text(x, top, titleText(), TEXT, 30f, false, false, true);
+                text(right, top, String.valueOf(run.session().gold()) + " G",
                         GOLD, 26f, true, false, true);
             } else if ("hud.row.badge".equals(row)) {
-                y -= HudScreen.ROW_GAP + line(x, y, badgeText(), TEXT_DIM, 17f);
+                text(right, top, badgeText(), TEXT_DIM, 17f, true, false, true);
             } else if ("hud.row.wall".equals(row)) {
-                y -= HudScreen.ROW_GAP
-                        + line(x, y, run.castle().tierLabel(), TEXT_DIM, 18f);
+                text(x, top, run.castle().tierLabel(), TEXT_DIM, 18f, false);
             } else if ("hud.row.multiplier".equals(row)) {
                 //  Two placeholders: the multiplier and the head count that
                 //  earned it.  Passing one left a literal {1} on the HUD.
-                y -= HudScreen.ROW_GAP + line(x, y, Strings.format("hud.multiplier",
+                text(x, top, Strings.format("hud.multiplier",
                         String.format(java.util.Locale.ROOT, "%.2f",
                                 run.goldMultiplier()),
-                        run.aliveEnemyCount()), GOLD, 18f);
+                        run.aliveEnemyCount()), GOLD, 18f, false, false, true);
             } else if ("hud.row.health".equals(row)) {
-                y -= HudScreen.ROW_GAP + 18f;
-                drawHealth(x, y, right - x);
+                drawHealth(x, hud.rowBottom(row), right - x);
             } else if ("hud.row.score".equals(row)) {
-                y -= HudScreen.ROW_GAP + line(x, y, Strings.format("hud.score",
-                        run.session().score()), TEXT, 28f, true);
+                text(x, top, Strings.format("hud.score", run.session().score()),
+                        TEXT, 28f, false, false, true);
             } else if ("hud.row.talents".equals(row)) {
-                y -= HudScreen.ROW_GAP + line(x, y, Strings.format("hud.talentPoints",
-                        run.talentTree().availablePoints()), TEXT_DIM, 19f);
+                text(x, top, Strings.format("hud.talentPoints",
+                        run.talentTree().availablePoints()), TEXT_DIM, 19f, false);
             } else if ("hud.row.clock".equals(row)) {
-                y -= HudScreen.ROW_GAP + 26f;
-                text(x, y + 20f, clockText(), Palette.rgb(150, 220, 255), 24f,
-                    false, false, true);
+                text(x, top, clockText(), Palette.rgb(150, 220, 255), 24f,
+                        false, false, true);
             }
         }
     }

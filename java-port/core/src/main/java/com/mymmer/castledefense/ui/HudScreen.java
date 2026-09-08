@@ -113,6 +113,20 @@ public final class HudScreen implements UiScreen {
 
     /** The rows the last layout produced, as ids, for tests and the renderer. */
     private final Array<String> rows = new Array<>(false, 8);
+    /** Each row's height and its top edge, parallel to {@link #rows}. */
+    private final com.badlogic.gdx.utils.FloatArray rowHeights =
+            new com.badlogic.gdx.utils.FloatArray(8);
+    private final com.badlogic.gdx.utils.FloatArray rowTops =
+            new com.badlogic.gdx.utils.FloatArray(8);
+
+    /** The castle health bar's height, and the Endless clock row's. */
+    public static final float HEALTH_BAR_HEIGHT = 18f;
+    public static final float CLOCK_ROW_HEIGHT = 26f;
+
+    private void addRow(String id, float height) {
+        rows.add(id);
+        rowHeights.add(height);
+    }
 
     public HudScreen(RunWorld run) {
         if (run == null) {
@@ -169,11 +183,14 @@ public final class HudScreen implements UiScreen {
      * from pushing the score out of the box.
      */
     private void layoutStatPanel(SafeArea safe, TextLayout text, boolean playing) {
-        float rowHeight = text.lineHeight(30f);
-        float total = 0f;
+        rowHeights.clear();
+        rowTops.clear();
 
-        rows.add("hud.row.title");
-        total += rowHeight;
+        //  Measure first: append a row only when it applies, and remember how
+        //  tall it is.  Positions are assigned afterwards, from the panel's own
+        //  top -- which is what makes "row N does not touch row N+1" something a
+        //  test can assert rather than something a draw method hopes for.
+        addRow("hud.row.title", text.lineHeight(30f));
 
         //  1b: only when the gold and the badge could not share row 1
         float inner = PANEL_WIDTH - PANEL_PAD * 2f;
@@ -181,41 +198,49 @@ public final class HudScreen implements UiScreen {
         float titleWidth = text.width(title, 30f);
         String badge = badgeText();
         if (!badge.isEmpty() && !badgeFitsBesideGold(text, inner, titleWidth, badge)) {
-            rows.add("hud.row.badge");
-            total += ROW_GAP + text.lineHeight(17f);
+            addRow("hud.row.badge", text.lineHeight(17f));
         }
 
-        rows.add("hud.row.wall");
-        total += ROW_GAP + text.lineHeight(18f);
+        addRow("hud.row.wall", text.lineHeight(18f));
 
         if (playing && run.goldMultiplier() > 1.005f) {
-            rows.add("hud.row.multiplier");
-            total += ROW_GAP + text.lineHeight(18f);
+            addRow("hud.row.multiplier", text.lineHeight(18f));
         }
 
-        rows.add("hud.row.health");
-        total += ROW_GAP + 18f;
-
-        rows.add("hud.row.score");
-        total += ROW_GAP + text.lineHeight(28f);
-
-        rows.add("hud.row.talents");
-        total += ROW_GAP + text.lineHeight(19f);
+        addRow("hud.row.health", HEALTH_BAR_HEIGHT);
+        addRow("hud.row.score", text.lineHeight(28f));
+        addRow("hud.row.talents", text.lineHeight(19f));
 
         if (run.session().isEndless()) {
-            rows.add("hud.row.clock");
-            total += ROW_GAP + 26f;
+            addRow("hud.row.clock", CLOCK_ROW_HEIGHT);
         }
+
+        float total = 0f;
+        for (int i = 0; i < rowHeights.size; i++) {
+            total += rowHeights.get(i);
+        }
+        total += ROW_GAP * Math.max(0, rows.size - 1);
 
         panelWidth = PANEL_WIDTH;
         panelHeight = total + PANEL_PAD * 2f;
         panelX = safe.x + PANEL_X;
         panelY = safe.top() - panelHeight - PANEL_TOP_GAP;
 
+        //  Now the positions.  Each row's TOP edge, walking down from the pad,
+        //  with ROW_GAP between one row's bottom and the next row's top.
+        float top = panelY + panelHeight - PANEL_PAD;
+        for (int i = 0; i < rows.size; i++) {
+            rowTops.add(top);
+            top -= rowHeights.get(i) + ROW_GAP;
+        }
+
         //  The armoury button rides in the clock row, and only in Endless.
         shopButton.setVisible(false);
         if (run.session().isEndless() && playing) {
-            float rowY = panelY + PANEL_PAD;             // the clock is the last row
+            //  The button rides in the clock row, which the loop above has now
+            //  positioned -- so it follows the row rather than assuming the row
+            //  is the last thing above the padding.
+            float rowY = rowBottom("hud.row.clock");
             shopButton.setVisible(true)
                     .setBounds(panelX + panelWidth - PANEL_PAD - 106f, rowY, 106f, 26f);
             TouchTargets.apply(shopButton);
@@ -416,6 +441,32 @@ public final class HudScreen implements UiScreen {
     /** The row ids the last layout produced, top to bottom. */
     public Array<String> rows() {
         return rows;
+    }
+
+    // ========================================================================
+    //  Row geometry, for the renderer and the overlap tests
+    // ========================================================================
+
+    /** Whether the last layout produced this row at all. */
+    public boolean hasRow(String id) {
+        return rows.indexOf(id, false) >= 0;
+    }
+
+    /** A row's TOP edge in UI units, or 0 when the row is not present. */
+    public float rowTop(String id) {
+        int i = rows.indexOf(id, false);
+        return i < 0 ? 0f : rowTops.get(i);
+    }
+
+    /** A row's height, or 0 when it is not present. */
+    public float rowHeight(String id) {
+        int i = rows.indexOf(id, false);
+        return i < 0 ? 0f : rowHeights.get(i);
+    }
+
+    /** A row's BOTTOM edge, which is where a bar or a button in it sits. */
+    public float rowBottom(String id) {
+        return rowTop(id) - rowHeight(id);
     }
 
     public UiRect shopButton() {

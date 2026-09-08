@@ -41,6 +41,9 @@ def git_rev():
 
 
 def main():
+    #  Run this straight after the captures, never later: the hash below is
+    #  HEAD at THIS moment, and a manifest written a commit after the images it
+    #  describes is a manifest that lies about them.  That happened once.
     out = sys.argv[1] if len(sys.argv) > 1 else "."
     os.makedirs(out, exist_ok=True)
     rev = git_rev()
@@ -52,7 +55,7 @@ def main():
         "",
         "| | |",
         "|---|---|",
-        "| Java build | `%s` |" % rev,
+        "| Java build | `%s` (HEAD when this manifest was written) |" % rev,
         "| Python source | `main.py`, `sprites.py`, `castle.py`, `enemies.py` "
         "— imported unmodified |",
         "| Java capture | `--scenario NAME --mode endless --frames 20`, desktop "
