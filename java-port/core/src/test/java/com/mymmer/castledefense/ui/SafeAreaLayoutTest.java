@@ -180,6 +180,48 @@ class SafeAreaLayoutTest {
     }
 
     @Test
+    @DisplayName("the talent tree leaves room for its own headings")
+    void talentHeadingsDoNotCollideWithTheSubtitle() {
+        //  The branch heading is drawn just above the first node and the
+        //  "N POINTS TO SPEND" subtitle just below the safe top. On the phone
+        //  they were four units apart, so UTILITY and AERO-MASTERY were printed
+        //  straight through the subtitle.
+        for (int[] device : DEVICES) {
+            TestUi t = new TestUi(device[0], device[1])
+                    .withInsets(142, 0, 0, 0, 0, 168, 84, 0);
+            t.startRun(GameMode.CLASSIC, "normal");
+            t.ui.navigation().openTalents();
+            t.ui.layout();
+
+            SafeArea safe = t.ui.safeArea();
+            Array<UiRect> nodes = t.ui.talents().controls();
+            float highest = Float.NEGATIVE_INFINITY;
+            for (int i = 0; i < nodes.size; i++) {
+                UiRect n = nodes.get(i);
+                if (n.visible() && n.id.startsWith("talent.")) {
+                    highest = Math.max(highest, n.visualY() + n.visualHeight());
+                }
+            }
+            assertTrue(highest > Float.NEGATIVE_INFINITY,
+                    describe(device) + ": no talent nodes were laid out");
+            //  Where the renderer actually puts them: the heading 22 units
+            //  above the first node, the subtitle 84 below the safe top.
+            //  Asserting the band alone was too weak -- the shipped 76 gave a
+            //  band of 110 against a constant of 100 and passed.
+            float heading = highest + 22f;
+            float subtitle = safe.touchTop() - 84f;
+            assertTrue(subtitle - heading >= 20f,
+                    describe(device) + ": the branch heading sits at " + heading
+                            + " and the points subtitle at " + subtitle
+                            + " -- only " + (subtitle - heading)
+                            + " units apart, so they overlap");
+            assertTrue(safe.touchTop() - highest >= TalentScreen.HEADER_BAND,
+                    describe(device) + ": the tree reaches into its own header "
+                            + "band");
+        }
+    }
+
+    @Test
     @DisplayName("with no insets at all, controls may use the whole screen")
     void noInsetsMeansNoInset() {
         TestUi t = new TestUi(1280, 720).withInsets(0, 0, 0, 0, 0, 0, 0, 0);

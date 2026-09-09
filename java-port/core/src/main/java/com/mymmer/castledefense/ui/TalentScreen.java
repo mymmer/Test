@@ -55,6 +55,21 @@ import com.mymmer.castledefense.talent.TalentTree;
 public final class TalentScreen implements UiScreen {
 
     /** Node box, in UI units. */
+    /**
+     * Clear space reserved above the tree for the title, the points subtitle
+     * and the branch headings, in interface units.
+     *
+     * <p>It has to exceed the two things drawn in that band: the subtitle sits
+     * 84 units below the safe top, and the branch heading is drawn 22 units
+     * above the first node. At the original 76 the heading landed at top-88 and
+     * the subtitle at top-84 -- four units apart, so UTILITY and AERO-MASTERY
+     * were printed straight through "0 POINTS TO SPEND" on a real phone.
+     *
+     * <p>Public so a test can assert the tree honours it rather than
+     * re-deriving three renderer offsets and going stale the moment one moves.
+     */
+    public static final float HEADER_BAND = 120f;
+
     public static final float NODE_WIDTH = 150f;
     public static final float NODE_HEIGHT = 46f;
     public static final float NODE_GAP = 8f;
@@ -115,7 +130,7 @@ public final class TalentScreen implements UiScreen {
         float x0 = safe.touchCenterX() - totalWidth / 2f;
 
         float headerHeight = 34f;
-        float top = safe.touchTop() - 76f - headerHeight;
+        float top = safe.touchTop() - HEADER_BAND - headerHeight;
         float bottom = safe.touchY + 96f;
         float columnHeight = top - bottom;
 
