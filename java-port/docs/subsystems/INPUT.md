@@ -330,3 +330,32 @@ A **cancel** and a **release** are different events. `pause()` calls
 and a cancelled gesture drops what it held with **zero** velocity rather than
 throwing it. `ThrowCancellationTest` asserts a released drag genuinely throws
 before asserting the cancelled one does not.
+
+## Acquisition is not collision
+
+A press that finds nothing now says **why**. `CursorInteraction.PressOutcome`
+separates `NO_TARGET` (nothing was near the point) from `MISSED` (something was
+near and the box did not cover it) from the refusals — `REFUSED_COOLDOWN`,
+`REFUSED_BUSY` — and `lastMissDistance()` reports how far the nearest candidate
+was. That distinction is the whole diagnosis: on the phone a dense crowd grabbed
+every time and an isolated mob missed by up to 23 world units, which is an
+aiming error, not a broken path.
+
+The reason is arithmetic. A Scout's body is 26x34 world units and its grab box
+is `hit_rect.inflate(16, 16)` — 42x50 — which on a 3040x1440 panel is **24x29
+dp** against Android's 48 dp minimum, and a fingertip's contact patch is 8-10 mm
+against the box's 4.6 mm.
+
+So the platform reports a **touch acquisition tolerance** (`18f` on Android,
+`0f` on desktop, because a mouse points at a pixel) and `grabbableNear` is
+consulted **last** — after every exact `grabCovers` test has failed. Nothing
+exact is ever overridden by something merely close, and `grabCovers` itself is
+untouched: collision, damage, splash and crowd separation stay what the parity
+fixtures recorded. `GrabAcquisitionTest` asserts the gameplay box still refuses a
+point that acquisition accepts.
+
+**A parity bug found while reading this path.** `main.py:1835`
+`enemy_under_mouse` keeps the candidate with the **smallest x** — prefer the
+nearest threat — and this port returned whichever came first in the list, so a
+press into a crowd could lift someone standing behind the mob under the finger.
+`heavy_under_mouse` had the same defect. Both now match.

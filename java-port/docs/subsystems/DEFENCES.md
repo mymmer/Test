@@ -252,3 +252,18 @@ level; the barricade tints on `flash()` and leaves rubble where it stood.
 
 Everything is drawn into gameplay's own box, so no artwork and no skin can change
 what is where — the Phase 7 invariant is untouched.
+
+## Phase 13.2 — the cage was never drawn
+
+`castle.py Outpost.draw_prisoner` draws a cage, a glow, the hunched Necromancer
+inside it, four bars, **his** health bar and two captions. None of it was
+ported, while the gameplay above was complete: he was trapped, drained, shot at
+by rival Necromancers, regenerated and released on death, and the outpost on
+screen looked exactly as it did when empty.
+
+`DefencePainter.paintPrisoner` reads the state that already existed —
+`hasPrisoner()`, `prisonerHp() / prisonerMax()`, `prisonerHit()` — and adds
+none. **The Outpost stays healthless**, as it is in the source;
+`PrisonerPresentationTest` pins that, because inventing a pool for the structure
+is the obvious wrong way to make a health indicator appear. The bar is the
+prisoner's.

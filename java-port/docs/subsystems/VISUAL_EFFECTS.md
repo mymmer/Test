@@ -180,3 +180,28 @@ by anything, anywhere in the renderer. Quality scales their intensity.
 
 And nothing else. See [`RENDERING.md`](RENDERING.md) §12 for the equivalence
 test that locks it down.
+
+## 11. Phase 13.2 — the bolt that was never stroked
+
+Lightning was applied and never drawn. The source has exactly two lightning
+sources and both fill one list, `Game.bolts`: a mob flung above `STORM_CEILING`
+during a storm (`enemies.py:586` -> `main.py:1426`) and the Lightning Strike
+skill (`main.py:693`). Here `Weather.strike` dealt the damage, started the
+cooldown, set the flash and shook the screen and emitted **no visual event at
+all**; `castLightning` did the same. The white-out veil *was* ported, which is
+why something clearly happened on the phone and nothing showed what.
+
+`Palette` already held `BOLT_CORE` and `BOLT_INNER` in the source's two stroke
+colours — Phase 11 named the paint and never drew the stroke.
+
+`VisualEvents` gains a fourth `void`: `bolt(x, y, life)`, carrying the anchor and
+the lifetime and nothing else. The zig-zag is decoration, generated inside
+`EffectsSystem` from `VisualRng`. The source re-rolls that path every frame,
+which is what makes a bolt flicker, so the path key is the bolt plus its
+remaining life: the two strokes agree within a frame and re-roll between frames.
+The gameplay generator is never touched, and `LightningPresentationTest` proves
+it by comparing a struck run's next gameplay draws against an unstruck one's.
+
+The skill's four scattered bolts are spread **evenly** rather than randomly: the
+source rolls those offsets from its own generator, and this port has no gameplay
+roll to spend on decoration.

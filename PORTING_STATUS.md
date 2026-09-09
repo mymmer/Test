@@ -910,6 +910,67 @@ suite.
   author; they have **not** been approved by the repository owner. That approval
   is the gate on Phase 12, and this document does not claim it.
 
+## Phase 13.2 — The play review
+
+Contract: [`ANDROID_DEVICE.md`](java-port/docs/subsystems/ANDROID_DEVICE.md) 13.
+Seven findings from the repository owner playing the Phase 13.1 build on the
+phone. Each was traced to the authoritative Python before anything changed.
+
+| # | Finding | What it actually was |
+|---|---|---|
+| 1 | Lightning has no visible effect | Not a Troll King attack at all -- he leaps, smashes a tower and wears a crown. The two lightning sources (`enemies.py:586` -> `main.py:1426` storm strike, `main.py:693` skill) both applied damage and emitted **no visual event**. `Palette.BOLT_CORE`/`BOLT_INNER` existed unused since Phase 11. |
+| 2 | Shop upgrades need descriptions | The descriptions were in the bundle since Phase 10 and unreachable: `CARD_MAX_HEIGHT` was 112 units and the layout needed 146. |
+| 3 | Talent tree too small to read | And **unscrollable** -- `scrollBy` existed and nothing called it, so enlarging the nodes would have made three talents permanently unreachable. |
+| 4 | Shop text too small | 7.4-8.6 dp on a 3040x1440 panel, against Android's 12 sp floor. |
+| 5 | HUD covering the upper turrets | My own 13.1 regression: anchoring the panel to the touch rectangle also made it dodge an 84 px gesture strip, dropping it 42 units onto the keep-top emplacement. Its fill was `(15,18,28)@0.88` where `sprites.py` paints `(26,28,42)@190`. |
+| 6 | Outpost shows no prisoner | `castle.py Outpost.draw_prisoner` -- cage, glow, hunched Necromancer, four bars, health bar, two captions -- was never ported, while the gameplay around it was complete. |
+| 7 | Grabbing unreliable | **Not a hitbox bug.** The box is exactly `hit_rect.inflate(16,16)`. A Scout's 42x50 grab box is 24x29 dp against Android's 48 dp minimum and a fingertip's 8-10 mm patch. Diagnosed by outcome logging on the phone: dense crowds grabbed every time, isolated mobs missed by up to 23 world units. |
+
+### What changed
+
+- `VisualEvents.bolt(x, y, life)` -- a fourth `void` on the same one-way seam.
+  The zig-zag is generated in `EffectsSystem` from `VisualRng`, keyed on the bolt
+  plus its remaining life so both strokes agree within a frame and the path
+  re-rolls between them, as the source's does. No gameplay roll is spent on
+  decoration, and the skill's four scattered bolts are spread evenly for the same
+  reason.
+- Shop cards to 150 units, carrying the source's wrapped description, status line
+  and price. What the *next* purchase does comes from `ItemView.upgradesInstead`
+  (`main.py:1047`'s "(upgrades)" tail), not from a formula copied into the UI.
+- Talent nodes 46 -> 64 units, names 13 -> 16, ranks 12 -> 15; a detail panel for
+  the **selected** talent (a finger has no hover), and two scroll buttons.
+  Selection already existed: a first tap inspects, only a second buys, through
+  `TalentTree`. All 38 talents, six branches and the source gating are unchanged.
+- `TalentDef.ValueFormat` carries the source's own `{v}` formatting through
+  `talents.json` -- 30 percentages, one to one decimal, four integers, one
+  decimal, two valueless. A "below 1.0 is a percentage" rule would print 90% for
+  `spikedot` where the game means 0.9 damage a tick.
+- The stat panel is back on the display rectangle at the source's `HUD_X 14,
+  HUD_Y 12`, in the source's colour and alpha. Panel and turret still overlap
+  when the panel is tall -- so do they in Python -- but the press falls through,
+  as `main.py` does after checking its two buttons.
+- `DefencePainter.paintPrisoner` reads existing prisoner state only. **The
+  Outpost stays healthless**, as in the source; the bar is the prisoner's.
+- A **touch acquisition tolerance** (18 world units on Android, 0 on desktop),
+  consulted only after every exact `grabCovers` test has failed. `grabCovers`,
+  collision, damage, physics and grab capacity are untouched.
+- **A parity bug found while reading the grab path**: `main.py:1835` keeps the
+  candidate with the smallest x -- prefer the nearest threat -- and this port
+  returned whichever came first in the list. `enemy_under_mouse` and
+  `heavy_under_mouse` both match now.
+
+### Verified, and not
+
+- **Verified on the phone**: bolts visible on both sources; the cage, prisoner
+  and health bar; shop descriptions legible; the talent detail panel (Rapid Fire
+  read "Lv.0/5 1 pt / Every emplacement reloads 6% faster."); the keep turret
+  pressable through the panel (`outcome=TOWER charging=YES`); grabs landing.
+- **Not verified**: whether 18 units is the right tolerance for a human hand. adb
+  cannot reproduce a person's aiming error. The cause is measured; the feel is a
+  question for real fingers.
+- **Not verified**: multi-touch, other devices, gesture-navigation devices and
+  90/120 Hz panels remain open exactly as Phase 13 left them.
+
 ## Phase 13.1 — Device readiness
 
 Contract: [`ANDROID_DEVICE.md`](java-port/docs/subsystems/ANDROID_DEVICE.md) 9-11,

@@ -379,12 +379,13 @@ Android's guidance puts the minimum comfortable caption at **12 sp**, which is
 1280x720 desktop design, and a design that is comfortable on a monitor is small
 on a handheld at the same logical size.
 
-**Not changed, deliberately.** Fixing it properly means a global UI scale, which
-is a redesign and outside this phase; a per-element floor would flatten six
-distinct sizes into one and risks overflowing the shop cards and talent nodes
-that contain them. This is a decision to take deliberately, with the numbers
-above in hand, rather than a defect to patch quietly. Section D of the manual
-checklist asks for a human judgement on it.
+**Not changed in 13.1, deliberately.** Fixing it with a global UI scale is a
+redesign, and a per-element floor would flatten six distinct sizes into one and
+risk overflowing the shop cards and talent nodes that contain them. Section D of
+the manual checklist asked for a human judgement on it, and 13.2 is the answer:
+the shop and the talent tree were **the two screens the judgement came back
+against**, and both were enlarged there by growing their containers first — see
+13.2 and 13.3. The rest of this table still stands as measured.
 
 ## 12. Verified, and not
 
@@ -399,3 +400,160 @@ checklist asks for a human judgement on it.
 | Other devices | **Not verified** — one phone, one SoC, one 60 Hz panel, one cutout |
 | Gesture-navigation devices | **Not verified** — this device uses 3-button navigation |
 | 90/120 Hz panels | **Not verified** — and the frame budget would be 11.1 or 8.3 ms there, not 16.7 |
+| Grab reliability on real fingers | **Not verified** — the cause is measured, the tolerance is not; see 13.6 |
+
+## 13. Phase 13.2 — the play review
+
+Seven findings from playing the build on the phone. Each was traced to the
+authoritative source before anything changed.
+
+### 13.1 Lightning was applied and never drawn
+
+The Troll King has no lightning: he leaps, smashes a tower, and wears a crown.
+The source has exactly two lightning sources and both fill one list,
+`Game.bolts` — a mob flung above `STORM_CEILING` during a storm
+(`enemies.py:586` → `main.py:1426`) and the Lightning Strike skill
+(`main.py:693`).
+
+Both were silent here. `Weather.strike` applied the damage, started the
+cooldown, set the flash and shook the screen and **emitted no visual events at
+all**; so did `castLightning`. The white-out veil *was* ported, which is why
+something clearly happened and nothing showed what.
+
+`Palette` already held `BOLT_CORE` and `BOLT_INNER` in the source's two stroke
+colours. Phase 11 named the paint and never drew the stroke.
+
+`VisualEvents` gains `bolt(x, y, life)` — a fourth `void` on the same one-way
+seam, carrying only the anchor and the lifetime. The zig-zag is decoration,
+generated in `EffectsSystem` from `VisualRng`. The source re-rolls that path
+every frame, which is what makes a bolt flicker, so the key is the bolt plus its
+remaining life: both strokes agree within a frame and the path re-rolls between
+frames. The gameplay generator is never touched, and a test proves it by
+comparing a struck run against an unstruck one.
+
+The skill's four scattered bolts are spread evenly rather than randomly: the
+source rolls those offsets from its own generator and this port has no gameplay
+roll to spend on decoration.
+
+### 13.2 The shop explained nothing
+
+`main.py` puts a stripe, a hotkey, a name, an icon, a counter tag, a three-line
+wrapped description, a status line and a price on every card. This port drew a
+name, a price and "Owned: N" — so a player learned what an upgrade cost and
+never what it did, though the descriptions had been in the bundle since Phase
+10. The card height cap of 112 units is why; it is now 150, of which the layout
+already had 146.
+
+What the **next** purchase does is answered by the shop, not the interface:
+`ItemView.upgradesInstead` is `main.py:1047`'s "(upgrades)" tail. No cost or
+effect formula was copied into the renderer.
+
+### 13.3 The talent tree, and a scroll nobody called
+
+Nodes are 64 units rather than 46, names 16 rather than 13, ranks 15 rather than
+12 — the old sizes were 7.4 and 6.9 dp against Android's 12 sp minimum.
+
+The source shows a tooltip for whatever the mouse hovers. A finger has no hover,
+so it is shown for the **selected** talent, and selection already existed: a
+first tap selects and only a second tap on the same node spends a point.
+Inspecting has never bought anything.
+
+That uncovered the hazard: `scrollBy` existed and **nothing called it**. The
+tree could not scroll, so any talent below the visible rows was unreachable —
+and taller nodes would have hidden three for good. Two scroll buttons, not a
+drag: a drag on a modal screen is owned by nobody today and inventing an owner
+would touch the router's rules for nothing visible. A test walks the scroll on
+three shapes and asserts all 38 are reachable.
+
+The talent **value** comes from the data. `main.py` formats each `{v}` itself —
+30 as `.0%`, one as `.1%`, four as `.0f`, one as `.1f`, two with no value. "Below
+1.0 is a percentage" gets 35 right and `spikedot` (perRank 0.9, written as a
+plain number) wrong, printing "90%" where the game means 0.9 damage a tick. So
+`talents.json` carries the format.
+
+Annotating 38 entries by hand missed two of them — `lightfingers` and
+`stormwinds`, both `{v:.0%}` — and a missing key defaults to "print no value",
+which is silent. `TalentPresentationTest` now counts the formats against the
+source's own tally (30 / 1 / 4 / 1, and exactly Sentinels and Tempest with no
+value), so a talent cannot go quiet again.
+
+### 13.4 The HUD had been pushed onto the keep turret
+
+My own regression from 13.1. The panel was anchored to the **touch** rectangle
+so its SHOP button would clear the navigation strip; that rectangle also
+excludes the gesture strips, and the top one is 84 px — 42 units. The panel hung
+42 units lower on the phone and its lower edge landed across the keep-top
+emplacement at gameplay y 234.
+
+Nothing about the panel needed to dodge a gesture strip. It is anchored to the
+display rectangle again, at the source's own `HUD_X 14, HUD_Y 12`, and
+`SafeAreaLayoutTest` still checks the button against the touch rectangle.
+
+A second divergence made it worse: `sprites.py` draws the panel `(26, 28, 42)`
+at alpha 190 and this port used `(15, 18, 28)` at 0.88 — darker **and** more
+opaque, so a turret behind it was invisible rather than dimmed. Both now match.
+
+Stated plainly: the panel and the keep slots **do** overlap when the panel is
+tall, in the source as much as here, because the panel grows with its rows. What
+must never happen is the panel eating the press, and it does not — `main.py`
+checks its two buttons and falls through to `try_grab`. Verified on the phone:
+pressing the keep turret reports `outcome=TOWER charging=YES`.
+
+### 13.5 The Outpost's cage was never drawn
+
+`castle.py Outpost.draw_prisoner` draws a cage, a glow, the hunched Necromancer,
+four bars, **his** health bar and two captions. None of it was ported, while the
+gameplay trapped him, drained him, let rivals shoot him, regenerated him and
+released him on death.
+
+The bar reads `prisonerHp / prisonerMax`. The source's Outpost has no health of
+its own and this port does not give it one to feed a bar with — a test pins
+that, because inventing a pool for the structure is the obvious wrong way to
+make the indicator appear.
+
+### 13.6 Grabbing: the target is smaller than the finger
+
+Not a hitbox bug. The hit box is exactly `hit_rect.inflate(16, 16)`, centred on
+the same point. Ruled out by measurement: the coordinate conversion (already
+pinned by `WorldPickingTest`) and render interpolation, which lags the
+authoritative position by at most one step of motion — about 2 units for a Scout
+against a box 42 wide.
+
+The cursor now records **why** a press produced nothing, and the phone answered:
+in a dense crowd every tap grabbed; isolated mobs missed, by 23 world units in
+one case.
+
+| | |
+|---|---|
+| Scout body | 26 x 34 world units |
+| Grab box | 42 x 50 (`+16` each axis) |
+| On this panel | 84 x 100 px, **24 x 29 dp** |
+| Android minimum target | 48 dp |
+| Fingertip contact patch | 8–10 mm against the box's 4.6 mm |
+
+So an **acquisition** tolerance of 18 world units, reported by the platform —
+zero on a mouse, because a mouse points at a pixel. Consulted only after every
+exact test has failed, so nothing exact is ever overridden by something merely
+close. `grabCovers` is untouched: collision, damage, splash and crowd separation
+are what the parity fixtures recorded, and a test asserts the gameplay box still
+refuses a point acquisition accepts.
+
+Separately, a real parity bug found while reading: `main.py:1835` keeps the match
+with the **smallest x** — "prefer the nearest threat" — and this port returned
+whichever came first in the target list, so a press into a crowd could lift
+someone standing behind the mob under the finger. Both
+`enemy_under_mouse` and `heavy_under_mouse` now match.
+
+**The cause is measured; the feel is not.** adb cannot reproduce a human's
+aiming error, so whether 18 units is the right number is a question for real
+fingers.
+
+### 13.7 Deliberate departures from Python
+
+| | Why |
+|---|---|
+| Talent detail panel follows **selection**, not hover | a finger has no hover |
+| Talent scroll **buttons** | the tree could not scroll at all; a drag would need a new owner in the router |
+| Node and card text enlarged | the source's sizes are 7–9 dp on this panel |
+| Shop cards up to 150 units tall | to carry the description the source has and this port dropped |
+| Grab acquisition tolerance, touch only | the target is smaller than the finger; gameplay boxes unchanged |

@@ -379,3 +379,50 @@ the build, and either set can be forced with
 
 Typography across the whole interface is now calibrated against pygame's — see
 [`TEXT_LOCALIZATION.md`](TEXT_LOCALIZATION.md).
+
+## Phase 13.2 — what the play review changed
+
+Four of the seven findings landed here.
+
+**The shop said nothing about its upgrades.** `main.py` draws a stripe, a
+hotkey, a name, an icon, a counter tag, a three-line wrapped description, a
+status line and a price on every card; this port drew a name, a price and
+"Owned: N". The descriptions had been in the bundle since Phase 10 and were
+never reached, because `ShopScreen.CARD_MAX_HEIGHT` was 112 units and the layout
+needed 146. It is 150. What the **next** purchase does comes from
+`ItemView.upgradesInstead` — `main.py:1047`'s "(upgrades)" tail — not from a
+formula copied into the renderer.
+
+**The talent tree could not scroll.** `scrollBy` existed and nothing called it,
+so any talent laid out below the visible rows was unreachable; enlarging the
+nodes to a legible size would have hidden three of them permanently. Two scroll
+buttons, not a drag: a drag on a modal screen is owned by nobody today and
+inventing an owner would change the router's rules for nothing visible.
+`TalentPresentationTest` walks the scroll on three screen shapes and asserts all
+38 talents can be reached.
+
+**Nodes and cards were enlarged by growing their containers first**, which is
+why this is not the global UI scale that section 11 of `ANDROID_DEVICE.md`
+declines: node 46 -> 64 units, name 13 -> 16, rank 12 -> 15, and the text is
+placed from measured bounds rather than a multiplier.
+
+**Talent values are formatted from the data.** `main.py` writes each `{v}`
+itself — 30 as `.0%`, one as `.1%`, four as `.0f`, one as `.1f`, two with no
+value at all. A "below 1.0 means a percentage" rule gets 35 right and `spikedot`
+wrong, printing 90% where the game means 0.9 damage a tick, so
+`TalentDef.ValueFormat` carries the source's own choice through `talents.json`.
+
+**The stat panel had been pushed onto the keep turret** — a Phase 13.1
+regression of mine. Anchoring it to the *touch* rectangle, so its SHOP button
+would clear the navigation strip, also made it dodge the 84 px top gesture strip
+and dropped the whole panel 42 units onto the keep-top emplacement. It is
+anchored to the display rectangle again at the source's `HUD_X 14, HUD_Y 12`,
+and `SafeAreaLayoutTest` still checks the button against the touch rectangle. Its
+fill was wrong too: `sprites.py` paints `(26, 28, 42)` at alpha 190 and this port
+used `(15, 18, 28)` at 0.88, darker *and* more opaque, so a turret behind it
+vanished instead of dimming.
+
+Panel and turret still overlap when the panel is tall — they do in the source
+too, because it grows with its rows. What must never happen is the panel eating
+the press, and `HudTurretClearanceTest` drives the production input path to prove
+it does not.
