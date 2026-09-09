@@ -10,7 +10,7 @@ Legend: `[ ]` not started · `[~]` in progress · `[x]` ported (compiles, believ
 Nothing is complete merely because it compiles. A row may only reach `[T]` when a named
 test exercises it.
 
-**Phase status: Phases 1 through 13 complete, plus the pre-Phase-8 time-domain
+**Phase status: Phases 1 through 13.1 complete, plus the pre-Phase-8 time-domain
 hardening and the Phase 11.5 audit. The Android device gate is now CLOSED: the
 game has been built, installed and played on a physical Samsung Galaxy S10+,
 holds 60 fps in nine scenarios with no thermal throttling, and survives
@@ -909,6 +909,69 @@ suite.
 - **Manual review.** The captures exist and have been inspected by the port
   author; they have **not** been approved by the repository owner. That approval
   is the gate on Phase 12, and this document does not claim it.
+
+## Phase 13.1 — Device readiness
+
+Contract: [`ANDROID_DEVICE.md`](java-port/docs/subsystems/ANDROID_DEVICE.md) 9-11,
+manual steps in [`MANUAL_DEVICE_CHECKLIST.md`](java-port/docs/MANUAL_DEVICE_CHECKLIST.md).
+
+**Two kinds of inset, kept apart.** Phase 13 measured 45% of the SETTINGS button
+inside the navigation strip and recorded it rather than fixing it. The cause was
+reading one family: this phone's cutout is 142px on the LEFT and its navigation
+strip 168px on the RIGHT, so reading the cutout gets one edge right and the other
+wrong. `SafeArea` now carries a display rectangle for extents and a TOUCH
+rectangle -- the wider strip per edge -- that every control is laid out against.
+Decoration still reaches the display edge. The full `systemGestures` region is
+deliberately not used: it is larger, includes back-swipe edges an app may
+exclude, and would surrender more screen than the platform claims.
+
+Insets are now re-read when Android reports new ones, so the layout follows
+immersive bars, rotation and resume; previously they were read at create() and
+resize() only.
+
+### Five defects, four of them seen on the phone
+
+| Defect | |
+|---|---|
+| SETTINGS 45% inside the navigation strip | fixed; `SafeAreaLayoutTest` fails on the shipped layout |
+| `!enemy.foot_soldier.name!` on the NEW FOE banner | the THIRD appearance of one key-shape mistake |
+| `!skill.{lightning,meteor,tornado}.short!` under every slot | captions the port draws and nobody wrote keys for |
+| Talent headings printed through "0 POINTS TO SPEND" | four units apart; the screen no review had opened |
+| `LayerTimes` op counters never reset | Phase 13 leftover; counts read as a rising cost |
+
+Neither localisation defect was reachable by scanning source text -- both keys
+are composed at runtime, a class the literal scan excludes by design. So
+`ComposedKeysTest` walks the real enumerations, and `BannerKeysTest` drives
+`UiRenderer.subjectKey` itself. The second exists because the first is not
+enough: the bundle DID contain `enemy.<id>`; only asking the production mapping
+what key it builds can catch a renderer asking for one nobody wrote.
+
+### Verified on hardware
+
+Grab/drag/throw, armour stripping (with its progress affordance), tower
+overcharge (slingshot line, 46% meter), boss crown, Lich staff, all three skills
+armed and cast, the Challenge Horn, buying a tower, talents, Back-to-pause,
+Game Over to restart with fresh state, and lifecycle with a live grab.
+
+The Endless shop freeze contract, in numbers: alive 24, 25, 27 while playing;
+28, 28, 28, 28 across twelve seconds in SHOP; 29, 31 on resume -- while
+`steps/frame` stayed at 1.00. The frame keeps running; the WORLD is frozen.
+
+### Driven by test instead
+
+Dragon claws, second-finger ownership and the strip-to-shovable transition, all
+through real GameInput/InputRouter/CursorInteraction with the PRODUCTION cursor
+rather than TestUi's spy. `ThrowCancellationTest` assembles the whole game,
+because TestRun stubs the velocity source to zero and "the cancelled drag threw
+nothing" would pass whatever the game does.
+
+**Multi-touch remains unverified.** adb injects one pointer. Five minutes of real
+fingers is the only thing that can close it.
+
+**Text size is measured and unchanged.** Only the title clears Android's 12sp
+caption guidance; the rest of a faithful 1280x720 desktop layout lands between
+6.9 and 12.6 dp on this panel. Fixing it is a global UI scale -- a redesign, and
+a decision to take deliberately with the numbers rather than a defect to patch.
 
 ## Phase 13 — Android device validation
 

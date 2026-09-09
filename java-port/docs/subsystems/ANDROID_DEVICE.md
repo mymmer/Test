@@ -225,7 +225,168 @@ invalidation on resume, and it does.
 
 Back from the main menu exits the app, which is the documented platform default.
 
-## 9. Verified, and not
+## 9. Phase 13.1 — the readiness pass
+
+### 9.1 Two kinds of inset, kept apart
+
+Phase 13 recorded that 45% of SETTINGS sat inside the navigation strip and left
+it there. The cause was reading one inset family. This phone's cutout is 142 px
+on the **left**; its navigation strip is 168 px on the **right**. Reading the
+cutout alone gets one edge right and the other wrong.
+
+| family | what it is | rule |
+|---|---|---|
+| **obscuring** | system bars + display cutout | nothing that must be seen or pressed |
+| **gesture** | `mandatorySystemGestures` — strips the system takes a touch from, which an app may not opt out of | visible and drawable; **not reliably pressable** |
+
+`SafeArea` now carries both: a display rectangle for extents, and a **touch
+rectangle** — the wider strip on each edge — that every control is laid out
+against. Decoration still reaches the display edge, because a background under a
+navigation bar looks right.
+
+The full `systemGestures` region is deliberately **not** used. It is larger, it
+includes back-swipe edges an app may exclude, and treating it as unusable would
+surrender far more screen than the platform actually claims.
+
+Read with a gate per API — `getRootWindowInsets` at 23, cutouts at 28, gesture
+insets at 29, typed `getInsets` at 30 — against minSdk 21, where each simply
+contributes nothing. The result is cached and recomputed only when Android
+reports new insets, so the layout now **follows** them: immersive bars swiping
+in, rotation, resume. Previously they were read at `create()` and `resize()`
+only, which misses every change that does not resize the window.
+
+On the device: `game=insets[l=142 r=0 t=0 b=0 gesture l=0 r=168 t=84 b=0]`,
+matching Android's `mandatory` exactly. `menu.settings` moved from screen
+2708–3008 to **2540–2840**, against a strip beginning at 2872.
+
+Centred *text* follows the touch rectangle too — not because a caption can be
+stolen by a gesture, but because it has to line up with the buttons beneath it.
+
+### 9.2 Defects fixed
+
+| # | Defect | Evidence |
+|---|---|---|
+| 1 | SETTINGS 45% inside the navigation strip | measured hit box against measured inset |
+| 2 | `!enemy.foot_soldier.name!` on the NEW FOE banner | seen on the phone |
+| 3 | `!skill.{lightning,meteor,tornado}.short!` under every skill slot | seen on the phone |
+| 4 | Talent branch headings printed through "0 POINTS TO SPEND" | seen on the phone |
+| 5 | `LayerTimes` op counters never reset (Phase 13 leftover) | counts grew window on window |
+
+Defects 2 and 3 are the **third** appearance of one mistake. The bundle keys
+bosses as `boss.<id>` and difficulties as `difficulty.<id>`; the renderer asked
+for `enemy.<id>.name`. Phase 12 fixed exactly this shape for difficulties.
+
+### 9.3 Interactions verified on hardware
+
+Through the production input path — injected `MotionEvent`s enter the same
+pipeline a finger does.
+
+| Interaction | Evidence |
+|---|---|
+| Grab / drag / throw | `grabbed=<type> owns=true busy=true`, mob visibly lifted |
+| Armour stripping | `stripping=siege_ram`, "DRAG AWAY TO STRIP THE PLATING" and a progress bar |
+| Tower overcharge | `charging=YES`, slingshot line drawn, **46%** charge meter |
+| Boss regalia (crown) | `held=YES`, crown detached and carried |
+| Lich staff disarm | `held=YES`, staff detached |
+| Skills: lightning, meteor, tornado | armed from the slot and cast into the world; kills 0 to 37 |
+| Challenge Horn | pack spawned, 27 to 39 enemies, multiplier 2.26 to 4.68 |
+| Buy a tower | 220 to 110 gold, "Owned: 1", price 110 to 138, bowman appears on the wall |
+| Talents open and close | Back returns to the armoury |
+| Endless shop freeze | **alive 24, 25, 27 while playing; then 28, 28, 28, 28 across 12 s in SHOP; then 29, 31** |
+| Back to pause | `[screen] PLAYING -> PAUSED` |
+| Game Over to restart | `PLAYING -> GAMEOVER -> MENU -> SHOP`, fresh run at 220 gold, wave 1 |
+| Lifecycle with a live grab | Home/resume and lock/unlock; nothing held on return, no crash |
+
+The shop-freeze figures are worth reading twice: `steps/frame` stayed at **1.00**
+throughout. The frame keeps running at 60 Hz; it is the **world** that is frozen,
+not the loop.
+
+### 9.4 Driven by test instead, and why
+
+| Interaction | Why not on hardware |
+|---|---|
+| Dragon claws | a small box on a boss in flight; injected taps miss it, and 36 rapid `input tap` calls produced 5 delivered events |
+| Second-finger ownership | `adb shell input` injects one pointer; two simultaneous contacts cannot be synthesised |
+| Ram strip to shovable transition | the moment after a strip completes is gone before another injected drag arrives |
+
+These run through real `GameInput` to `InputRouter` to `CursorInteraction` with
+real screen pixels, and with the **production** cursor installed rather than
+`TestUi`'s spy — a spy grabs nothing, so "nothing was grabbed" would be true
+because nothing can ever be grabbed.
+
+`ThrowCancellationTest` assembles the whole `CastleDefenseGame`, because
+`TestRun` wires the velocity source to a stub that returns zero: on that harness
+"the cancelled drag threw nothing" passes whatever the game does. It asserts that
+a released drag genuinely throws **before** asserting the cancelled one does not.
+
+Two of my own assertions were wrong and the game was right. A stripped Siege Ram
+does not become liftable — mass 9 exceeds an unupgraded cursor, so it becomes
+**shovable**. And a cancelled grab does not leave the mob standing: it drops.
+The real claim is about velocity, not posture.
+
+### 9.5 Multi-touch is still unverified
+
+It cannot be injected. `docs/MANUAL_DEVICE_CHECKLIST.md` section A is five
+minutes of real fingers and is the only thing that can close it.
+
+## 10. Measurement terminology
+
+Phase 13 reported a number as "CPU time" that was mostly waiting. Each quantity,
+named for what it actually is:
+
+| Quantity | How it is obtained | Status |
+|---|---|---|
+| **Delivered frame interval / fps** | wall time between successive frame starts | **measured** |
+| **Wall time inside `render()`** | stopwatch around the game's own frame | **measured** — and it includes GL/vsync blocking, so it is *not* a workload |
+| **Simulation work** | stopwatch around the fixed-step loop | **measured** |
+| **Render-layer work** | `LayerTimes`, per draw layer | **measured**, but only the layers instrumented in Java |
+| **GL / vsync blocking** | frame wall time minus instrumented work | **inferred**, not measured directly |
+| **GPU time / utilisation** | — | **not measured.** No profiler was installed |
+| **GC count and cumulative time** | `Debug.getRuntimeStat` `art.gc.gc-count` / `gc-time` | **measured**; cumulative and includes concurrent collection, so it is not a frame-time cost |
+| **Thermal** | `PowerManager.getCurrentThermalStatus()` | **measured as a status enum.** `0 = NONE`. It is **not** a temperature |
+
+**The sum of the instrumented Java layers is not CPU utilisation and is not GPU
+utilisation.** It is the cost of the shape pass and the simulation, which is what
+it is labelled as.
+
+Every measurement window records `state=`, `alive=` and whether `keepAlive` is
+on. A window in `GAMEOVER` is not a live benchmark and is never reported as one.
+
+The Phase 13 baseline — nine live scenarios and the five-minute soak — is
+unchanged and was not re-run. 13.1 changed layout constants, key lookups and
+tests; none of them touch the draw loop's cost.
+
+## 11. Text size on this phone
+
+Measured, not eyeballed. The UI viewport is 1520x720 over 3040x1440, so
+**1 UI unit = 2 px**, and this panel's density is **3.5 px/dp**.
+
+| element | UI units | px | dp |
+|---|---|---|---|
+| Title | 40 | 80 | 22.9 |
+| Top-right run statistics | 22 | 44 | 12.6 |
+| Subtitle | 20 | 40 | 11.4 |
+| Bottom instructions, skill cooldown | 18 | 36 | 10.3 |
+| Badge | 17 | 34 | 9.7 |
+| Shop card name | 16 | 32 | 9.1 |
+| Horn label, shop price | 15 | 30 | 8.6 |
+| Health and boss bar numbers | 14 | 28 | 8.0 |
+| Shop "Owned", talent rank | 13 | 26 | 7.4 |
+| Skill caption, talent level | 12 | 24 | 6.9 |
+
+Android's guidance puts the minimum comfortable caption at **12 sp**, which is
+42 px here. **Only the title clears it.** The layout is a faithful port of a
+1280x720 desktop design, and a design that is comfortable on a monitor is small
+on a handheld at the same logical size.
+
+**Not changed, deliberately.** Fixing it properly means a global UI scale, which
+is a redesign and outside this phase; a per-element floor would flatten six
+distinct sizes into one and risks overflowing the shop cards and talent nodes
+that contain them. This is a decision to take deliberately, with the numbers
+above in hand, rather than a defect to patch quietly. Section D of the manual
+checklist asks for a human judgement on it.
+
+## 12. Verified, and not
 
 | | |
 |---|---|
@@ -234,7 +395,7 @@ Back from the main menu exits the app, which is the documented platform default.
 | Physical device: functionality | **Verified** — every interaction above, on a Galaxy S10+ |
 | Physical device: performance | **Verified** — 60 fps sustained, nine scenarios, numbers above |
 | Physical device: lifecycle | **Verified** — background, resume, lock, GL restore |
-| Multi-touch | **Not verified** — cannot be injected over adb |
+| Multi-touch | **Not verified** — cannot be injected over adb; see MANUAL_DEVICE_CHECKLIST.md section A |
 | Other devices | **Not verified** — one phone, one SoC, one 60 Hz panel, one cutout |
 | Gesture-navigation devices | **Not verified** — this device uses 3-button navigation |
 | 90/120 Hz panels | **Not verified** — and the frame budget would be 11.1 or 8.3 ms there, not 16.7 |

@@ -293,3 +293,40 @@ test rather than shipping.
 `theShakenSetIsExactlyTheSourceSet` reads `UiRenderer`'s own source for what lies
 between `beginShaken()` and `endShaken()` — a list kept beside the code is what
 let the SHOP button drift into the shaken block unnoticed in the first place.
+
+## Connected to the platform, and in which space
+
+Two things this document assumed for ten phases and neither was true until
+Phase 13.
+
+**The processor is registered.** `CastleDefenseGame.create()` calls
+`Gdx.input.setInputProcessor(input)` and catches `Keys.BACK`. Nothing called
+either before, so libGDX had nowhere to deliver a touch and `GameInput.touchDown`
+was never once invoked in a running build. The router tests call `GameInput`
+directly, which is the right way to test a router and cannot see this;
+`InputWiringTest` asserts the wiring itself.
+
+**A touch is converted into gameplay space.** The viewport unprojects into draw
+space, which is y-up; the simulation keeps Pygame's y-down world with the ground
+at `GROUND_Y = 620`. `GameInput.toWorld` crosses that boundary with
+`WorldGeometry.toGameplayY`, exactly as the painters cross it the other way.
+Without it a finger on the ground arrived at gameplay y 125 -- its own mirror
+image about the horizon -- and nothing was ever under the cursor.
+
+`WorldPickingTest` asserts absolute positions against known landmarks, which is
+the question no earlier test asked: `ShakeInputTest` drives this path but
+compares the pointer against *itself* across camera shake, and a consistently
+wrong number passes that perfectly.
+
+## Ownership
+
+One world interaction at a time. A second finger may not start a second one,
+and releasing it does not end the first one's hold -- `InputRouter` acquires
+ownership on press and releases it only after dispatching the release, so a
+handler always learns that its gesture ended.
+
+A **cancel** and a **release** are different events. `pause()` calls
+`cancelAll()`, because Android delivers no touch-up when an app is backgrounded,
+and a cancelled gesture drops what it held with **zero** velocity rather than
+throwing it. `ThrowCancellationTest` asserts a released drag genuinely throws
+before asserting the cancelled one does not.

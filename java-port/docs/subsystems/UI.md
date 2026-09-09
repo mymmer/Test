@@ -148,12 +148,34 @@ crowd multiplier below its threshold, the Endless clock in a Classic run — is
 simply not added, and the rows below move up. The renderer walks `hud.rows()`
 rather than a fixed sequence, so it cannot disagree with the measurement.
 
-**Safe areas.** `SafeAreaInsets` arrives in screen pixels through
-`PlatformServices` — the same seam Android reports a real cutout on — and
-`SafeArea` converts it to UI units with the viewport's own ratios. Absurd input
-degrades to the full rectangle rather than to a negative one. Every visible
-control must lie inside it, at every screen shape, checked by
-`UiLayoutTest.controlsRespectTheSafeArea`.
+**Safe areas — two rectangles, not one.** `SafeAreaInsets` arrives in screen
+pixels through `PlatformServices` and carries two families, because they mean
+different things and are not nested:
+
+- **Obscuring** — system bars and the display cutout. Something is drawn over
+  those pixels, so nothing that must be seen or pressed goes there.
+- **Gesture** — `mandatorySystemGestures`, the strips the system takes a touch
+  from and that an app may not opt out of. Perfectly visible and drawable, and
+  **not reliably pressable**.
+
+`SafeArea` converts both into UI units with the viewport's own ratios and exposes
+a **display rectangle** for extents and a **touch rectangle** — the wider strip
+on each edge — for anything with a hit box. Absurd input degrades to the full
+rectangle rather than to a negative one.
+
+Every control is laid out against the *touch* rectangle; decoration may reach the
+display edge, because a background under a navigation bar looks perfectly right.
+Centred text follows the touch rectangle as well, so a title cannot drift out of
+line with the buttons under it.
+
+They are kept apart because a phone puts them on different edges. A Galaxy S10+
+in landscape has a 142 px cutout on the **left** and a 168 px navigation strip on
+the **right**; reading only the cutout gets one edge right and the other wrong,
+which is precisely how Phase 13 shipped with 45% of the SETTINGS button inside
+the strip. Checked by `UiLayoutTest.controlsRespectTheSafeArea` and by
+`SafeAreaLayoutTest`, which asserts every visible control's **hit** box — not its
+painted box, which `TouchTargets` grows past — at three aspect ratios with the
+insets asymmetric and then mirrored.
 
 **Responsiveness** is reflow, not scale: the shop picks its column count from the
 available width, the talent screen scrolls when a branch is deeper than the panel
