@@ -554,7 +554,7 @@ public final class UiRenderer {
 
         //  The word goes UNDER the disc, as the source puts it, which is why the
         //  icon does not have to carry a label it cannot fit.
-        text(cx, r.visualY() - 4f, Strings.get(spent ? "hud.hornSpent" : "hud.horn"),
+        text(cx, r.visualY() - 4f, Strings.get(spent ? "hud.hornUsed" : "hud.horn"),
                 spent ? TEXT_DIM : GOLD, 15f, false, true);
     }
 
@@ -614,7 +614,11 @@ public final class UiRenderer {
         SafeArea safe = ui.safeArea();
         title(safe, Strings.get("settings.title"));
         button(ui.settings().muteButton(),
-                Strings.get(ui.saveData().muted ? "settings.unmute" : "settings.mute"));
+                //  The state, not an action -- "MUTED" / "ON", as the source
+                //  writes it beside its AUDIO row.  "settings.unmute" never
+                //  existed in the bundle, so a muted game drew the raw key.
+                Strings.get(ui.saveData().muted
+                        ? "settings.muted" : "settings.unmuted"));
         for (int i = 0; i < ui.settings().difficultyButtons().size; i++) {
             UiRect b = ui.settings().difficultyButtons().get(i);
             button(b, Strings.get("difficulty."

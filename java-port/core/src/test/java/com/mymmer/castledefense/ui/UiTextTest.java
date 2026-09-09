@@ -180,11 +180,68 @@ class UiTextTest {
      * <p>Keys assembled at runtime ({@code "talent." + id + ".name"}) are not
      * literals and are deliberately not matched here; they have their own tests.
      */
+    /**
+     * The bracketed argument list of every {@code Strings.get/format} call.
+     *
+     * <p>Walked rather than pattern-matched, because a regex cannot count
+     * brackets: an argument list may contain nested calls, and stopping at the
+     * first {@code ")"} would truncate them. Quoted text is skipped so a
+     * bracket inside a string cannot close the call early.
+     */
+    private static Array<String> stringsCalls(String src) {
+        Array<String> out = new Array<>();
+        java.util.regex.Matcher head = java.util.regex.Pattern
+                .compile("Strings\\.(?:get|format)\\(").matcher(src);
+        while (head.find()) {
+            int i = head.end();
+            int depth = 1;
+            boolean inString = false;
+            StringBuilder b = new StringBuilder();
+            while (i < src.length() && depth > 0) {
+                char c = src.charAt(i);
+                if (inString) {
+                    if (c == '\\') {
+                        b.append(c);
+                        if (i + 1 < src.length()) {
+                            b.append(src.charAt(i + 1));
+                        }
+                        i += 2;
+                        continue;
+                    }
+                    if (c == '"') {
+                        inString = false;
+                    }
+                } else if (c == '"') {
+                    inString = true;
+                } else if (c == '(') {
+                    depth++;
+                } else if (c == ')') {
+                    depth--;
+                    if (depth == 0) {
+                        break;
+                    }
+                }
+                b.append(c);
+                i++;
+            }
+            out.add(b.toString());
+        }
+        return out;
+    }
+
     @Test
     @DisplayName("every string key written in the interface source exists")
     void literalKeysAllExist() {
+        //  Every key-shaped literal ANYWHERE inside the call's brackets, not
+        //  only one sitting immediately after the opening bracket.
+        //
+        //  The old pattern required exactly that, so it silently skipped every
+        //  conditional key -- including
+        //  Strings.get(spent ? "hud.hornSpent" : "hud.horn"), whose first
+        //  branch named a key that does not exist. A phone drew the Challenge
+        //  Horn with "!hud.hornSpent!" under it while this test passed.
         java.util.regex.Pattern p = java.util.regex.Pattern.compile(
-                "Strings\\.(?:get|format)\\(\\s*\"([^\"]+)\"\\s*[,)]");
+                "\"([a-z][A-Za-z0-9]*(?:\\.[A-Za-z0-9]+)+)\"");
         Array<String> missing = new Array<>();
         int found = 0;
         for (String pkg : new String[] {"ui", "render"}) {
@@ -195,10 +252,12 @@ class UiTextTest {
                 if (!f.getName().endsWith(".java")) {
                     continue;
                 }
-                java.util.regex.Matcher m = p.matcher(readFile(f));
-                while (m.find()) {
-                    found++;
-                    require(m.group(1), missing);
+                for (String call : stringsCalls(readFile(f))) {
+                    java.util.regex.Matcher m = p.matcher(call);
+                    while (m.find()) {
+                        found++;
+                        require(m.group(1), missing);
+                    }
                 }
             }
         }
