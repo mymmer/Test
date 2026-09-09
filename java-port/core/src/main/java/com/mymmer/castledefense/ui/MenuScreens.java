@@ -67,14 +67,19 @@ public final class MenuScreens {
         public void layout(SafeArea safe, TextLayout text) {
             controls.clear();
 
-            float buttonWidth = Math.min(360f, safe.width * 0.42f);
+            //  Controls are laid out against the TOUCH rectangle, not the
+            //  display one: these all have hit boxes, and a hit box inside the
+            //  system's gesture strip is one the platform may take the press
+            //  from. The two rectangles differ whenever a device puts its
+            //  navigation strip somewhere the cutout is not.
+            float buttonWidth = Math.min(360f, safe.touchWidth * 0.42f);
             float buttonHeight = 62f;
-            float cx = safe.centerX();
+            float cx = safe.touchCenterX();
 
             //  the two modes, side by side when there is room and stacked when
             //  there is not -- a 20:9 phone in portrait-ish UI space is narrow
-            boolean sideBySide = safe.width >= buttonWidth * 2f + 40f;
-            float modeY = safe.y + safe.height * 0.34f;
+            boolean sideBySide = safe.touchWidth >= buttonWidth * 2f + 40f;
+            float modeY = safe.touchY + safe.touchHeight * 0.34f;
             if (sideBySide) {
                 classic.setBounds(cx - buttonWidth - 20f, modeY, buttonWidth, buttonHeight);
                 endless.setBounds(cx + 20f, modeY, buttonWidth, buttonHeight);
@@ -85,7 +90,8 @@ public final class MenuScreens {
             }
 
             //  the difficulty row sits under them
-            float diffWidth = Math.min(150f, (safe.width - 40f) / difficultyButtons.size - 12f);
+            float diffWidth =
+                    Math.min(150f, (safe.touchWidth - 40f) / difficultyButtons.size - 12f);
             float diffHeight = 44f;
             float rowWidth = difficultyButtons.size * diffWidth
                     + (difficultyButtons.size - 1) * 12f;
@@ -99,7 +105,11 @@ public final class MenuScreens {
                         ? UiRect.State.SELECTED : UiRect.State.NORMAL);
             }
 
-            settings.setBounds(safe.right() - 150f - 16f, safe.y + 16f, 150f, 48f);
+            //  The button Phase 13 found sitting 45% inside the navigation
+            //  strip. Anchored to the touch rectangle's right edge, it clears
+            //  whichever strip that device actually has.
+            settings.setBounds(safe.touchRight() - 150f - 16f, safe.touchY + 16f,
+                    150f, 48f);
 
             controls.add(classic);
             controls.add(endless);
@@ -215,9 +225,11 @@ public final class MenuScreens {
         @Override
         public void layout(SafeArea safe, TextLayout text) {
             controls.clear();
-            float panelWidth = Math.min(640f, safe.width - 40f);
-            float cx = safe.centerX();
-            float top = safe.top() - 120f;
+            //  Every control on this screen is inside the panel, so the panel
+            //  itself is placed against the touch rectangle.
+            float panelWidth = Math.min(640f, safe.touchWidth - 40f);
+            float cx = safe.touchCenterX();
+            float top = safe.touchTop() - 120f;
 
             mute.setBounds(cx - panelWidth / 2f + 24f, top, 220f, 48f);
             clearScore.setBounds(cx - panelWidth / 2f + 24f, top - 68f, 260f, 48f);
@@ -234,7 +246,7 @@ public final class MenuScreens {
                         ? UiRect.State.SELECTED : UiRect.State.NORMAL);
             }
 
-            back.setBounds(cx - 90f, safe.y + 28f, 180f, 52f);
+            back.setBounds(cx - 90f, safe.touchY + 28f, 180f, 52f);
 
             controls.add(mute);
             controls.add(clearScore);
@@ -343,7 +355,8 @@ public final class MenuScreens {
         @Override
         public void layout(SafeArea safe, TextLayout text) {
             controls.clear();
-            resume.setBounds(safe.centerX() - 110f, safe.centerY() - 90f, 220f, 56f);
+            resume.setBounds(safe.touchCenterX() - 110f,
+                    safe.touchCenterY() - 90f, 220f, 56f);
             controls.add(resume);
             TouchTargets.applyAll(controls);
         }
@@ -399,8 +412,8 @@ public final class MenuScreens {
         @Override
         public void layout(SafeArea safe, TextLayout text) {
             controls.clear();
-            restart.setBounds(safe.centerX() - 140f, safe.y + safe.height * 0.18f,
-                    280f, 58f);
+            restart.setBounds(safe.touchCenterX() - 140f,
+                    safe.touchY + safe.touchHeight * 0.18f, 280f, 58f);
             controls.add(restart);
             TouchTargets.applyAll(controls);
         }

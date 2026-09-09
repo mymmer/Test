@@ -72,12 +72,14 @@ public final class ShopScreen implements UiScreen {
     public void layout(SafeArea safe, TextLayout text) {
         controls.clear();
 
-        float panelWidth = Math.min(1120f, safe.width - 32f);
-        float panelX = safe.centerX() - panelWidth / 2f;
+        //  Every card in this panel is pressable, so the panel follows the
+        //  touch rectangle.
+        float panelWidth = Math.min(1120f, safe.touchWidth - 32f);
+        float panelX = safe.touchCenterX() - panelWidth / 2f;
         //  Below the title AND its gold subtitle: 96 put the first row of cards
         //  under the subtitle's descenders on a short screen.
-        float top = safe.top() - 124f;
-        float bottom = safe.y + 92f;
+        float top = safe.touchTop() - 124f;
+        float bottom = safe.touchY + 92f;
 
         //  A grid that reflows: as many columns as fit at a comfortable card
         //  width, so a 20:9 screen gets more per row rather than wider cards.
@@ -105,9 +107,11 @@ public final class ShopScreen implements UiScreen {
                     ? UiRect.State.SELECTED : UiRect.State.NORMAL);
         }
 
-        float actionWidth = Math.min(300f, safe.width * 0.32f);
-        startButton.setBounds(safe.centerX() + 8f, safe.y + 20f, actionWidth, 56f);
-        talentsButton.setBounds(safe.centerX() - actionWidth - 8f, safe.y + 20f,
+        float actionWidth = Math.min(300f, safe.touchWidth * 0.32f);
+        startButton.setBounds(safe.touchCenterX() + 8f, safe.touchY + 20f,
+                actionWidth, 56f);
+        talentsButton.setBounds(safe.touchCenterX() - actionWidth - 8f,
+                safe.touchY + 20f,
                 actionWidth, 56f);
         //  The talents door is always open from the armoury; the source's `T`
         //  works here too.

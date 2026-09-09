@@ -28,6 +28,21 @@ public class AndroidLauncher extends AndroidApplication {
     /** Tag for both the device banner and the rolling measurement lines. */
     private static final String TAG = "CastleDefensePerf";
 
+    private AndroidPlatformServices services;
+
+    /**
+     * A resume can bring different insets -- the bars may have been restored
+     * while the app was away, or the device folded or rotated. Marking them
+     * stale makes the next frame re-read them.
+     */
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (services != null) {
+            services.invalidateInsets();
+        }
+    }
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -52,6 +67,7 @@ public class AndroidLauncher extends AndroidApplication {
         String scenario = getIntent() == null
                 ? null : getIntent().getStringExtra("scenario");
         AndroidPlatformServices services = new AndroidPlatformServices(this);
+        this.services = services;
         boolean dumpUi = getIntent() != null
                 && getIntent().getBooleanExtra("dumpUi", false);
         boolean uiDebug = getIntent() != null
@@ -66,6 +82,10 @@ public class AndroidLauncher extends AndroidApplication {
                         getIntent().getBooleanExtra("keepAlive", false))
                 : new CastleDefenseGame(services);
         initialize(game, config);
+        //  Insets change while the app runs -- immersive bars swiping in, a
+        //  rotation, a resume -- so the layout follows them rather than being
+        //  computed once at startup.
+        services.watchInsets();
         maybeMeasure(game, getIntent());
     }
 

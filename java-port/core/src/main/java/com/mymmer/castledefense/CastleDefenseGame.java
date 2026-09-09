@@ -282,6 +282,7 @@ public class CastleDefenseGame extends ApplicationAdapter {
             probe.simEnd();
         }
 
+        refreshSafeArea();
         applyBack();
 
         //  Particles and floating text are presentation, so they run on the
@@ -317,6 +318,30 @@ public class CastleDefenseGame extends ApplicationAdapter {
         if (probe != null) {
             probe.frameEnd(steps, simulation.droppedStepEvents(),
                     simulation.clampedFrames());
+        }
+    }
+
+    /** The insets currently applied to the interface, so a change is visible. */
+    private com.mymmer.castledefense.platform.SafeAreaInsets appliedInsets;
+
+    /**
+     * Follows the platform's insets while the game runs.
+     *
+     * <p>They were read at {@code create()} and on {@code resize()} only, which
+     * misses every change that does not resize the window: immersive bars
+     * swiping in or timing out, a fold, and a resume that restores them. The
+     * platform caches its answer and only recomputes when Android reports new
+     * insets, so this costs a reference comparison in the ordinary frame.
+     */
+    private void refreshSafeArea() {
+        if (ui == null) {
+            return;
+        }
+        com.mymmer.castledefense.platform.SafeAreaInsets now =
+                services.platform().safeAreaInsets();
+        if (now != null && !now.equals(appliedInsets)) {
+            appliedInsets = now;
+            ui.setSafeAreaInsets(now);
         }
     }
 

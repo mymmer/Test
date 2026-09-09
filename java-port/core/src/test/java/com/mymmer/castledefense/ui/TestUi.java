@@ -138,6 +138,23 @@ public final class TestUi {
         return this;
     }
 
+    /**
+     * Applies both inset families: obscuring, then the system's gesture strips.
+     *
+     * <p>The two are separate on every real phone — a cutout on one short edge
+     * and a navigation strip on the other — and collapsing them is what put 45%
+     * of the SETTINGS button inside the strip.
+     */
+    public TestUi withInsets(int left, int right, int top, int bottom,
+                             int gestureLeft, int gestureRight,
+                             int gestureTop, int gestureBottom) {
+        ui.setSafeAreaInsets(new com.mymmer.castledefense.platform.SafeAreaInsets(
+                left, right, top, bottom,
+                gestureLeft, gestureRight, gestureTop, gestureBottom));
+        ui.layout();
+        return this;
+    }
+
     // --- driving the interface ----------------------------------------------
 
     /** A press at a point in UI units. Returns the control id, or null. */

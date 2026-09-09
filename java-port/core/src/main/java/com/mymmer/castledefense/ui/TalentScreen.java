@@ -107,15 +107,16 @@ public final class TalentScreen implements UiScreen {
 
         int branches = TalentBranch.values().length;
         float columnGap = 10f;
-        float usable = safe.width - 32f;
+        //  Talent nodes are pressable, so the tree follows the touch rect.
+        float usable = safe.touchWidth - 32f;
         float columnWidth = Math.min(NODE_WIDTH,
                 (usable - columnGap * (branches - 1)) / branches);
         float totalWidth = branches * columnWidth + columnGap * (branches - 1);
-        float x0 = safe.centerX() - totalWidth / 2f;
+        float x0 = safe.touchCenterX() - totalWidth / 2f;
 
         float headerHeight = 34f;
-        float top = safe.top() - 76f - headerHeight;
-        float bottom = safe.y + 96f;
+        float top = safe.touchTop() - 76f - headerHeight;
+        float bottom = safe.touchY + 96f;
         float columnHeight = top - bottom;
 
         //  the deepest branch decides whether the panel needs to scroll
@@ -158,7 +159,7 @@ public final class TalentScreen implements UiScreen {
             }
         }
 
-        back.setBounds(safe.centerX() - 90f, safe.y + 26f, 180f, 52f);
+        back.setBounds(safe.touchCenterX() - 90f, safe.touchY + 26f, 180f, 52f);
 
         for (int i = 0; i < nodes.size; i++) {
             controls.add(nodes.get(i));

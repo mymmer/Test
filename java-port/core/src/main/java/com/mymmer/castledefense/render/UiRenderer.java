@@ -388,7 +388,7 @@ public final class UiRenderer {
             //  dropped quickly at the end, as the source fades them.
             float a = (float) Math.min(1d,
                     b.remaining() / Math.max(0.001d, b.life) * 2.2d);
-            text(safe.centerX(), y, textFor(b),
+            text(safe.touchCenterX(), y, textFor(b),
                     Palette.alpha(colourFor(b.id), a, fade), 34f, false, true, true);
             y -= 40f;
         }
@@ -485,7 +485,7 @@ public final class UiRenderer {
             return;
         }
         SafeArea safe = ui.safeArea();
-        text(safe.centerX(), safe.y + 24f,
+        text(safe.touchCenterX(), safe.touchY + 24f,
                 Strings.get(touch ? "hud.hint.touch" : "hud.hint.desktop"),
                 TEXT_DIM, 18f, false, true);
     }
@@ -588,6 +588,15 @@ public final class UiRenderer {
 
     // --- the modal screens --------------------------------------------------
 
+    /**
+     * Centred text follows the TOUCH rectangle, not the display one.
+     *
+     * <p>Not because a caption can be stolen by a gesture -- it cannot -- but
+     * because it has to line up with the buttons underneath it. Centring the
+     * title on one rectangle and the controls on another puts them 42 units
+     * apart on a phone with asymmetric strips, which reads as a mistake even
+     * though both are individually correct.
+     */
     private void drawMenu() {
         SafeArea safe = ui.safeArea();
         title(safe, Strings.get("menu.title"));
@@ -605,7 +614,7 @@ public final class UiRenderer {
             button(ui.menu().difficultyButtons().get(i), Strings.get(
                     "difficulty." + ui.difficulties().all().get(i).id()));
         }
-        text(safe.centerX(), safe.y + 40f, Strings.format("menu.difficulty",
+        text(safe.touchCenterX(), safe.touchY + 40f, Strings.format("menu.difficulty",
                 Strings.get("difficulty." + ui.preferredDifficulty().id())),
                 TEXT_DIM, 18f, false, true);
     }
@@ -740,11 +749,11 @@ public final class UiRenderer {
     // ========================================================================
 
     private void title(SafeArea safe, String s) {
-        text(safe.centerX(), safe.top() - 46f, s, GOLD, 40f, false, true);
+        text(safe.touchCenterX(), safe.touchTop() - 46f, s, GOLD, 40f, false, true);
     }
 
     private void subtitle(SafeArea safe, String s) {
-        text(safe.centerX(), safe.top() - 84f, s, TEXT_DIM, 20f, false, true);
+        text(safe.touchCenterX(), safe.touchTop() - 84f, s, TEXT_DIM, 20f, false, true);
     }
 
     private void shade(SafeArea safe) {

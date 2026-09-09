@@ -36,19 +36,64 @@ public final class SafeArea {
     public final float fullWidth;
     public final float fullHeight;
 
+    /**
+     * The tighter rectangle an <b>interactive control</b> must sit inside.
+     *
+     * <p>Same as the display rectangle plus the system's gesture strips — the
+     * pixels the platform may claim a press from before the game hears about
+     * it. Visible, drawable, and not reliably pressable.
+     *
+     * <p>Text, panels and readouts use the display rectangle; anything with a
+     * hit box uses this one. They differ whenever a device puts its navigation
+     * strip somewhere the cutout is not, which is the ordinary case in
+     * landscape.
+     */
+    public final float touchX;
+    public final float touchY;
+    public final float touchWidth;
+    public final float touchHeight;
+
     private SafeArea(float x, float y, float width, float height,
-                     float fullWidth, float fullHeight) {
+                     float touchX, float touchY, float touchWidth,
+                     float touchHeight, float fullWidth, float fullHeight) {
         this.x = x;
         this.y = y;
         this.width = width;
         this.height = height;
+        this.touchX = touchX;
+        this.touchY = touchY;
+        this.touchWidth = touchWidth;
+        this.touchHeight = touchHeight;
         this.fullWidth = fullWidth;
         this.fullHeight = fullHeight;
     }
 
     /** The whole viewport, with nothing cut off. */
     public static SafeArea full(float uiWidth, float uiHeight) {
-        return new SafeArea(0f, 0f, uiWidth, uiHeight, uiWidth, uiHeight);
+        return new SafeArea(0f, 0f, uiWidth, uiHeight,
+                0f, 0f, uiWidth, uiHeight, uiWidth, uiHeight);
+    }
+
+    public float touchRight() {
+        return touchX + touchWidth;
+    }
+
+    public float touchTop() {
+        return touchY + touchHeight;
+    }
+
+    public float touchCenterX() {
+        return touchX + touchWidth / 2f;
+    }
+
+    public float touchCenterY() {
+        return touchY + touchHeight / 2f;
+    }
+
+    /** Is this control entirely inside the rectangle a control must sit in? */
+    public boolean containsTouch(UiRect rect) {
+        return rect != null
+                && rect.insideBounds(touchX, touchY, touchWidth, touchHeight);
     }
 
     /**
@@ -93,7 +138,25 @@ public final class SafeArea {
         if (w <= 0f || h <= 0f) {
             return full(uiWidth, uiHeight);
         }
-        return new SafeArea(left, bottom, w, h, uiWidth, uiHeight);
+
+        //  The control rectangle: the same conversion applied to whichever
+        //  strip reaches further in on each edge.
+        float tLeft = Math.max(0f, insets.touchLeft() * perPixelX);
+        float tRight = Math.max(0f, insets.touchRight() * perPixelX);
+        float tTop = Math.max(0f, insets.touchTop() * perPixelY);
+        float tBottom = Math.max(0f, insets.touchBottom() * perPixelY);
+        float tw = uiWidth - tLeft - tRight;
+        float th = uiHeight - tTop - tBottom;
+        if (tw <= 0f || th <= 0f) {
+            //  A device claiming the whole screen is a device to disbelieve:
+            //  fall back to the display rectangle rather than to nothing.
+            tLeft = left;
+            tBottom = bottom;
+            tw = w;
+            th = h;
+        }
+        return new SafeArea(left, bottom, w, h,
+                tLeft, tBottom, tw, th, uiWidth, uiHeight);
     }
 
     public float right() {

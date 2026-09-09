@@ -223,8 +223,11 @@ public final class HudScreen implements UiScreen {
 
         panelWidth = PANEL_WIDTH;
         panelHeight = total + PANEL_PAD * 2f;
-        panelX = safe.x + PANEL_X;
-        panelY = safe.top() - panelHeight - PANEL_TOP_GAP;
+        //  The panel carries the Endless SHOP button, so it is anchored to
+        //  the touch rectangle: a panel clear of the cutout but sitting in the
+        //  navigation strip would look right and lose presses.
+        panelX = safe.touchX + PANEL_X;
+        panelY = safe.touchTop() - panelHeight - PANEL_TOP_GAP;
 
         //  Now the positions.  Each row's TOP edge, walking down from the pad,
         //  with ROW_GAP between one row's bottom and the next row's top.
@@ -266,8 +269,8 @@ public final class HudScreen implements UiScreen {
             return;
         }
         float total = n * SKILL_SLOT + (n - 1) * SKILL_GAP;
-        float x = safe.centerX() - total / 2f;
-        float y = safe.y + 34f;
+        float x = safe.touchCenterX() - total / 2f;
+        float y = safe.touchY + 34f;
 
         Array<SkillId> unlocked = run.skills().unlockedSkills();
         for (int i = 0; i < unlocked.size; i++) {
@@ -298,7 +301,7 @@ public final class HudScreen implements UiScreen {
         }
         //  The source's own place for it, offset into the safe rectangle so a
         //  cutout cannot eat it on a phone.
-        hornButton.setBounds(safe.x + HORN_X, safe.y + HORN_Y,
+        hornButton.setBounds(safe.touchX + HORN_X, safe.touchY + HORN_Y,
                 HORN_WIDTH, HORN_HEIGHT);
         TouchTargets.apply(hornButton);
         //  Pressable even when spent, so the press is consumed rather than
