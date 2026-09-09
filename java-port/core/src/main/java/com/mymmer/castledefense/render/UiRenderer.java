@@ -60,8 +60,15 @@ import com.mymmer.castledefense.ui.UiRoot;
 public final class UiRenderer {
 
     // Palette. Deliberately flat: Phase 11 owns the game's actual look.
-    private static final Color PANEL = new Color(0.06f, 0.07f, 0.11f, 0.88f);
-    private static final Color PANEL_EDGE = new Color(0.36f, 0.40f, 0.52f, 1f);
+    //  sprites.py C_PANEL = (26, 28, 42) at alpha 190, and C_PANEL_EDGE =
+    //  (86, 94, 128) at alpha 200. This port had it darker AND more opaque
+    //  (rgb 15,18,28 at 0.88), which is why a turret behind the stat panel was
+    //  invisible rather than merely dimmed -- and presses have always passed
+    //  through it, so what was lost was the sight of the thing being pressed.
+    private static final Color PANEL = new Color(26f / 255f, 28f / 255f,
+            42f / 255f, 190f / 255f);
+    private static final Color PANEL_EDGE = new Color(86f / 255f, 94f / 255f,
+            128f / 255f, 200f / 255f);
     private static final Color BUTTON = new Color(0.13f, 0.16f, 0.24f, 1f);
     private static final Color BUTTON_SELECTED = new Color(0.20f, 0.30f, 0.46f, 1f);
     private static final Color BUTTON_DISABLED = new Color(0.10f, 0.11f, 0.14f, 1f);

@@ -223,11 +223,21 @@ public final class HudScreen implements UiScreen {
 
         panelWidth = PANEL_WIDTH;
         panelHeight = total + PANEL_PAD * 2f;
-        //  The panel carries the Endless SHOP button, so it is anchored to
-        //  the touch rectangle: a panel clear of the cutout but sitting in the
-        //  navigation strip would look right and lose presses.
-        panelX = safe.touchX + PANEL_X;
-        panelY = safe.touchTop() - panelHeight - PANEL_TOP_GAP;
+        //  Anchored to the DISPLAY rectangle, not the touch one.
+        //
+        //  The touch rectangle also excludes the system's gesture strips, and
+        //  the top strip is 84px -- 42 interface units -- on this phone. Hanging
+        //  the panel from there pushed the whole thing 42 units down the screen
+        //  and its bottom edge landed on the keep's cannon at world y 205-235,
+        //  which is exactly the turret that became hard to use.
+        //
+        //  Nothing about this panel needs to avoid a gesture strip. A strip
+        //  steals swipes, and the panel's only control is the Endless SHOP
+        //  button sitting at its bottom edge, far from the top. Controls are
+        //  still checked against the touch rectangle by SafeAreaLayoutTest, so
+        //  a future row that pushed the button into a strip would fail there.
+        panelX = safe.x + PANEL_X;
+        panelY = safe.top() - panelHeight - PANEL_TOP_GAP;
 
         //  Now the positions.  Each row's TOP edge, walking down from the pad,
         //  with ROW_GAP between one row's bottom and the next row's top.
