@@ -595,6 +595,16 @@ public final class UiRenderer {
         button(ui.menu().classicButton(), Strings.get("mode.classic"));
         button(ui.menu().endlessButton(), Strings.get("mode.endless"));
         button(ui.menu().settingsButton(), Strings.get("menu.settings"));
+        //  The difficulty row.  The source draws three buttons on the menu
+        //  itself (main.py: `difficulty_buttons`, the row beneath the mode
+        //  cards) and highlights the selected one.  The port laid them out and
+        //  registered them as pressable but never drew them, so on a phone
+        //  there were three invisible controls in what looked like empty sky --
+        //  found by pressing HARD on a real device and watching nothing happen.
+        for (int i = 0; i < ui.menu().difficultyButtons().size; i++) {
+            button(ui.menu().difficultyButtons().get(i), Strings.get(
+                    "difficulty." + ui.difficulties().all().get(i).id()));
+        }
         text(safe.centerX(), safe.y + 40f, Strings.format("menu.difficulty",
                 Strings.get("difficulty." + ui.preferredDifficulty().id())),
                 TEXT_DIM, 18f, false, true);

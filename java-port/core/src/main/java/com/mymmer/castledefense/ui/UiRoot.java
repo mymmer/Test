@@ -78,12 +78,6 @@ public final class UiRoot implements UiConsumer {
         this.hud = new HudScreen(run);
         this.difficulties = difficulties;
         this.save = save;
-        //  Seeded from the save so it is never null: the menu shows a selected
-        //  difficulty on the first frame, and starting a run before touching
-        //  the setting uses the one that was saved rather than nothing.
-        this.menuDifficulty = difficulties.contains(save != null ? save.difficulty : null)
-                ? difficulties.get(save.difficulty)
-                : difficulties.defaultDifficulty();
         this.menu = new MenuScreens.MainMenu(nav, difficulties, save);
         this.settings = new MenuScreens.Settings(nav, difficulties, save, persist);
         this.pause = new MenuScreens.Pause(nav);
@@ -337,16 +331,34 @@ public final class UiRoot implements UiConsumer {
                         com.mymmer.castledefense.config.GameConfig.GROUND_Y);
     }
 
+    /**
+     * The difficulty the next run will use — read from the save, which is where
+     * the menu writes it.
+     *
+     * <h2>Why it is not a field</h2>
+     *
+     * <p>It was one until Phase 13, and that field was the whole bug. The menu's
+     * difficulty buttons write {@code save.difficulty}; this read a private copy
+     * seeded once at construction that <b>production code never updated</b> —
+     * {@code setPreferredDifficulty} was called only from tests. So the label
+     * said NORMAL while a run started on HARD, and pressing a difficulty
+     * changed the run without changing anything on screen.
+     *
+     * <p>Two places holding the same fact is what made that possible, so now
+     * there is one.
+     */
     private com.mymmer.castledefense.config.DifficultyConfig menuPreferred() {
-        return menuDifficulty;
+        return difficulties.contains(save != null ? save.difficulty : null)
+                ? difficulties.get(save.difficulty)
+                : difficulties.defaultDifficulty();
     }
-
-    private com.mymmer.castledefense.config.DifficultyConfig menuDifficulty;
 
     /** The difficulty the next run will use. Set by the menu, read on start. */
     public void setPreferredDifficulty(
             com.mymmer.castledefense.config.DifficultyConfig d) {
-        this.menuDifficulty = d;
+        if (save != null && d != null) {
+            save.difficulty = d.id();
+        }
     }
 
     // ========================================================================
@@ -362,7 +374,7 @@ public final class UiRoot implements UiConsumer {
      * from inside a run to a screen that could offer this.
      */
     public com.mymmer.castledefense.config.DifficultyConfig preferredDifficulty() {
-        return menuDifficulty;
+        return menuPreferred();
     }
 
     /** The difficulty table, for a renderer that needs to name one. */
