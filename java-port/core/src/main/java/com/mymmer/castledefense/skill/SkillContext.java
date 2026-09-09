@@ -56,6 +56,20 @@ public interface SkillContext {
 
     SimulationTrace trace();
 
+    /**
+     * The presentation sink. Defaulted, so no existing implementor changes.
+     *
+     * <p>Same one-way seam every other subsystem emits through: a skill decides
+     * its damage and its targets, and this only says what to draw.
+     */
+    default com.mymmer.castledefense.render.VisualEvents visuals() {
+        return com.mymmer.castledefense.render.VisualEvents.NONE;
+    }
+
+    /** Lights the storm white-out. {@code main.py:716}. */
+    default void stormFlash() {
+    }
+
     long step();
 
     /** Counts a cast, for the run's statistics. */

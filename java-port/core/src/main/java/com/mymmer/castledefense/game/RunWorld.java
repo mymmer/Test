@@ -643,6 +643,9 @@ public final class RunWorld implements BossContext, DirectorContext, AllyFactory
     public void setVisualEvents(com.mymmer.castledefense.render.VisualEvents sink) {
         this.visuals = sink == null
                 ? com.mymmer.castledefense.render.VisualEvents.NONE : sink;
+        //  Weather holds its own reference: it is handed to enemies through
+        //  EnemyContext and strikes from there, so it cannot reach back here.
+        weather.setVisualEvents(this.visuals);
     }
 
     /** The sink, for the systems that emit through it. */
@@ -654,6 +657,12 @@ public final class RunWorld implements BossContext, DirectorContext, AllyFactory
     @Override
     public ScreenShake shake() {
         return shake;
+    }
+
+    /** {@code SkillContext}: the skill's white-out is the weather's own state. */
+    @Override
+    public void stormFlash() {
+        weather.flash();
     }
 
     /**

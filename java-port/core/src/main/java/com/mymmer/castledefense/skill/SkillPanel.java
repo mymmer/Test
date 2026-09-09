@@ -283,6 +283,28 @@ public final class SkillPanel {
             }
         }
         ctx.shake().add(13f);
+
+        //  main.py:712-721. One bolt down the middle and four scattered across
+        //  the radius, then the white-out, the ring and the count. The scatter
+        //  is decoration, so it comes from the RENDERER's generator: the four
+        //  offsets are handed over as positions the effects system spreads,
+        //  never drawn from the gameplay stream, which would make a cast that
+        //  nobody watched diverge from one that was.
+        ctx.visuals().bolt(x, GameConfig.GROUND_Y - 40f, 0.45f);
+        for (int k = 0; k < 4; k++) {
+            //  evenly across the radius rather than randomly: the source rolls
+            //  these from its own generator, and this port has no gameplay roll
+            //  to spend on decoration.
+            float offset = radius * (-0.75f + 0.5f * k);
+            ctx.visuals().bolt(x + offset, GameConfig.GROUND_Y - 30f, 0.3f);
+        }
+        ctx.stormFlash();
+        ctx.visuals().ring(x, GameConfig.GROUND_Y - 20f, 34,
+                com.mymmer.castledefense.render.VisualEvents.LIGHTNING_RING,
+                radius * 4f, 0.55f, 6f);
+        ctx.visuals().text(x, GameConfig.GROUND_Y - 150f, hit + " VAPORISED",
+                com.mymmer.castledefense.render.VisualEvents.STORM_TEXT, 30f, 1f);
+
         if (ctx.trace().isEnabled()) {
             ctx.trace().event(TraceEvent.SKILL_EFFECT_CREATED, ctx.step(), 0L,
                     x, hit, "lightning");

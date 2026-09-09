@@ -75,6 +75,33 @@ public final class Weather {
         this.trace = trace;
     }
 
+    /**
+     * The presentation sink. One-way, and {@code NONE} until a renderer exists.
+     *
+     * <p>A strike used to apply its damage, its cooldown, its flash and its
+     * shake and then draw nothing whatever: the bolt, the spray and the "ZAP"
+     * readout were all absent, so the only sign of a strike was a white flash
+     * with no cause visible on screen.
+     */
+    private com.mymmer.castledefense.render.VisualEvents visuals =
+            com.mymmer.castledefense.render.VisualEvents.NONE;
+
+    public void setVisualEvents(com.mymmer.castledefense.render.VisualEvents sink) {
+        this.visuals = sink == null
+                ? com.mymmer.castledefense.render.VisualEvents.NONE : sink;
+    }
+
+    /**
+     * Lights the white-out without striking anything.
+     *
+     * <p>The Lightning Strike skill sets {@code game.storm_flash = 1.0}
+     * directly ({@code main.py:716}); it is presentation state that lives here,
+     * so the skill asks for it rather than reaching into the field.
+     */
+    public void flash() {
+        stormFlash = 1f;
+    }
+
     public void setTrace(SimulationTrace trace) {
         this.trace = trace;
     }
@@ -187,6 +214,15 @@ public final class Weather {
         if (shake != null) {
             shake.add(8f);
         }
+        //  main.py:1435-1439 -- the bolt, the spray and the readout. Gameplay
+        //  has already decided the damage above; this only shows it.
+        visuals.bolt(enemy.x(), enemy.y(), 0.28f);
+        visuals.burst(enemy.x(), enemy.y(), 26,
+                com.mymmer.castledefense.render.VisualEvents.STORM_SPARK,
+                340f, 0.5f, 4f, 0f,
+                com.mymmer.castledefense.render.VisualEvents.Shape.RECT);
+        visuals.text(enemy.x(), enemy.y() - 30f, "ZAP " + (int) damage,
+                com.mymmer.castledefense.render.VisualEvents.STORM_TEXT, 26f, 1f);
         if (trace != null && trace.isEnabled()) {
             trace.event(TraceEvent.STORM_STRIKE, 0L, enemy.uid(), enemy.x(), enemy.y(),
                     "lightning");

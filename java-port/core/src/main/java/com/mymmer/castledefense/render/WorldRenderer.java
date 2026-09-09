@@ -364,6 +364,8 @@ public final class WorldRenderer implements GameRenderer {
         LayerTimes.layer(6);
         effects.paintParticles(ctx);                                  // EFFECTS
         painters.paintWeather(ctx, run.weather(), ctx.worldTime);      // WEATHER
+        effects.paintBolts(ctx);                                       // BOLTS
+        painters.paintStormVeil(ctx, run.weather());                   // FLASH
         if (state == GameState.PLAYING) {
             //  GRAB_CURSOR -- PLAYING only, exactly as the source gates it.
             cursor.paint(ctx, run.cursor(), run.pointerX(), run.pointerY(),

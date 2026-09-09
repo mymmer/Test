@@ -335,6 +335,16 @@ public final class WorldPainters {
                         Palette.WIND);
             }
         }
+    }
+
+    /**
+     * The white-out over everything, after a strike.
+     *
+     * <p>Separate from the streaks because the bolts belong <b>between</b> them:
+     * the source draws wind, then every bolt, then the veil over the lot, and a
+     * bolt painted on top of its own flash would read as a different effect.
+     */
+    public void paintStormVeil(RenderContext ctx, Weather weather) {
         if (weather.stormFlash() > 0f) {
             ShapeKit.enableBlend();
             ctx.kit.rect(0f, 0f, GameConfig.WORLD_WIDTH, GameConfig.WORLD_HEIGHT,

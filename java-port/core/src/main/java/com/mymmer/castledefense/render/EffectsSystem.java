@@ -3,6 +3,7 @@ package com.mymmer.castledefense.render;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.utils.Array;
 import com.badlogic.gdx.math.MathUtils;
+import com.mymmer.castledefense.config.GameConfig;
 
 /**
  * Particles and floating text: the source's {@code Effects}, pooled.
@@ -121,6 +122,22 @@ public final class EffectsSystem implements VisualEvents {
     private final VisualRng rng;
     private int cap = MAX_PARTICLES;
 
+    /** Live bolts. Small by construction: five per cast, one per strike. */
+    private static final int MAX_BOLTS = 24;
+
+    static final class Bolt {
+        float x;
+        float y;
+        float life;
+        float fullLife;
+        /** A stable key so both strokes of one bolt follow one path. */
+        final long key = NEXT_BOLT_KEY++;
+    }
+
+    private static long NEXT_BOLT_KEY = 1L;
+
+    private final Array<Bolt> bolts = new Array<>(false, MAX_BOLTS);
+
     public EffectsSystem(VisualRng rng) {
         this.rng = rng == null ? new VisualRng(1L) : rng;
         for (int i = 0; i < pool.length; i++) {
@@ -197,12 +214,38 @@ public final class EffectsSystem implements VisualEvents {
         liveTexts.add(t);
     }
 
+    /**
+     * Records a bolt. {@code main.py} keeps these as {@code [x, y, life]}.
+     *
+     * <p>The list is deliberately tiny: the source appends one per storm strike
+     * and five per Lightning Strike, and they last under half a second.
+     */
+    @Override
+    public void bolt(float x, float y, float life) {
+        if (bolts.size >= MAX_BOLTS) {
+            return;
+        }
+        Bolt b = new Bolt();
+        b.x = x;
+        b.y = WorldGeometry.toDrawY(y);     // see the class note on coordinates
+        b.life = life;
+        b.fullLife = Math.max(1e-4f, life);
+        bolts.add(b);
+    }
+
     // ========================================================================
     //  Lifecycle
     // ========================================================================
 
     /** Advances on the frame delta. Nothing here is gameplay. */
     public void update(float dt) {
+        for (int i = bolts.size - 1; i >= 0; i--) {
+            Bolt b = bolts.get(i);
+            b.life -= dt;
+            if (b.life <= 0f) {
+                bolts.removeIndex(i);
+            }
+        }
         for (int i = live.size - 1; i >= 0; i--) {
             Particle p = live.get(i);
             p.vy -= p.grav * dt;            // gravity pulls down in a upward-y world
@@ -227,6 +270,7 @@ public final class EffectsSystem implements VisualEvents {
 
     /** Everything back to the pool. Called on a new run, as {@code Effects.clear}. */
     public void clear() {
+        bolts.clear();
         while (live.size > 0) {
             recycle(live.size - 1);
         }
@@ -285,6 +329,64 @@ public final class EffectsSystem implements VisualEvents {
     }
 
     // --- for the overlay and the tests ---------------------------------------
+
+    /**
+     * Draws every live bolt as a jagged path from its anchor to above the sky.
+     *
+     * <p>{@code main.py:2427}: from the strike point, step upward by 24-46 and
+     * sideways by +/-26 until the path leaves the top of the screen, then stroke
+     * it twice -- 4 units of near-white, 2 of pale blue over it.
+     *
+     * <p>The source re-rolls that path on <b>every frame</b>, which is what
+     * makes a bolt flicker rather than sit still, so it is re-rolled here too --
+     * from {@link VisualRng}, the decoration stream. Gameplay's generator is
+     * never touched: a bolt that consumed it would make the whole run diverge
+     * depending on whether anyone was watching.
+     */
+    public void paintBolts(RenderContext ctx) {
+        if (bolts.size == 0) {
+            return;
+        }
+        ShapeKit.enableBlend();
+        for (int i = 0; i < bolts.size; i++) {
+            Bolt b = bolts.get(i);
+            float fade = Math.max(0f, Math.min(1f, b.life / b.fullLife));
+            strokeBolt(ctx, b, 4f, ctx.alpha(Palette.BOLT_CORE, fade));
+            strokeBolt(ctx, b, 2f, ctx.alpha(Palette.BOLT_INNER, fade));
+        }
+    }
+
+    /**
+     * One stroke of a bolt.
+     *
+     * <p>Both strokes of a bolt must follow the <em>same</em> path, so the
+     * generator is restarted from the bolt's own key before each -- otherwise
+     * the pale core and the blue glow would zig-zag independently and the bolt
+     * would look like two bolts.
+     */
+    private void strokeBolt(RenderContext ctx, Bolt b, float width, Color colour) {
+        //  Keyed on the bolt AND its remaining life: both strokes see the same
+        //  life within a frame so they trace one path, and the life changes
+        //  between frames so the path re-rolls -- which is the flicker the
+        //  source gets from re-rolling at draw time.
+        com.badlogic.gdx.math.RandomXS128 r =
+                rng.stable(b.key * 7919L + (long) (b.life * 1000f));
+        float x = b.x;
+        float y = b.y;
+        float top = GameConfig.WORLD_HEIGHT + 20f;
+        int guard = 0;
+        while (y < top && guard++ < 64) {
+            float nx = x + (r.nextFloat() * 52f - 26f);
+            float ny = y + (24f + r.nextFloat() * 22f);
+            ctx.kit.line(x, y, nx, ny, width, colour);
+            x = nx;
+            y = ny;
+        }
+    }
+
+    public int boltCount() {
+        return bolts.size;
+    }
 
     public int particleCount() {
         return live.size;

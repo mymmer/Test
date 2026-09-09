@@ -36,7 +36,7 @@ public final class VisualScenarios {
     public static final String[] NAMES = {
         "all-enemies", "all-bosses", "all-towers", "armour", "regalia",
         "dragon-breath", "lich-ward", "fire-zone", "tornado", "storm",
-        "projectiles", "particles", "endless-late", "mixed-wave",
+        "projectiles", "particles", "endless-late", "mixed-wave", "lightning",
     };
 
     private VisualScenarios() {
@@ -53,6 +53,7 @@ public final class VisualScenarios {
         }
         switch (name) {
             case "all-enemies":   allEnemies(run); return true;
+            case "lightning":     lightning(run); return true;
             case "all-bosses":    allBosses(run); return true;
             case "all-towers":    allTowers(run); return true;
             case "armour":        armour(run); return true;
@@ -197,6 +198,41 @@ public final class VisualScenarios {
         run.skills().castAt(SkillId.TORNADO, 620f, 160f);
         mixedWave(run);
         steps(run, 90);         // let it pick some mobs up
+    }
+
+    /**
+     * A storm, mobs in the air, and bolts coming down.
+     *
+     * <p>Both of the source's lightning paths at once: three mobs lifted above
+     * {@code STORM_CEILING} and struck, and a Lightning Strike cast into the
+     * crowd. Every strike goes through the real mechanic, so the damage, the
+     * cooldowns and the readouts are the game's own -- this only arranges for
+     * them to happen while somebody is looking.
+     *
+     * <p>It exists because the bolts, the sprays and the "ZAP" readouts were
+     * missing entirely and no scenario would have shown it.
+     */
+    private static void lightning(RunWorld run) {
+        for (int i = 0; i < 400 && !run.weather().storm(); i++) {
+            run.weather().roll();
+        }
+        mixedWave(run);
+        //  Three in the storm ceiling, struck where they hang.
+        for (int i = 0; i < 3; i++) {
+            Enemy e = run.spawnEnemy(EnemyType.SCOUT, 4);
+            if (e == null) {
+                continue;
+            }
+            e.setX(420f + i * 260f);
+            e.setY(com.mymmer.castledefense.config.GameConfig.STORM_CEILING - 12f);
+            run.weather().strike(e);
+        }
+        //  ...and the skill, whose bolts last longest.
+        while (run.skills().unlockedCount() == 0) {
+            run.skills().unlockNext();
+        }
+        run.skills().castAt(com.mymmer.castledefense.skill.SkillId.LIGHTNING,
+                760f, com.mymmer.castledefense.config.GameConfig.GROUND_Y);
     }
 
     private static void storm(RunWorld run) {
