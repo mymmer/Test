@@ -261,9 +261,43 @@ public class GameInput implements InputProcessor {
         return false;
     }
 
+    /**
+     * Back, latched rather than acted on.
+     *
+     * <p>libGDX delivers keys on the input thread, and navigation belongs to
+     * the render thread -- the same split the pointers already live with. So
+     * this records the press and {@link #consumeBack()} hands it over once, on
+     * the thread that owns the interface. Acting here would mutate game state
+     * from whichever thread the platform happened to use.
+     *
+     * <p>Escape is included because it is the desktop's Back, and having one
+     * route for both is what stops the two drifting apart.
+     */
     @Override
     public boolean keyDown(int keycode) {
+        if (keycode == com.badlogic.gdx.Input.Keys.BACK
+                || keycode == com.badlogic.gdx.Input.Keys.ESCAPE) {
+            backRequested = true;
+            return true;
+        }
         return false;
+    }
+
+    /** Set on the input thread, read on the render thread. */
+    private volatile boolean backRequested;
+
+    /**
+     * Takes the pending Back press, if there is one.
+     *
+     * <p>Returns true at most once per press: a Back that is read is a Back
+     * that has been dealt with.
+     */
+    public boolean consumeBack() {
+        if (!backRequested) {
+            return false;
+        }
+        backRequested = false;
+        return true;
     }
 
     @Override

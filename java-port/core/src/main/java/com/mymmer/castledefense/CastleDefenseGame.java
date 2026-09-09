@@ -67,6 +67,15 @@ public class CastleDefenseGame extends ApplicationAdapter {
     //  tests (and Android lifecycle callbacks) observe from another one
     private volatile int createCount;
     private volatile int resizeCount;
+    /**
+     * Phase 13's on-device measurement, or null.
+     *
+     * <p>Null in every shipped build and every test: the game pays one null
+     * check per frame for it. Set by a launcher that was asked to measure --
+     * {@code --bench} on the desktop, an intent extra on Android.
+     */
+    private volatile com.mymmer.castledefense.perf.FrameProbe frameProbe;
+
     private volatile int renderCount;
     private volatile int pauseCount;
     private volatile int resumeCount;
@@ -191,6 +200,23 @@ public class CastleDefenseGame extends ApplicationAdapter {
         if (w > 0 && h > 0) {
             viewports.resize(w, h);
         }
+        //  Connect the input.
+        //
+        //  Until Phase 13 this line did not exist, and nothing else called
+        //  Gdx.input.setInputProcessor either -- so libGDX never delivered a
+        //  touch or a click to GameInput and the running game had NO input at
+        //  all, on any platform.  It survived ten phases because the tests
+        //  drive GameInput directly (which is the right way to test the router)
+        //  and every screenshot is a staged scenario, so nothing ever pressed a
+        //  button in a running build until it was tried on a phone.
+        //
+        //  setCatchKey stops Android treating Back as "leave the activity" so
+        //  Navigation.back() can apply the source's own routes; it is a no-op
+        //  on the desktop backend.
+        if (Gdx.input != null) {
+            Gdx.input.setInputProcessor(input);
+            Gdx.input.setCatchKey(com.badlogic.gdx.Input.Keys.BACK, true);
+        }
         log("created");
     }
 
@@ -224,9 +250,16 @@ public class CastleDefenseGame extends ApplicationAdapter {
     @Override
     public void render() {
         renderCount++;
+        final com.mymmer.castledefense.perf.FrameProbe probe = frameProbe;
+        if (probe != null) {
+            probe.frameBegin();
+        }
         float delta = Gdx.graphics != null ? Gdx.graphics.getDeltaTime() : 0f;
 
         int steps = simulation.advance(delta);
+        if (probe != null) {
+            probe.simBegin();
+        }
         for (int i = 0; i < steps; i++) {
             // the input clock is simulation time, never wall-clock
             input.setClock((float) world.simulationTime());
@@ -245,6 +278,11 @@ public class CastleDefenseGame extends ApplicationAdapter {
                 worldRenderer.onSimulationStep();
             }
         }
+        if (probe != null) {
+            probe.simEnd();
+        }
+
+        applyBack();
 
         //  Particles and floating text are presentation, so they run on the
         //  frame delta -- and only while the world itself is running, which is
@@ -276,6 +314,44 @@ public class CastleDefenseGame extends ApplicationAdapter {
         if (uiDebug != null) {
             uiDebug.render(viewports);
         }
+        if (probe != null) {
+            probe.frameEnd(steps, simulation.droppedStepEvents(),
+                    simulation.clampedFrames());
+        }
+    }
+
+    /**
+     * Applies a pending Back press, on the render thread.
+     *
+     * <p>Called once per frame rather than once per simulation step: Back is a
+     * navigation event, not a gameplay one -- it moves between screens and
+     * pauses the world, and running it twice because a slow frame ran two steps
+     * would close two menus for one press.
+     */
+    private void applyBack() {
+        if (ui == null || !input.consumeBack()) {
+            return;
+        }
+        if (ui.navigation().back()
+                == com.mymmer.castledefense.ui.Navigation.BackResult.EXIT_APP
+                && Gdx.app != null) {
+            Gdx.app.exit();
+        }
+    }
+
+    /**
+     * Attaches (or clears) the frame probe.
+     *
+     * <p>Deliberately settable after {@code create()}: on Android the decision
+     * arrives in the launching intent, and on the desktop from the command
+     * line, but neither is a construction-time property of the game.
+     */
+    public void setFrameProbe(com.mymmer.castledefense.perf.FrameProbe probe) {
+        this.frameProbe = probe;
+    }
+
+    public com.mymmer.castledefense.perf.FrameProbe getFrameProbe() {
+        return frameProbe;
     }
 
     /** The interface's debug overlay, or null before create(). */
