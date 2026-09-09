@@ -162,16 +162,20 @@ final class MeasuredGame extends CastleDefenseGame {
             return;
         }
         lastDown = down;
+        com.mymmer.castledefense.interaction.CursorInteraction c = getRun().cursor();
         android.util.Log.i("CastleDefensePerf", String.format(java.util.Locale.ROOT,
-                "[touch] down=%b world=(%.0f,%.0f) ui=(%.0f,%.0f) owns=%b "
-                        + "grabbed=%s stripping=%s held=%s busy=%b state=%s",
+                "[touch] down=%b world=(%.0f,%.0f) owns=%b grabbed=%s extra=%d "
+                        + "stripping=%s held=%s charging=%s smacking=%s "
+                        + "grabCd=%.2f busy=%b state=%s",
                 down, p == null ? -1f : p.worldX(), p == null ? -1f : p.worldY(),
-                p == null ? -1f : p.uiX(), p == null ? -1f : p.uiY(),
                 getInput().ownsInteraction(0),
-                getRun().cursor().grabbed() == null ? "-" : "YES",
-                getRun().cursor().stripping() == null ? "-" : "YES",
-                getRun().cursor().heldItem() == null ? "-" : "YES",
-                getRun().cursor().busy(), getRun().world().state()));
+                c.grabbed() == null ? "-" : c.grabbed().type().id(),
+                c.extraGrabbedCount(),
+                c.stripping() == null ? "-" : c.stripping().type().id(),
+                c.heldItem() == null ? "-" : "YES",
+                c.charging() == null ? "-" : "YES",
+                c.smacking() == null ? "-" : "YES",
+                c.grabCdRemaining(), c.busy(), getRun().world().state()));
     }
 
     /**

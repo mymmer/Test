@@ -411,7 +411,16 @@ public final class UiRenderer {
         return b.amount != 0 ? Strings.format(key, b.amount) : Strings.get(key);
     }
 
-    private String subjectKey(Announcements.Banner b) {
+    /**
+     * The bundle key a banner's subject resolves to.
+     *
+     * <p>Public and static so a test can assert the key this actually builds,
+     * rather than asserting that the bundle contains some key of its own
+     * choosing. Those are different claims: the NEW_FOE case asked for
+     * "enemy.&lt;id&gt;.name" while the bundle had "enemy.&lt;id&gt;", and a
+     * test written against the bundle alone would have passed throughout.
+     */
+    public static String subjectKey(Announcements.Banner b) {
         switch (b.id) {
             case BOSS_APPROACHES:
             case BOSS_ARRIVES:
@@ -419,7 +428,11 @@ public final class UiRenderer {
             case SKILL_UNLOCKED:
                 return "skill." + b.subject + ".name";
             case NEW_FOE:
-                return "enemy." + b.subject + ".name";
+                //  "enemy.<id>", with no ".name" suffix -- the same shape the
+                //  boss case above uses, and the same mistake Phase 12 found in
+                //  "difficulty.<id>.name". A phone announced a new wave as
+                //  "New foe: !enemy.foot_soldier.name!".
+                return "enemy." + b.subject;
             default:
                 return b.subject;
         }
