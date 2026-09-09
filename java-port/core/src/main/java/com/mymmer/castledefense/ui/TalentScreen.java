@@ -71,7 +71,17 @@ public final class TalentScreen implements UiScreen {
     public static final float HEADER_BAND = 120f;
 
     public static final float NODE_WIDTH = 150f;
-    public static final float NODE_HEIGHT = 46f;
+    /**
+     * Taller than the source's, for a phone.
+     *
+     * <p>A 46-unit node held a 13-unit name and a 12-unit rank -- 7.4 and 6.9 dp
+     * on a 3040x1440 panel, against Android's 12 sp minimum. The column scrolls
+     * already, so a taller node costs scrolling rather than talents.
+     */
+    public static final float NODE_HEIGHT = 64f;
+
+    /** Space kept at the bottom for the selected talent's detail panel. */
+    public static final float DETAIL_HEIGHT = 96f;
     public static final float NODE_GAP = 8f;
 
     private final RunWorld run;
@@ -87,6 +97,18 @@ public final class TalentScreen implements UiScreen {
     /** Rows scrolled off the top, for a branch column taller than the panel. */
     private int scroll;
     private int maxScroll;
+
+    /**
+     * Scroll controls, shown only when a branch is deeper than the panel.
+     *
+     * <p>{@code scrollBy} existed and <b>nothing ever called it</b>, so a
+     * column taller than the screen simply had talents that could not be
+     * reached. Two buttons rather than a drag gesture: a drag on a modal screen
+     * is currently owned by nobody, and inventing one would touch the router's
+     * ownership rules for no gain the player can see.
+     */
+    private final UiRect scrollUp = new UiRect("talent.scrollUp");
+    private final UiRect scrollDown = new UiRect("talent.scrollDown");
 
     public TalentScreen(RunWorld run, Navigation nav) {
         if (run == null || nav == null) {
@@ -131,7 +153,9 @@ public final class TalentScreen implements UiScreen {
 
         float headerHeight = 34f;
         float top = safe.touchTop() - HEADER_BAND - headerHeight;
-        float bottom = safe.touchY + 96f;
+        //  Room for BACK and, above it, the detail panel for the selected
+        //  talent -- the touch equivalent of the source's hover tooltip.
+        float bottom = safe.touchY + 96f + DETAIL_HEIGHT;
         float columnHeight = top - bottom;
 
         //  the deepest branch decides whether the panel needs to scroll
@@ -180,6 +204,19 @@ public final class TalentScreen implements UiScreen {
             controls.add(nodes.get(i));
         }
         controls.add(back);
+        //  Only when there is something to scroll to.
+        scrollUp.setVisible(maxScroll > 0 && scroll > 0);
+        scrollDown.setVisible(maxScroll > 0 && scroll < maxScroll);
+        float arrowSize = 52f;
+        float arrowX = safe.touchRight() - arrowSize - 16f;
+        scrollUp.setBounds(arrowX, top - arrowSize, arrowSize, arrowSize);
+        scrollDown.setBounds(arrowX, bottom, arrowSize, arrowSize);
+        if (scrollUp.visible()) {
+            controls.add(scrollUp);
+        }
+        if (scrollDown.visible()) {
+            controls.add(scrollDown);
+        }
         //  Nodes are only 46 tall and packed 8 apart, so an unconditional 44x44
         //  minimum would overlap the neighbour below.  The columns are already
         //  wide enough; only the height needs a floor, and NODE_HEIGHT + NODE_GAP
@@ -206,6 +243,14 @@ public final class TalentScreen implements UiScreen {
             nav.closeTalents();
             return hit.id;
         }
+        if (hit == scrollUp) {
+            scrollBy(-1);
+            return hit.id;
+        }
+        if (hit == scrollDown) {
+            scrollBy(1);
+            return hit.id;
+        }
         for (int i = 0; i < nodes.size; i++) {
             if (hit == nodes.get(i)) {
                 TalentDef def = order.get(i);
@@ -229,6 +274,14 @@ public final class TalentScreen implements UiScreen {
     /** Scrolls the branch columns. Presentation only. */
     public void scrollBy(int rows) {
         scroll = Math.max(0, Math.min(maxScroll, scroll + rows));
+    }
+
+    public UiRect scrollUpButton() {
+        return scrollUp;
+    }
+
+    public UiRect scrollDownButton() {
+        return scrollDown;
     }
 
     public int scroll() {

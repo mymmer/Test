@@ -45,6 +45,15 @@ public final class ShopScreen implements UiScreen {
     private final UiRect talentsButton = new UiRect("shop.talents");
 
     /** Which card the player last tapped, for a details panel. Presentation only. */
+    /**
+     * The tallest a card is allowed to grow.
+     *
+     * <p>Sized for what the source puts on one: a name, a wrapped description,
+     * the ownership line and the price. The old cap of 112 fitted a name and a
+     * price and nothing else.
+     */
+    public static final float CARD_MAX_HEIGHT = 150f;
+
     private String selectedItem;
 
     public ShopScreen(RunWorld run, Navigation nav) {
@@ -88,7 +97,12 @@ public final class ShopScreen implements UiScreen {
         float cardWidth = (panelWidth - gap * (columns - 1)) / columns;
         int rows = (cards.size + columns - 1) / columns;
         float available = top - bottom;
-        float cardHeight = Math.min(112f, (available - gap * (rows - 1)) / rows);
+        //  Was capped at 112, which left the card room for a name and a price
+        //  and nothing else -- so the port drew neither the description nor the
+        //  status the source puts on every card. The cap is now generous enough
+        //  for both, and the row still shrinks to fit a short screen.
+        float cardHeight = Math.min(CARD_MAX_HEIGHT,
+                (available - gap * (rows - 1)) / rows);
 
         Array<ShopItemDef> items = run.shop().items();
         for (int i = 0; i < cards.size; i++) {

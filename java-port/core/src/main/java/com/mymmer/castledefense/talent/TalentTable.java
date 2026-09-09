@@ -113,7 +113,20 @@ public final class TalentTable {
                         + "player can buy that does nothing.");
             }
 
-            TalentDef def = new TalentDef(id, branch, tier, maxRank, perRank, effect);
+            //  How the description's value is written. Carried in the data
+            //  because the source formats each talent's {v} itself and no rule
+            //  over perRank reproduces all of them -- see TalentDef.ValueFormat.
+            String fmt = Json5.optString(t, "format", "none");
+            TalentDef.ValueFormat format;
+            try {
+                format = TalentDef.ValueFormat.valueOf(
+                        fmt.trim().toUpperCase(java.util.Locale.ROOT));
+            } catch (IllegalArgumentException e) {
+                throw new DataException(where + ": unknown value format '" + fmt
+                        + "'; expected percent, percent1, number, decimal or none");
+            }
+            TalentDef def = new TalentDef(id, branch, tier, maxRank, perRank,
+                    effect, format);
             table.all.add(def);
             table.byId.put(id, def);
             table.byBranch.get(branch).add(def);

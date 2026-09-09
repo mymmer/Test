@@ -80,6 +80,12 @@ public final class UiRenderer {
     /** The source's boss bar red, from draw_bar(..., (208, 62, 60)). */
     private static final Color BOSS = Palette.rgb(208, 62, 60);
     private static final Color SHADE = new Color(0f, 0f, 0f, 0.62f);
+    /** {@code (170, 205, 235)} -- the source's ownership line. */
+    private static final Color STATUS = Palette.rgb(170, 205, 235);
+    /** {@code (140, 200, 150)} -- MAXED. */
+    private static final Color MAXED = Palette.rgb(140, 200, 150);
+    /** {@code (140, 120, 80)} -- a price you cannot afford. */
+    private static final Color PRICE_DIM = Palette.rgb(140, 120, 80);
 
     /** The size the built-in font was designed at. Scaling is relative to it. */
     private static final float BASE_FONT = 15f;
@@ -685,20 +691,52 @@ public final class UiRenderer {
         fill(card.visualX(), card.visualY(), card.visualWidth(), card.visualHeight(),
                 face, PANEL_EDGE);
 
-        float pad = 8f;
+        float pad = 10f;
         float x = card.visualX() + pad;
+        float cx = card.centerX();
         float top = card.visualY() + card.visualHeight() - pad;
+
+        //  1. name and hotkey
         text(x, top, (index + 1) % 10 + ". " + Strings.get("shop." + itemId + ".name"),
-                view.buyable() ? TEXT : TEXT_DIM, 16f, false);
-        text(x, top - 20f, view.available
-                ? Strings.format("shop.cost", view.cost)
-                : Strings.get("shop.unavailable"),
-                view.affordable && view.available ? GOLD : TEXT_DIM, 15f, false);
+                view.buyable() ? TEXT : TEXT_DIM, 20f, false, false, true);
+
+        //  2. what it does. The source wraps this to three lines and clips;
+        //     it was missing from this port entirely, so a player had a name
+        //     and a price and no way to learn what either bought.
+        float bodyWidth = card.visualWidth() - pad * 2f;
+        TextLayout.Paragraph desc = ui.text().wrap(
+                Strings.get("shop." + itemId + ".desc"), bodyWidth, 15f, 2f);
+        float dy = top - 26f;
+        for (int i = 0; i < desc.lines.size && i < 3; i++) {
+            text(x, dy, desc.lines.get(i), TEXT_DIM, 15f, false);
+            dy -= 17f;
+        }
+
+        //  3. the ownership line and what the next purchase does, both from
+        //     the shop's own view -- no cost or slot arithmetic here.
+        float bottom = card.visualY() + pad;
         if (view.level > 0) {
-            text(x, top - 38f, Strings.format("shop.owned", view.level),
-                    TEXT_DIM, 13f, false);
+            text(x, bottom + 44f, Strings.format("shop.owned", view.level),
+                    STATUS, 15f, false);
+        }
+        if (view.available && view.def.effect == ShopItemDef.Effect.TOWER) {
+            text(x, bottom + 24f, view.upgradesInstead
+                            ? Strings.format("shop.upgrades",
+                                    Strings.get("shop." + itemId + ".name"))
+                            : Strings.get("shop.adds"),
+                    TEXT_DIM, 14f, false);
+        }
+
+        //  4. price, or why it cannot be bought.
+        if (!view.available) {
+            text(x, bottom, Strings.get("shop.unavailable"), MAXED, 18f,
+                    false, false, true);
+        } else {
+            text(x, bottom, Strings.format("shop.cost", view.cost),
+                    view.affordable ? GOLD : PRICE_DIM, 20f, false, false, true);
         }
     }
+
 
     private void drawTalents() {
         SafeArea safe = ui.safeArea();
@@ -728,7 +766,64 @@ public final class UiRenderer {
         for (int i = 0; i < screen.nodes().size; i++) {
             drawTalentNode(screen.nodes().get(i), screen.order().get(i), tree);
         }
+        if (screen.scrollUpButton().visible()) {
+            button(screen.scrollUpButton(), Strings.get("common.up"));
+        }
+        if (screen.scrollDownButton().visible()) {
+            button(screen.scrollDownButton(), Strings.get("common.down"));
+        }
+        drawTalentDetail(safe, screen, tree);
         button(screen.backButton(), Strings.get("common.back"));
+    }
+
+    /**
+     * What the selected talent does. {@code main.py:3062}'s hover tooltip.
+     *
+     * <p>The source shows this for whatever the mouse is over. A finger has no
+     * hover, so it is shown for the selected node -- which the screen already
+     * tracks, because the first tap selects and only a second tap on the same
+     * node spends a point. Nothing here can buy anything.
+     *
+     * <p>The value is written at {@code max(1, rank)}, as the source does, with
+     * the same note: "current" once it is owned, "at rank 1" before.
+     */
+    private void drawTalentDetail(SafeArea safe, TalentScreen screen,
+                                  TalentTree tree) {
+        String id = screen.selected();
+        if (id == null || id.isEmpty()) {
+            text(safe.touchCenterX(), safe.touchY + 108f,
+                    Strings.get("talent.pickOne"), TEXT_DIM, 16f, false, true);
+            return;
+        }
+        TalentDef def = tree.table().get(id);
+        if (def == null) {
+            return;
+        }
+        float width = Math.min(660f, safe.touchWidth - 40f);
+        float x = safe.touchCenterX() - width / 2f;
+        float y = safe.touchY + 96f;
+        fill(x, y, width, TalentScreen.DETAIL_HEIGHT - 8f, PANEL, PANEL_EDGE);
+
+        int rank = tree.rank(def.id);
+        text(x + 14f, y + TalentScreen.DETAIL_HEIGHT - 26f,
+                Strings.get(def.nameKey()), TEXT, 20f, false, false, true);
+        //  rank, and the cost of the next point
+        text(x + width - 14f, y + TalentScreen.DETAIL_HEIGHT - 26f,
+                Strings.format("talent.rank", rank, def.maxRank)
+                        + (rank >= def.maxRank ? "" : "   " + Strings.get("talent.onePoint")),
+                rank >= def.maxRank ? MAXED : (tree.canPurchase(def.id) ? GOLD : TEXT_DIM),
+                16f, true);
+
+        //  The description, with the value the source would print.
+        String body = Strings.format(def.descriptionKey(), def.formatValue(rank));
+        String note = Strings.get(rank > 0 ? "talent.current" : "talent.atRank1");
+        TextLayout.Paragraph p = ui.text().wrap(body + "  (" + note + ")",
+                width - 28f, 16f, 3f);
+        float ty = y + TalentScreen.DETAIL_HEIGHT - 50f;
+        for (int i = 0; i < p.lines.size && i < 2; i++) {
+            text(x + 14f, ty, p.lines.get(i), TEXT_DIM, 16f, false);
+            ty -= 19f;
+        }
     }
 
     private void drawTalentNode(UiRect node, TalentDef def, TalentTree tree) {
@@ -741,12 +836,20 @@ public final class UiRenderer {
                 : (buyable ? BUTTON : BUTTON_DISABLED);
         fill(node.visualX(), node.visualY(), node.visualWidth(), node.visualHeight(),
                 face, PANEL_EDGE);
-        text(node.visualX() + 6f, node.visualY() + node.visualHeight() - 6f,
+        //  Bigger than the source's, because the source was read on a monitor:
+        //  13 and 12 units are 7.4 and 6.9 dp on this phone.
+        TextLayout.Paragraph name = ui.text().wrap(
                 Strings.get("talent." + def.id + ".name"),
-                unlocked ? TEXT : TEXT_DIM, 13f, false);
-        text(node.visualX() + 6f, node.visualY() + 16f,
+                node.visualWidth() - 12f, 16f, 1f);
+        float ny = node.visualY() + node.visualHeight() - 6f;
+        for (int i = 0; i < name.lines.size && i < 2; i++) {
+            text(node.visualX() + 6f, ny, name.lines.get(i),
+                    unlocked ? TEXT : TEXT_DIM, 16f, false);
+            ny -= 18f;
+        }
+        text(node.visualX() + 6f, node.visualY() + 8f,
                 Strings.format("talent.rank", tree.rank(def.id), def.maxRank),
-                tree.rank(def.id) > 0 ? GOLD : TEXT_DIM, 12f, false);
+                tree.rank(def.id) > 0 ? GOLD : TEXT_DIM, 15f, false);
     }
 
     private void drawPause() {

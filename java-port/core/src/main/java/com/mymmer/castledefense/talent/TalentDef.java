@@ -27,14 +27,42 @@ public final class TalentDef {
     public final double perRank;
     public final TalentEffect effect;
 
+    /**
+     * How the description's value is written, from the data.
+     *
+     * <p>The source formats each talent's {@code {v}} itself -- 28 as
+     * {@code .0%}, one as {@code .1%}, four as {@code .0f}, one as
+     * {@code .1f}, and two have no value at all. A rule like "below 1.0 means
+     * a percentage" gets 35 of them right and {@code spikedot} (perRank 0.9,
+     * written as a plain number) wrong, which would print "90%" where the game
+     * means "0.9 damage a tick". So the intent is carried in the data instead
+     * of guessed from the number.
+     */
+    public enum ValueFormat { PERCENT, PERCENT1, NUMBER, DECIMAL, NONE }
+
+    public final ValueFormat format;
+
+    /** The value at a rank, written the way the source writes it. */
+    public String formatValue(int rank) {
+        double v = valueAt(Math.max(1, rank));
+        switch (format) {
+            case PERCENT:  return Math.round(v * 100d) + "%";
+            case PERCENT1: return String.format(java.util.Locale.ROOT, "%.1f%%", v * 100d);
+            case NUMBER:   return String.valueOf(Math.round(v));
+            case DECIMAL:  return String.format(java.util.Locale.ROOT, "%.1f", v);
+            default:       return "";
+        }
+    }
+
     TalentDef(String id, TalentBranch branch, int tier, int maxRank,
-              double perRank, TalentEffect effect) {
+              double perRank, TalentEffect effect, ValueFormat format) {
         this.id = id;
         this.branch = branch;
         this.tier = tier;
         this.maxRank = maxRank;
         this.perRank = perRank;
         this.effect = effect;
+        this.format = format != null ? format : ValueFormat.NONE;
     }
 
     /** Localisation key for the display name. Never gameplay identity. */

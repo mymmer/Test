@@ -394,14 +394,27 @@ public final class Shop {
         public final boolean affordable;
         /** The item's own level, or the purchase count for a tower. */
         public final int level;
+        /**
+         * True when the next purchase of this tower upgrades the ones already
+         * built instead of adding another.
+         *
+         * <p>{@code main.py:1047 tower_status} appends "(upgrades)" when the
+         * wall has no free emplacement left, which is the one thing a player
+         * needs to know before spending: the same button does two quite
+         * different things depending on space. Answered here rather than
+         * recomputed in the interface, because free-slot counting is the
+         * castle's business.
+         */
+        public final boolean upgradesInstead;
 
         ItemView(ShopItemDef def, int cost, boolean available, boolean affordable,
-                 int level) {
+                 int level, boolean upgradesInstead) {
             this.def = def;
             this.cost = cost;
             this.available = available;
             this.affordable = affordable;
             this.level = level;
+            this.upgradesInstead = upgradesInstead;
         }
 
         public boolean buyable() {
@@ -420,8 +433,11 @@ public final class Shop {
     public ItemView view(String id) {
         ShopItemDef d = table.require(id);
         int cost = currentCost(id);
+        boolean upgrades = d.effect == ShopItemDef.Effect.TOWER
+                && purchases.get(d.id, 0) > 0
+                && ctx.castle().freeSlots().size == 0;
         return new ItemView(d, cost, isAvailable(id),
-                ctx.session().gold() >= cost, levelOf(d));
+                ctx.session().gold() >= cost, levelOf(d), upgrades);
     }
 
     private int levelOf(ShopItemDef d) {
