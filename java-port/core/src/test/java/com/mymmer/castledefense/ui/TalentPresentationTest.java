@@ -168,4 +168,42 @@ class TalentPresentationTest {
                 "crit chance is a percentage in the source");
         assertEquals("5%", crit.formatValue(1), "perRank 0.05 at rank 1");
     }
+
+    @Test
+    @DisplayName("no talent silently falls back to printing no value")
+    void everyTalentCarriesTheSourcesFormat() {
+        //  Counted out of main.py's TALENTS list, not out of talents.json:
+        //  30 write {v:.0%}, four {v:.0f}, one {v:.1%}, one {v:.1f}, and
+        //  exactly two -- Sentinels and Tempest -- have no {v} at all.
+        //
+        //  The loader defaults a missing "format" to NONE, which prints
+        //  nothing. That is the right default for the two that want it and
+        //  silent data loss for the other 36, and it had already swallowed
+        //  lightfingers and stormwinds before this test existed.
+        TestUi t = talents(1280, 720);
+        int percent = 0, percent1 = 0, number = 0, decimal = 0;
+        Set<String> valueless = new HashSet<>();
+        for (TalentBranch b : TalentBranch.values()) {
+            Array<TalentDef> branch = t.run.run.talentTree().table().branch(b);
+            for (int i = 0; i < branch.size; i++) {
+                TalentDef d = branch.get(i);
+                switch (d.format) {
+                    case PERCENT:  percent++;  break;
+                    case PERCENT1: percent1++; break;
+                    case NUMBER:   number++;   break;
+                    case DECIMAL:  decimal++;  break;
+                    default:       valueless.add(d.id); break;
+                }
+            }
+        }
+        assertEquals(30, percent, "main.py writes {v:.0%} thirty times");
+        assertEquals(1, percent1, "and {v:.1%} once");
+        assertEquals(4, number, "and {v:.0f} four times");
+        assertEquals(1, decimal, "and {v:.1f} once");
+        assertEquals(new HashSet<>(java.util.Arrays.asList("sentinels", "tempest")),
+                valueless,
+                "only Sentinels and Tempest have no {v} in the source; anything "
+                        + "else here is a talent whose value the detail panel "
+                        + "will not print: " + valueless);
+    }
 }

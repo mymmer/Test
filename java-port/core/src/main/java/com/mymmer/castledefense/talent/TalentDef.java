@@ -30,7 +30,7 @@ public final class TalentDef {
     /**
      * How the description's value is written, from the data.
      *
-     * <p>The source formats each talent's {@code {v}} itself -- 28 as
+     * <p>The source formats each talent's {@code {v}} itself -- 30 as
      * {@code .0%}, one as {@code .1%}, four as {@code .0f}, one as
      * {@code .1f}, and two have no value at all. A rule like "below 1.0 means
      * a percentage" gets 35 of them right and {@code spikedot} (perRank 0.9,
