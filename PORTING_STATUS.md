@@ -10,11 +10,13 @@ Legend: `[ ]` not started · `[~]` in progress · `[x]` ported (compiles, believ
 Nothing is complete merely because it compiles. A row may only reach `[T]` when a named
 test exercises it.
 
-**Phase status: Phases 1 through 12 complete, plus the pre-Phase-8 time-domain
-hardening and the Phase 11.5 audit. The Android assembly gate, open since Phase
-2, is now CLOSED: an SDK was installed, `verifyAndroid` passes, and the debug APK
-builds, installs and runs. Android verification on a PHYSICAL device remains
-outstanding.**
+**Phase status: Phases 1 through 13 complete, plus the pre-Phase-8 time-domain
+hardening and the Phase 11.5 audit. The Android device gate is now CLOSED: the
+game has been built, installed and played on a physical Samsung Galaxy S10+,
+holds 60 fps in nine scenarios with no thermal throttling, and survives
+backgrounding and screen lock. Phase 13 also found that the game had never been
+connected to input at all, and that every world interaction was aimed at the
+mirror image of the finger. Both are fixed.**
 
 **(superseded) Earlier phase status: Phase 2 implemented and hardened but NOT fully tested —
 the Android assembly gate is still open because Google's Maven is unreachable
@@ -907,6 +909,55 @@ suite.
 - **Manual review.** The captures exist and have been inspected by the port
   author; they have **not** been approved by the repository owner. That approval
   is the gate on Phase 12, and this document does not claim it.
+
+## Phase 13 — Android device validation
+
+Contract: [`ANDROID_DEVICE.md`](java-port/docs/subsystems/ANDROID_DEVICE.md).
+
+**Two defects that ten phases of green tests could not see, because both were in
+the wiring rather than the logic.**
+
+1. **`Gdx.input.setInputProcessor` was never called** -- anywhere, by anything,
+   since Phase 3. libGDX had nowhere to deliver a touch, so `GameInput` was never
+   invoked in a running build on any platform. The router tests call `GameInput`
+   directly (correctly -- that is how you test a router) and every screenshot is
+   a staged scenario, so nothing had ever pressed a button in a running game.
+2. **Touches arrived in draw space.** The viewport unprojects y-up; the
+   simulation keeps Pygame's y-down world with the ground at 620.
+   `WorldGeometry` is the one boundary between them and input never crossed it,
+   so a finger on the ground reported gameplay y 125 -- its own mirror image
+   about the horizon. Grabbing, throwing, armour stripping, tower overcharge,
+   the boss crown and the Dragon's claws were all unreachable.
+
+`ShakeInputTest` drives that exact path and even places a mob at y 600 -- but it
+asserts the pointer does not DRIFT under shake, comparing the value against
+itself, which a consistently wrong number passes perfectly.
+
+### Also found on the device
+
+| | |
+|---|---|
+| Back never routed | `Navigation.back()` had the full policy; nothing called it |
+| Menu difficulty row never drawn | three invisible pressable controls in empty sky |
+| Two sources for the difficulty | menu said NORMAL while the run started HARD |
+| `!hud.hornSpent!`, `!settings.unmute!` | raw keys on screen; the Phase 12 scan could not see conditional keys |
+| `LayerTimes` op counts never reset | grew window on window, read as a rising cost |
+
+### Measured on a Galaxy S10+ (Exynos 9820, Android 12, 3040x1440, 60 Hz)
+
+**60 fps sustained in all nine scenarios**, zero dropped or clamped steps, and a
+five-minute soak with `thermal=0` throughout and no drift.
+
+The frame does **2.7 ms of real work in a 16.7 ms budget** -- 2.6 ms of shapes,
+0.07 ms of simulation. The probe's 13 ms of apparent CPU time is the frame
+waiting on the display, not working: it is identical at 4.4, 1.1 and 0.49
+megapixels, and identical on LOW, MEDIUM and HIGH. **No gameplay broadphase,
+cache or pooling was added**, on the device's own evidence as well as the
+desktop's.
+
+Not verified: multi-touch (adb cannot inject two fingers), any other device,
+gesture-navigation phones, and 90/120 Hz panels -- where the budget would be
+11.1 or 8.3 ms rather than 16.7.
 
 ## Phase 12 — Measured performance and mobile readiness
 
