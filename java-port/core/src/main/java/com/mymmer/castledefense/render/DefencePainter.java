@@ -412,6 +412,9 @@ public final class DefencePainter {
     //  The two field structures
     // ========================================================================
 
+    /** {@code enemies.py Necromancer.COLOR}, the same value EnemyPainter uses. */
+    private static final Color NECROMANCER_ROBE = Palette.rgb(146, 96, 196);
+
     /** {@code Outpost.draw}: the outcrop, the blockhouse, its battlements. */
     public void paintOutpost(RenderContext ctx, Outpost outpost) {
         float x = outpost.x();
@@ -438,6 +441,106 @@ public final class DefencePainter {
             ctx.kit.rect(bx + i * 18f, by + 70f, 12f, 12f, Palette.rgb(92, 96, 112));
         }
         paintGarrison(ctx, outpost, bx, by);
+        paintPrisoner(ctx, outpost, x, by);
+    }
+
+    /**
+     * The caged Necromancer. {@code castle.py Outpost.draw_prisoner}.
+     *
+     * <p>Missing entirely from this port: the gameplay trapped him, drained
+     * him, let rivals shoot at him and released him on death, and the outpost
+     * on screen looked exactly as it did when empty.
+     *
+     * <p>Every number here is read from the outpost's own state. The bar is the
+     * <b>prisoner's</b> pool -- {@code prisonerHp / prisonerMax} -- and not the
+     * outpost's, which has no health at all in the source and must not grow one
+     * to give the bar something to show.
+     *
+     * <p>Coordinates: the source builds the cage from {@code body_rect.y + 8}
+     * in a y-down space. Here {@code by} is the blockhouse's bottom edge in
+     * draw space, so its top is {@code by + 70} and the cage hangs 8 below that.
+     */
+    private void paintPrisoner(RenderContext ctx, Outpost outpost, float cx,
+                               float by) {
+        if (!outpost.hasPrisoner()) {
+            return;
+        }
+        float cageX = cx - CAGE_W * 0.5f;
+        float cageBottom = cageBottom(outpost);
+        float cageTop = cageBottom + CAGE_H;
+        final float cageW = CAGE_W;
+        final float cageH = CAGE_H;
+
+        //  The ally-coloured glow behind the bars, brighter while the trap is
+        //  fresh: alpha 50..120 of 255, as the source blends it.
+        ShapeKit.enableBlend();
+        float glow = (50f + 70f * outpost.trapGlow()) / 255f;
+        //  ShapeRenderer.ellipse takes the bounding box's bottom-left, and the
+        //  source blits the glow at (cage.x - 15, cage.y - 15) -- the cage
+        //  inflated by 15 a side.
+        ctx.kit.ellipse(cageX - 15f, cageBottom - 15f,
+                cageW + 30f, cageH + 30f, ctx.alpha(Palette.ALLY, glow));
+
+        //  The prisoner, hunched: a robe triangle, a hooded head, two eyes.
+        //  The prisoner is always a Necromancer -- he is the only Trappable --
+        //  and the source shades his own COLOR to 0.8.
+        Color robe = ctx.shade(NECROMANCER_ROBE, 0.8f);
+        poly[0] = cx;               poly[1] = cageTop - 8f;
+        poly[2] = cageX + cageW - 6f; poly[3] = cageBottom + 4f;
+        poly[4] = cageX + 6f;       poly[5] = cageBottom + 4f;
+        ctx.kit.polygon(poly, 6, robe);
+        ctx.kit.circle(cx, cageTop - 14f, 6f, Palette.rgb(44, 32, 56));
+        ctx.kit.circle(cx - 2f, cageTop - 13f, 2f, Palette.ALLY);
+        ctx.kit.circle(cx + 3f, cageTop - 13f, 2f, Palette.ALLY);
+
+        //  The cage: a frame and four vertical bars.
+        ctx.kit.rectOutline(cageX, cageBottom, cageW, cageH, 3f,
+                Palette.rgb(66, 72, 88));
+        for (int i = 0; i < 4; i++) {
+            float barX = cageX + 8f + i * 10f;
+            ctx.kit.line(barX, cageBottom + 2f, barX, cageTop - 2f, 2f,
+                    Palette.rgb(150, 158, 176));
+        }
+
+        //  His own health, above the cage. Green until a third is left.
+        float frac = outpost.prisonerHp() / Math.max(1f, outpost.prisonerMax());
+        ctx.kit.bar(cageX - 4f, cageTop + 5f, cageW + 8f, 5f, frac,
+                frac > 0.35f ? Palette.ALLY : Palette.rgb(208, 62, 60));
+    }
+
+    private static final float CAGE_W = 44f;
+    private static final float CAGE_H = 46f;
+
+    /**
+     * The cage's bottom edge in draw space, from one place.
+     *
+     * <p>Shared by the shapes and the labels because they are drawn in separate
+     * passes and derived it separately at first -- which put the two captions
+     * eight units up, inside the bars.
+     *
+     * <p>{@code paintOutpost} sets the blockhouse's bottom to {@code up(y) - 8}
+     * and its height to 70, and the source hangs the cage 8 below the
+     * blockhouse's top.
+     */
+    private float cageBottom(Outpost outpost) {
+        return up(outpost.y()) - 8f + 70f - 8f - CAGE_H;
+    }
+
+    /** The prisoner's two labels, drawn in the text pass with the others. */
+    public void paintPrisonerLabels(RenderContext ctx, Outpost outpost) {
+        if (outpost == null || !outpost.hasPrisoner()) {
+            return;
+        }
+        //  textCentered's y is the text's LOWER edge in draw space, and the
+        //  source puts each caption's top just under the cage -- so a line's
+        //  height comes off as well as the source's own offset.
+        float below = cageBottom(outpost);
+        ctx.textCentered(outpost.x(), below - 2f - 15f, "TRAPPED", 15f,
+                Palette.ALLY, true, true);
+        if (outpost.prisonerHit() > 0d) {
+            ctx.textCentered(outpost.x(), below - 17f - 15f, "UNDER FIRE", 15f,
+                    Palette.rgb(208, 62, 60), true, true);
+        }
     }
 
     /** The bows or turrets on the outpost roof, one per garrison level. */

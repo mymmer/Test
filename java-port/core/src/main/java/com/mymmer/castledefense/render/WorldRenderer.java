@@ -391,6 +391,7 @@ public final class WorldRenderer implements GameRenderer {
             defences.paintTowerLabel(ctx, run.castle().towers().get(i));
         }
         defences.paintStructureLabels(ctx, run.outpost(), run.barricade());
+        defences.paintPrisonerLabels(ctx, run.outpost());              // PRISONER
         effects.paintTexts(ctx);
         if (state == GameState.PLAYING) {
             cursor.paintLabels(ctx, run.cursor(), run, run.pointerX(),

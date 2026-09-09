@@ -37,6 +37,7 @@ public final class VisualScenarios {
         "all-enemies", "all-bosses", "all-towers", "armour", "regalia",
         "dragon-breath", "lich-ward", "fire-zone", "tornado", "storm",
         "projectiles", "particles", "endless-late", "mixed-wave", "lightning",
+        "prisoner-full", "prisoner-hurt", "prisoner-dying",
     };
 
     private VisualScenarios() {
@@ -54,6 +55,9 @@ public final class VisualScenarios {
         switch (name) {
             case "all-enemies":   allEnemies(run); return true;
             case "lightning":     lightning(run); return true;
+            case "prisoner-full":   prisoner(run, 1.0f, false); return true;
+            case "prisoner-hurt":   prisoner(run, 0.55f, true); return true;
+            case "prisoner-dying":  prisoner(run, 0.05f, true); return true;
             case "all-bosses":    allBosses(run); return true;
             case "all-towers":    allTowers(run); return true;
             case "armour":        armour(run); return true;
@@ -233,6 +237,41 @@ public final class VisualScenarios {
         }
         run.skills().castAt(com.mymmer.castledefense.skill.SkillId.LIGHTNING,
                 760f, com.mymmer.castledefense.config.GameConfig.GROUND_Y);
+    }
+
+    /**
+     * A Necromancer in the Outpost's cage, at a chosen fraction of his pool.
+     *
+     * <p>The cage, the prisoner and his health bar were absent from this port
+     * entirely, so no scenario would have shown any of it. Three of these exist
+     * because the bar changes colour below a third and the "UNDER FIRE" line
+     * only appears while he is being shot at.
+     *
+     * <p>The capture goes through the real {@code trap}, and the damage through
+     * the real {@code hurtPrisoner}, so the state on screen is the state the
+     * game would actually be in.
+     */
+    private static void prisoner(RunWorld run, float fraction, boolean underFire) {
+        run.session().addGold(100000);
+        run.shop().buy("outpost");
+        Enemy necro = run.spawnEnemy(EnemyType.NECROMANCER, 6);
+        if (!(necro instanceof com.mymmer.castledefense.defence.Trappable)
+                || !run.outpost().trap(
+                        (com.mymmer.castledefense.defence.Trappable) necro)) {
+            return;
+        }
+        float pool = run.outpost().prisonerMax();
+        float wanted = pool * Math.max(0f, Math.min(1f, fraction));
+        if (wanted < pool) {
+            run.outpost().hurtPrisoner(pool - wanted);
+        }
+        if (!underFire) {
+            //  Let the recently-hit flash lapse so only the bar shows.
+            for (int i = 0; i < 90; i++) {
+                run.outpost().updatePrisoner(1d / 60d);
+            }
+        }
+        mixedWave(run);
     }
 
     private static void storm(RunWorld run) {
