@@ -115,8 +115,20 @@ public final class LayerTimes {
         return out.toString();
     }
 
+    /**
+     * Clears both accumulators for the next window.
+     *
+     * <p>{@code OPS} was left out of this until Phase 13, which did not matter
+     * while the only caller printed once at exit -- but the device harness
+     * reports every 300 frames, so the counts grew window on window (1873, then
+     * 3751, then 5629) and read as a rising cost that was not happening. A
+     * counter that is reported repeatedly has to be reset with what it is
+     * reported beside.
+     */
     public static void reset() {
         java.util.Arrays.fill(TOTAL, 0L);
+        java.util.Arrays.fill(OPS, 0L);
+        glCalls = 0L;
         frames = 0;
     }
 }

@@ -320,10 +320,24 @@ public class GameInput implements InputProcessor {
     private final float[] worldScratch = new float[2];
     private final float[] uiScratch = new float[2];
 
+    /**
+     * A screen pixel to <b>gameplay</b> coordinates.
+     *
+     * <p>Two conversions, not one. The viewport unprojects into draw space,
+     * which is y-up like libGDX; the simulation keeps Pygame's y-down world
+     * where the ground is at 620. {@code WorldGeometry} is the single boundary
+     * between them, and this is the crossing on the way in, exactly as the
+     * painters are the crossing on the way out.
+     *
+     * <p>The second conversion was missing until Phase 13, so a touch on the
+     * ground arrived at gameplay y 125 instead of 620 and never found anything
+     * under it -- the whole world-interaction layer was unreachable.
+     */
     private float[] toWorld(int screenX, int screenY) {
         com.badlogic.gdx.math.Vector2 v = viewports.screenToWorld(screenX, screenY);
         worldScratch[0] = v.x;
-        worldScratch[1] = v.y;
+        worldScratch[1] =
+                com.mymmer.castledefense.render.WorldGeometry.toGameplayY(v.y);
         return worldScratch;
     }
 

@@ -36,15 +36,44 @@ final class MeasuredGame extends CastleDefenseGame {
     private final GameMode mode;
     private final boolean dumpUi;
     private final boolean uiDebug;
+    private final String quality;
+    private final boolean keepAlive;
     private boolean staged;
 
     MeasuredGame(PlatformServices platform, String scenario, GameMode mode,
-                 boolean dumpUi, boolean uiDebug) {
+                 boolean dumpUi, boolean uiDebug, String quality,
+                 boolean keepAlive) {
         super(platform);
         this.scenario = scenario;
         this.mode = mode == null ? GameMode.ENDLESS : mode;
         this.dumpUi = dumpUi;
         this.uiDebug = uiDebug;
+        this.quality = quality;
+        this.keepAlive = keepAlive;
+    }
+
+    /**
+     * Keeps the world simulating, so a measurement measures play.
+     *
+     * <p>The staged scenes drop twenty-odd enemies at an undefended castle, and
+     * it falls in seconds. A run in GAMEOVER still <em>draws</em> everything --
+     * the scene, dimmed, under the overlay -- so the frame times stay perfectly
+     * plausible while the simulation has stopped advancing. The first device
+     * sweep measured exactly that in seven scenarios out of nine, and only the
+     * state printed beside the numbers gave it away.
+     *
+     * <p>This is the same trick {@code TestRun.survivingStep} plays for the
+     * headless benchmark, for the same reason, and it is debug-harness
+     * behaviour: reachable only through an intent extra.
+     */
+    private void reviveIfFallen() {
+        if (!keepAlive || getRun() == null) {
+            return;
+        }
+        getRun().castle().repair(1f);
+        if (getRun().world().state() == GameState.GAMEOVER) {
+            getRun().world().setState(GameState.PLAYING);
+        }
     }
 
     /**
@@ -61,6 +90,23 @@ final class MeasuredGame extends CastleDefenseGame {
             staged = true;
             try {
                 stageScenario();
+                //  The preset is a presentation budget, so it is set on the
+                //  renderer.  Phase 13 measures the same scene on all three to
+                //  show what quality actually buys -- and the equivalence tests
+                //  show it buys nothing in gameplay.
+                if (quality != null && getWorldRenderer() != null) {
+                    com.mymmer.castledefense.config.QualityConfig q =
+                            com.mymmer.castledefense.config.QualityConfig.parse(
+                                    quality, null);
+                    if (q == null) {
+                        android.util.Log.w("CastleDefensePerf",
+                                "unknown quality '" + quality + "'");
+                    } else {
+                        getWorldRenderer().setQuality(q);
+                        android.util.Log.i("CastleDefensePerf",
+                                "[quality] " + q.name());
+                    }
+                }
                 if (uiDebug && getUiDebugOverlay() != null) {
                     getUiDebugOverlay().setEnabled(true);
                 }
@@ -69,21 +115,64 @@ final class MeasuredGame extends CastleDefenseGame {
                         "scenario '" + scenario + "' failed to stage", e);
             }
         }
+        reviveIfFallen();
         super.render();
+        reviveIfFallen();
+        traceInput();
         //  Dumped a few frames after staging, not on the staging frame: the
         //  interface lays out every frame from the viewport, and the first
         //  layout after a scene change is not necessarily the settled one.
-        if (dumpUi && !dumped && getRenderCount() > 5) {
-            dumped = true;
-            try {
-                dumpControls();
-            } catch (RuntimeException e) {                   // noqa
-                android.util.Log.e("CastleDefensePerf", "ui dump failed", e);
+        //  Dumped on every screen change, not once: each screen has its own
+        //  controls, and a phase that has to press the shop, the talent tree
+        //  and the pause menu needs their real coordinates, not the menu's.
+        if (dumpUi && getRenderCount() > 5 && getRun() != null) {
+            GameState now = getRun().world().state();
+            if (now != lastDumped) {
+                lastDumped = now;
+                try {
+                    android.util.Log.i("CastleDefensePerf", "[screen] " + now);
+                    dumpControls();
+                } catch (RuntimeException e) {               // noqa
+                    android.util.Log.e("CastleDefensePerf", "ui dump failed", e);
+                }
             }
         }
     }
 
-    private boolean dumped;
+    private GameState lastDumped;
+    private boolean lastDown;
+
+    /**
+     * Reports every pointer press and what the world made of it.
+     *
+     * <p>Phase 13 found that dragging a mob on the phone did nothing, and no
+     * amount of reading the router settled why: every seam it goes through --
+     * the processor, the consumers, the world handler -- was correctly wired.
+     * This prints the two facts that separate the possibilities: whether a
+     * press reached {@code GameInput} at all, and whether the cursor took hold
+     * of anything when it did.
+     */
+    private void traceInput() {
+        if (!dumpUi || getInput() == null || getRun() == null) {
+            return;
+        }
+        com.mymmer.castledefense.input.Pointer p = getInput().pointer(0);
+        boolean down = p != null && p.isDown();
+        if (down == lastDown) {
+            return;
+        }
+        lastDown = down;
+        android.util.Log.i("CastleDefensePerf", String.format(java.util.Locale.ROOT,
+                "[touch] down=%b world=(%.0f,%.0f) ui=(%.0f,%.0f) owns=%b "
+                        + "grabbed=%s stripping=%s held=%s busy=%b state=%s",
+                down, p == null ? -1f : p.worldX(), p == null ? -1f : p.worldY(),
+                p == null ? -1f : p.uiX(), p == null ? -1f : p.uiY(),
+                getInput().ownsInteraction(0),
+                getRun().cursor().grabbed() == null ? "-" : "YES",
+                getRun().cursor().stripping() == null ? "-" : "YES",
+                getRun().cursor().heldItem() == null ? "-" : "YES",
+                getRun().cursor().busy(), getRun().world().state()));
+    }
 
     /**
      * Every control's hit rectangle, in interface units and in screen pixels.

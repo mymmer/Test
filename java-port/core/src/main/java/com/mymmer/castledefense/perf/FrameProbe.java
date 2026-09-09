@@ -62,6 +62,18 @@ public final class FrameProbe {
 
     private String label = "play";
     private DeviceStats deviceStats;
+    /**
+     * What the world was doing while it was timed.
+     *
+     * <p>Phase 12's headless benchmark once reported a 0.1 us median for every
+     * scenario because a crowd had flattened the castle and it was timing a
+     * step that returns immediately in GAMEOVER. The fix there was to fail
+     * loudly. Here the frame keeps drawing whatever happened -- the game-over
+     * screen still paints the whole scene -- so a dead world produces perfectly
+     * plausible frame times that mean nothing about play. Printing the state
+     * beside the numbers is what makes that visible instead of assumed.
+     */
+    private DeviceStats sceneStats;
 
     /** Timestamps for the frame currently being measured. */
     private long frameStart;
@@ -83,6 +95,10 @@ public final class FrameProbe {
 
     public void setDeviceStats(DeviceStats stats) {
         this.deviceStats = stats;
+    }
+
+    public void setSceneStats(DeviceStats stats) {
+        this.sceneStats = stats;
     }
 
     public String label() {
@@ -198,6 +214,12 @@ public final class FrameProbe {
                 pct(f, 0.99) / 1000.0,
                 pct(s, 0.50), pct(s, 0.95), pct(s, 0.99),
                 windowSteps / (double) n, dropped, clamped));
+        if (sceneStats != null) {
+            String scene = sceneStats.stats();
+            if (scene != null && !scene.isEmpty()) {
+                b.append(' ').append(scene);
+            }
+        }
         if (deviceStats != null) {
             String extra = deviceStats.stats();
             if (extra != null && !extra.isEmpty()) {

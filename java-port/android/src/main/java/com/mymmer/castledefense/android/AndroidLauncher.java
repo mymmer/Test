@@ -32,6 +32,13 @@ public class AndroidLauncher extends AndroidApplication {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
+        //  LayerTimes reads this once, when the class loads, and the class is
+        //  not touched until the GL thread builds the renderer -- so setting it
+        //  here, before initialize() starts that thread, is early enough.
+        if (getIntent() != null && getIntent().getBooleanExtra("layerTimes", false)) {
+            System.setProperty("castledefense.layerTimes", "true");
+        }
+
         AndroidApplicationConfiguration config = new AndroidApplicationConfiguration();
         config.useImmersiveMode = true;     // hide the nav bar; more world, fewer mis-taps
         config.useAccelerometer = false;
@@ -49,11 +56,14 @@ public class AndroidLauncher extends AndroidApplication {
                 && getIntent().getBooleanExtra("dumpUi", false);
         boolean uiDebug = getIntent() != null
                 && getIntent().getBooleanExtra("uiDebug", false);
+        String quality = getIntent() == null
+                ? null : getIntent().getStringExtra("quality");
         boolean measured = (scenario != null && !scenario.isEmpty())
-                || dumpUi || uiDebug;
+                || dumpUi || uiDebug || quality != null;
         CastleDefenseGame game = measured
                 ? new MeasuredGame(services, scenario, modeFrom(getIntent()),
-                        dumpUi, uiDebug)
+                        dumpUi, uiDebug, quality,
+                        getIntent().getBooleanExtra("keepAlive", false))
                 : new CastleDefenseGame(services);
         initialize(game, config);
         maybeMeasure(game, getIntent());
@@ -91,6 +101,23 @@ public class AndroidLauncher extends AndroidApplication {
             }
         });
         probe.setLabel(label);
+        //  So a window that timed a dead world says so.
+        final CastleDefenseGame g = game;
+        probe.setSceneStats(new FrameProbe.DeviceStats() {
+            @Override
+            public String stats() {
+                if (g.getRun() == null) {
+                    return "state=none";
+                }
+                int alive = 0;
+                for (int i = 0; i < g.getRun().horde().size(); i++) {
+                    if (g.getRun().horde().get(i).isAlive()) {
+                        alive++;
+                    }
+                }
+                return "state=" + g.getRun().world().state() + " alive=" + alive;
+            }
+        });
         probe.setDeviceStats(new FrameProbe.DeviceStats() {
             @Override
             public String stats() {
@@ -222,6 +249,16 @@ public class AndroidLauncher extends AndroidApplication {
         Runtime rt = Runtime.getRuntime();
         long usedKb = (rt.totalMemory() - rt.freeMemory()) / 1024L;
         long nativeKb = Debug.getNativeHeapAllocatedSize() / 1024L;
+        //  Per-layer times, when asked for.  Reported alongside the frame
+        //  numbers so the two can be read together: if the layers sum to far
+        //  less than the frame's CPU time, the frame is waiting, not working.
+        if (com.mymmer.castledefense.render.LayerTimes.enabled()) {
+            android.util.Log.i(TAG, "[layers] "
+                    + com.mymmer.castledefense.render.LayerTimes.report());
+            android.util.Log.i(TAG, "[ops] "
+                    + com.mymmer.castledefense.render.LayerTimes.ops());
+            com.mymmer.castledefense.render.LayerTimes.reset();
+        }
         String gc = "?";
         String gcTime = "?";
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {

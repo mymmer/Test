@@ -47,6 +47,26 @@ public final class WorldGeometry {
     }
 
     /** A gameplay y (down from the top) as a draw y (up from the bottom). */
+    /**
+     * Draw space back to gameplay space — the inverse of {@link #toDrawY}.
+     *
+     * <p>The arithmetic is identical, because the flip is its own inverse. It is
+     * a separate, named method anyway: at a call site, {@code toGameplayY} says
+     * which way the value is travelling, and a conversion whose direction has to
+     * be inferred from context is one that gets left out.
+     *
+     * <p>Which is what happened. Until Phase 13 the input path unprojected a
+     * touch into draw space and handed it to gameplay unconverted, so a finger
+     * on the ground (gameplay y 620) arrived as y 125. Nothing was ever under
+     * the cursor: grabbing, armour stripping, tower overcharge, the boss crown
+     * and the claw smack were all unreachable on every platform, and no test
+     * caught it because the tests built pointers in whichever space they were
+     * asserting.
+     */
+    public static float toGameplayY(float drawY) {
+        return GameConfig.WORLD_HEIGHT - drawY;
+    }
+
     public static float toDrawY(float gameplayY) {
         return GameConfig.WORLD_HEIGHT - gameplayY;
     }
