@@ -164,11 +164,13 @@ final class MeasuredGame extends CastleDefenseGame {
         lastDown = down;
         com.mymmer.castledefense.interaction.CursorInteraction c = getRun().cursor();
         android.util.Log.i("CastleDefensePerf", String.format(java.util.Locale.ROOT,
-                "[touch] down=%b world=(%.0f,%.0f) owns=%b grabbed=%s extra=%d "
+                "[touch] down=%b world=(%.0f,%.0f) owns=%b outcome=%s "
+                        + "miss=%.1f of=%s grabbed=%s extra=%d "
                         + "stripping=%s held=%s charging=%s smacking=%s "
                         + "grabCd=%.2f busy=%b state=%s",
                 down, p == null ? -1f : p.worldX(), p == null ? -1f : p.worldY(),
                 getInput().ownsInteraction(0),
+                c.lastOutcome(), c.lastMissDistance(), c.lastMissSubject(),
                 c.grabbed() == null ? "-" : c.grabbed().type().id(),
                 c.extraGrabbedCount(),
                 c.stripping() == null ? "-" : c.stripping().type().id(),

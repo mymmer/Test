@@ -160,6 +160,9 @@ public class CastleDefenseGame extends ApplicationAdapter {
             ui.setSafeAreaInsets(services.platform().safeAreaInsets());
             inputRouter.addConsumer(ui);
             inputRouter.setWorldHandler(run.cursor());
+            //  A fingertip needs more reach than a mouse pointer; a mouse asks
+            //  for none and gets none.
+            run.cursor().setTouchTolerance(services.platform().touchGrabTolerance());
         }
 
         if (rendererFactory != null) {

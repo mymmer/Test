@@ -252,6 +252,20 @@ public final class AndroidPlatformServices implements PlatformServices {
         }
     }
 
+    /**
+     * 18 world units -- about 36 physical pixels, or 1.9 mm, on a 3040x1440
+     * phone.
+     *
+     * <p>Chosen to bridge a fingertip's aiming error without reaching anything
+     * the player can see they missed: it is under half a Scout's body width, so
+     * a press still has to land on or beside the mob, never on the next one
+     * along.
+     */
+    @Override
+    public float touchGrabTolerance() {
+        return 18f;
+    }
+
     @Override
     public String deviceDescription() {
         return Build.MANUFACTURER + " " + Build.MODEL

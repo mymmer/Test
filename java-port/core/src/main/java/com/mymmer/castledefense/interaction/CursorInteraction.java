@@ -202,11 +202,105 @@ public final class CursorInteraction
                 || heldItem != null || smacking != null;
     }
 
+    // --- why a press did nothing --------------------------------------------
+
+    /**
+     * What became of the last press.
+     *
+     * <p>Added because "grabbing is unreliable" is not a diagnosis. A press that
+     * produces nothing has several quite different causes and they want
+     * different fixes: a cooldown still running is a pacing question, a point
+     * that fell outside every box by two units is ergonomics, and a point
+     * nowhere near anything is a coordinate bug. Guessing between them is how
+     * an afternoon disappears.
+     */
+    public enum PressOutcome {
+        /** Nothing was pressed yet. */
+        NONE,
+        GRABBED, STRIPPING, SHOVING, TOWER, REGALIA, ITEM, SMACK,
+        /** The grab cooldown had not lapsed. */
+        REFUSED_COOLDOWN,
+        /** Something was already held. */
+        REFUSED_BUSY,
+        /** A grabbable mob's box was missed -- see {@link #lastMissDistance()}. */
+        MISSED,
+        /** No grabbable mob anywhere near the point. */
+        NO_TARGET
+    }
+
+    private PressOutcome lastOutcome = PressOutcome.NONE;
+    private float lastMissDistance = -1f;
+    private String lastMissSubject = "";
+
+    public PressOutcome lastOutcome() {
+        return lastOutcome;
+    }
+
+    /**
+     * How far outside the nearest grabbable box the last press fell, in world
+     * units, or -1 when there was nothing to miss.
+     *
+     * <p>The number that separates "my finger was slightly off" from "the
+     * coordinates are wrong".
+     */
+    public float lastMissDistance() {
+        return lastMissDistance;
+    }
+
+    public String lastMissSubject() {
+        return lastMissSubject;
+    }
+
+    /** Distance from a point to the outside of a centred box; 0 when inside. */
+    private static float boxDistance(float px, float py, float cx, float cy,
+                                     float w, float h) {
+        float dx = Math.max(0f, Math.abs(px - cx) - w * 0.5f);
+        float dy = Math.max(0f, Math.abs(py - cy) - h * 0.5f);
+        return (float) Math.hypot(dx, dy);
+    }
+
+    /** Records why nothing was picked, for the diagnostic above. */
+    private void recordMiss(float px, float py) {
+        float best = Float.MAX_VALUE;
+        Enemy nearest = null;
+        int n = ctx.targetCount();
+        for (int i = 0; i < n; i++) {
+            Target t = ctx.target(i);
+            if (!(t instanceof Enemy)) {
+                continue;
+            }
+            Enemy e = (Enemy) t;
+            if (!e.grabbable()) {
+                continue;
+            }
+            float d = boxDistance(px, py, e.x(), e.y(),
+                    e.width() + 16f, e.height() + 16f);
+            if (d < best) {
+                best = d;
+                nearest = e;
+            }
+        }
+        if (nearest == null) {
+            lastOutcome = PressOutcome.NO_TARGET;
+            lastMissDistance = -1f;
+            lastMissSubject = "";
+        } else {
+            lastOutcome = PressOutcome.MISSED;
+            lastMissDistance = best;
+            lastMissSubject = nearest.type().id();
+        }
+    }
+
     // --- the press ----------------------------------------------------------
 
     @Override
     public boolean onWorldPress(Pointer pointer) {
-        if (grabCd > 0d || busy()) {
+        if (grabCd > 0d) {
+            lastOutcome = PressOutcome.REFUSED_COOLDOWN;
+            return false;
+        }
+        if (busy()) {
+            lastOutcome = PressOutcome.REFUSED_BUSY;
             return false;
         }
         float px = pointer.worldX();
@@ -218,6 +312,7 @@ public final class CursorInteraction
         DefenceTower tower = towerUnder(px, py);
         if (tower != null) {
             charging = tower;
+            lastOutcome = PressOutcome.TOWER;
             return true;
         }
 
@@ -229,6 +324,7 @@ public final class CursorInteraction
             DroppedItem item = withRegalia.detachRegalia();
             if (item != null) {
                 heldItem = item;
+            lastOutcome = PressOutcome.REGALIA;
                 return true;
             }
         }
@@ -238,6 +334,7 @@ public final class CursorInteraction
         if (loose != null) {
             loose.hold();
             heldItem = loose;
+            lastOutcome = PressOutcome.ITEM;
             return true;
         }
 
@@ -245,6 +342,7 @@ public final class CursorInteraction
         Boss smackable = bossSmackTargetUnder(px, py);
         if (smackable != null) {
             smacking = smackable;
+            lastOutcome = PressOutcome.SMACK;
             return true;
         }
 
@@ -252,6 +350,9 @@ public final class CursorInteraction
         Enemy e = grabbableUnder(px, py);
         if (e != null) {
             beginGrab(e);
+            lastOutcome = PressOutcome.GRABBED;
+            lastMissDistance = 0f;
+            lastMissSubject = e.type().id();
             return true;
         }
 
@@ -259,8 +360,24 @@ public final class CursorInteraction
         Enemy heavy = heavyUnder(px, py);
         if (heavy != null) {
             stripping = heavy;
+            lastOutcome = heavy.armored()
+                    ? PressOutcome.STRIPPING : PressOutcome.SHOVING;
+            lastMissSubject = heavy.type().id();
             return true;
         }
+        //  7. a fingertip's second look. Last, so nothing exact is ever
+        //     overridden by something merely close.
+        Enemy near = grabbableNear(px, py);
+        if (near != null) {
+            beginGrab(near);
+            lastOutcome = PressOutcome.GRABBED;
+            lastMissDistance = boxDistance(px, py, near.x(), near.y(),
+                    near.width() + 16f, near.height() + 16f);
+            lastMissSubject = near.type().id();
+            return true;
+        }
+
+        recordMiss(px, py);
         return false;
     }
 
@@ -331,7 +448,18 @@ public final class CursorInteraction
         return null;
     }
 
+    /**
+     * The grabbable mob under the point, preferring the nearest threat.
+     *
+     * <p>{@code main.py:1829 enemy_under_mouse} does not take the first match:
+     * it keeps the one with the <b>smallest x</b> -- "prefer the nearest
+     * threat" -- because in a crowd the boxes overlap and the mob about to
+     * reach the wall is the one the player is aiming at. This port returned
+     * whichever came first in the target list, so a press into a crowd could
+     * lift someone standing behind the mob under the finger.
+     */
     private Enemy grabbableUnder(float px, float py) {
+        Enemy best = null;
         int n = ctx.targetCount();
         for (int i = 0; i < n; i++) {
             Target t = ctx.target(i);
@@ -339,14 +467,53 @@ public final class CursorInteraction
                 continue;
             }
             Enemy e = (Enemy) t;
-            if (e.grabbable() && e.grabCovers(px, py)) {
-                return e;
+            if (e.grabbable() && e.grabCovers(px, py)
+                    && (best == null || e.x() < best.x())) {
+                best = e;
             }
         }
-        return null;
+        return best;
     }
 
-    private Enemy heavyUnder(float px, float py) {
+    /**
+     * Extra reach when a press found nothing, in world units. Zero = source.
+     *
+     * <p>Set from {@code PlatformServices.touchGrabTolerance}: zero on a mouse,
+     * a little on a touchscreen. See {@link #grabbableNear}.
+     */
+    private float touchTolerance;
+
+    public void setTouchTolerance(float units) {
+        this.touchTolerance = Math.max(0f, units);
+    }
+
+    public float touchTolerance() {
+        return touchTolerance;
+    }
+
+    /**
+     * The nearest grabbable mob within the touch tolerance of a missed press.
+     *
+     * <p><b>Only reached when the exact test found nothing.</b> A press that
+     * lands inside a grab box behaves exactly as the source says, including the
+     * nearest-threat preference; this is the second look that a fingertip needs
+     * and a mouse does not.
+     *
+     * <p>It does not widen {@code grabCovers}, so collision, damage, splash,
+     * projectile hits and crowd separation are all untouched -- the gameplay
+     * hitbox stays the one the parity fixtures were recorded against. What
+     * widens is <em>acquisition</em>, and only on a device that says it needs it.
+     *
+     * <p>Nearest by distance rather than by x: with nothing under the finger
+     * there is no overlap to break, and the mob closest to where the player
+     * pressed is the one they meant.
+     */
+    private Enemy grabbableNear(float px, float py) {
+        if (touchTolerance <= 0f) {
+            return null;
+        }
+        Enemy best = null;
+        float bestDistance = touchTolerance;
         int n = ctx.targetCount();
         for (int i = 0; i < n; i++) {
             Target t = ctx.target(i);
@@ -354,11 +521,35 @@ public final class CursorInteraction
                 continue;
             }
             Enemy e = (Enemy) t;
-            if ((e.strippable() || e.shovable()) && e.grabCovers(px, py)) {
-                return e;
+            if (!e.grabbable()) {
+                continue;
+            }
+            float d = boxDistance(px, py, e.x(), e.y(),
+                    e.width() + 16f, e.height() + 16f);
+            if (d <= bestDistance) {
+                bestDistance = d;
+                best = e;
             }
         }
-        return null;
+        return best;
+    }
+
+    /** {@code main.py:1839 heavy_under_mouse} -- same nearest-threat rule. */
+    private Enemy heavyUnder(float px, float py) {
+        Enemy best = null;
+        int n = ctx.targetCount();
+        for (int i = 0; i < n; i++) {
+            Target t = ctx.target(i);
+            if (!(t instanceof Enemy)) {
+                continue;
+            }
+            Enemy e = (Enemy) t;
+            if ((e.strippable() || e.shovable()) && e.grabCovers(px, py)
+                    && (best == null || e.x() < best.x())) {
+                best = e;
+            }
+        }
+        return best;
     }
 
     /** Grabs a mob, and drags along whatever Magnetic Gloves can reach. */

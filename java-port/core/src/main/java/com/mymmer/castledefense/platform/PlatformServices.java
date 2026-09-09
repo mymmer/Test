@@ -33,6 +33,24 @@ public interface PlatformServices {
     /** Screen edges the UI must avoid. Never null. */
     SafeAreaInsets safeAreaInsets();
 
+    /**
+     * Extra reach, in world units, when acquiring a grab by touch.
+     *
+     * <p>Zero on a mouse, because a mouse points at a pixel. A fingertip does
+     * not: a Scout's grab box is 42x50 world units, which on a 3040x1440 phone
+     * is 24 x 29 dp -- half Android's 48 dp minimum target and smaller than the
+     * contact patch of the finger pressing it. Isolated mobs are therefore
+     * genuinely hard to hit, which is measured in ANDROID_DEVICE.md.
+     *
+     * <p>This is an <b>acquisition</b> tolerance and nothing else. Gameplay
+     * hitboxes, collision, damage and mass are untouched: it only widens the
+     * search when an exact press found nothing, so the same press that would
+     * have failed now finds the mob the player was plainly aiming at.
+     */
+    default float touchGrabTolerance() {
+        return 0f;
+    }
+
     /** Something identifiable for a crash log, e.g. "Pixel 7 / Android 14". */
     String deviceDescription();
 }
