@@ -4,8 +4,8 @@ Short enough to run while holding the phone. Everything here is something
 `adb` **cannot** do: two fingers at once, a fast flick, a real palm on real
 glass. Everything that could be automated already has been.
 
-**Build:** `android-debug.apk`, commit `74e6324` or later (the last commit
-that changes the binary; the documentation commit after it does not).
+**Build:** `android-debug.apk`, commit `de2209b` or later -- the last commit
+that changes the binary. The documentation commits after it do not.
 **Install:** `adb install -r android-debug.apk`, or copy it to the phone and open it.
 
 Tick each line. If one fails, note what you did and what happened — that is
