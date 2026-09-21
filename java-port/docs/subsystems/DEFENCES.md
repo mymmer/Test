@@ -267,3 +267,25 @@ none. **The Outpost stays healthless**, as it is in the source;
 `PrisonerPresentationTest` pins that, because inventing a pool for the structure
 is the obvious wrong way to make a health indicator appear. The bar is the
 prisoner's.
+
+## Phase 13.3 — the ally that stood on the outpost
+
+`Outpost.raise` called `allies.spawnAlly(x - 30f, y)` and passed its **own** y.
+That is `OUTPOST_BASE_Y` — 505, the centre of a structure that stands clear of
+the ground. `FriendlySkeleton` treats a non-null y as authoritative, so a raised
+ally's centre was 505 and its feet landed at 519, where the ground beneath it is
+620 + depth. It hung **88 world units** — 177 px on a 3040x1440 phone — above
+the grass, and nothing in an ally's update touches y, so it stayed there for the
+whole of its 60-second life.
+
+Python's `Game.make_ally(x)` takes only an x; `FriendlySkeleton.__init__`
+defaults y to its own `ground_y`, which is `GROUND_Y + depth - h/2`, the same
+expression `Enemy.ground_y` uses. The gameplay and the painter were both correct
+here — the position handed to the constructor was not.
+
+The seam now takes **only an x**. There is no y to get wrong, which is the only
+version of this fix that stays fixed: every existing ally test built one through
+a fake that passed `null`, so the whole suite agreed with itself and none of it
+touched the one path a player sees. `AllyGroundAlignmentTest` drives the
+Outpost, the world factory and the constructor, and measures all three against
+`GROUND_Y` rather than against each other.

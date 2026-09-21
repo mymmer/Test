@@ -37,7 +37,7 @@ public final class VisualScenarios {
         "all-enemies", "all-bosses", "all-towers", "armour", "regalia",
         "dragon-breath", "lich-ward", "fire-zone", "tornado", "storm",
         "projectiles", "particles", "endless-late", "mixed-wave", "lightning",
-        "prisoner-full", "prisoner-hurt", "prisoner-dying",
+        "prisoner-full", "prisoner-hurt", "prisoner-dying", "allies",
     };
 
     private VisualScenarios() {
@@ -58,6 +58,7 @@ public final class VisualScenarios {
             case "prisoner-full":   prisoner(run, 1.0f, false); return true;
             case "prisoner-hurt":   prisoner(run, 0.55f, true); return true;
             case "prisoner-dying":  prisoner(run, 0.05f, true); return true;
+            case "allies":        allies(run); return true;
             case "all-bosses":    allBosses(run); return true;
             case "all-towers":    allTowers(run); return true;
             case "armour":        armour(run); return true;
@@ -305,6 +306,26 @@ public final class VisualScenarios {
     // ========================================================================
 
     /** A busy, ordinary wave: the picture most of the game looks like. */
+    /**
+     * Bone allies standing among ordinary ground mobs.
+     *
+     * <p>Built for one question: do an ally's feet and a mob's feet touch the
+     * same line? They did not. {@code Outpost.raise} handed the ally the
+     * <em>outpost's</em> y -- 505, the centre of a structure that stands clear
+     * of the ground -- and since nothing in an ally's update touches y, it hung
+     * 88 units above the grass for its whole life.
+     *
+     * <p>The allies come through {@link RunWorld#spawnAlly}, the same call the
+     * Outpost makes, and are interleaved with the mixed wave so both are in
+     * frame together.
+     */
+    private static void allies(RunWorld run) {
+        mixedWave(run);
+        for (int i = 0; i < 5; i++) {
+            run.spawnAlly(430f + i * 190f);
+        }
+    }
+
     private static void mixedWave(RunWorld run) {
         EnemyType[] roster = {EnemyType.SCOUT, EnemyType.FOOT_SOLDIER,
             EnemyType.SHIELD_BEARER, EnemyType.BERZERKER, EnemyType.GARGOYLE,

@@ -179,7 +179,7 @@ final class TestWorld implements DefenceContext {
         boolean refuse;
 
         @Override
-        public boolean spawnAlly(float x, float y) {
+        public boolean spawnAlly(float x) {
             if (refuse) {
                 return false;
             }

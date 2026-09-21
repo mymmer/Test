@@ -1027,8 +1027,10 @@ public final class RunWorld implements BossContext, DirectorContext, AllyFactory
     // --- AllyFactory --------------------------------------------------------
 
     @Override
-    public boolean spawnAlly(float x, float y) {
-        allies.add(new FriendlySkeleton(this, session.wave(), x, y));
+    public boolean spawnAlly(float x) {
+        //  null y: the skeleton works out its own ground line from its depth,
+        //  exactly as `make_ally(x)` leaves it to `__init__`.
+        allies.add(new FriendlySkeleton(this, session.wave(), x, null));
         return true;
     }
 

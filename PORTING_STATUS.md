@@ -910,6 +910,34 @@ suite.
   author; they have **not** been approved by the repository owner. That approval
   is the gate on Phase 12, and this document does not claim it.
 
+## Phase 13.3 — Allies on the ground
+
+Contract: [`DEFENCES.md`](java-port/docs/subsystems/DEFENCES.md). One finding
+from manual play: friendly skeletons floated above the battlefield.
+
+**Root cause: gameplay spawn position, not rendering.** `Outpost.raise` passed
+its own y -- `OUTPOST_BASE_Y`, 505 -- into `AllyFactory.spawnAlly(x, y)`, and
+`FriendlySkeleton` takes a non-null y as authoritative. Measured on the real
+path: ally centre 505, feet 519, against its own ground line of 607.6 and a
+Scout at the same depth standing at 607.5. **88.6 world units**, 177 px on the
+phone, held for the ally's whole 60-second life because nothing in `update`
+touches y.
+
+Python's `Game.make_ally(x)` takes only an x and lets `__init__` default y to
+`ground_y` = `GROUND_Y + depth - h/2`, the same expression `Enemy.ground_y`
+uses. The seam now takes only an x, so no caller can supply a y that is not the
+ground. Nothing in the renderer changed: `paintAlly` already anchored to
+`toDrawY(y) - h/2`, the same arithmetic `EnemyPainter` uses for `frame[1]`.
+
+**Why no test caught it.** Every existing ally test built one through a fake
+that passed `null` -- which is the ground -- so the suite agreed with itself and
+never drove the only path a player sees. `AllyGroundAlignmentTest` (5) raises one
+through a trapped Necromancer in the Outpost and measures against `GROUND_Y`, a
+constant from `main.py`, not against another ally. All five fail against the old
+code with the 88.58-unit offset named in the message.
+
+A visual scenario, `allies`, puts bone allies among ordinary ground mobs.
+
 ## Phase 13.2 — The play review
 
 Contract: [`ANDROID_DEVICE.md`](java-port/docs/subsystems/ANDROID_DEVICE.md) 13.

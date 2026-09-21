@@ -308,7 +308,8 @@ public final class Outpost {
             return;
         }
         skeletonTimer = GameConfig.TRAP_SKELETON_RATE * ctx.modifiers().allyRate();
-        if (allies.spawnAlly(x - 30f, y)) {
+        //  x only: an ally stands on the ground, not at the outpost's centre.
+        if (allies.spawnAlly(x - 30f)) {
             trapGlow = 1f;
         }
     }

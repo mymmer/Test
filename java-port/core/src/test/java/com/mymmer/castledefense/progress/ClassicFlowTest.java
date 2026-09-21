@@ -127,7 +127,7 @@ class ClassicFlowTest {
         //  horde, so `alive_enemies()` never sees it.
         TestRun r = new TestRun().beginClassic();
         clearTheField(r);
-        assertTrue(r.run.spawnAlly(900f, 560f));
+        assertTrue(r.run.spawnAlly(900f));
         assertEquals(1, r.run.allyCount());
 
         r.seconds(1.5);

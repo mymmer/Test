@@ -284,7 +284,7 @@ public final class TestEnemyWorld implements EnemyContext {
 
     private final AllyFactory allyFactory = new AllyFactory() {
         @Override
-        public boolean spawnAlly(float x, float y) {
+        public boolean spawnAlly(float x) {
             allies.add(new FriendlySkeleton(TestEnemyWorld.this, wave, x, null));
             return true;
         }
